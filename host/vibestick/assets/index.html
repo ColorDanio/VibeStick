@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VibeStick</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<aside id="sidebar">
+  <div class="logo">
+    <span class="logo-mark">▲</span> VibeStick
+    <span class="logo-sub">host daemon</span>
+  </div>
+  <nav>
+    <a href="#/overview" data-page="overview">Overview</a>
+    <a href="#/agents" data-page="agents">Agents</a>
+    <a href="#/voice" data-page="voice">Voice &amp; Mic</a>
+    <a href="#/settings" data-page="settings">Settings</a>
+  </nav>
+  <div class="sidebar-foot">
+    <span class="dot" id="side-dot"></span><span id="side-conn">…</span>
+  </div>
+</aside>
+<main id="main">
+  <section class="page" id="page-overview">
+    <h1>Overview</h1>
+    <div class="card conn-card" id="conn-card">
+      <div class="conn-big"><span class="dot big breath" id="conn-dot"></span>
+        <span id="conn-title">…</span></div>
+      <div class="conn-sub mono" id="conn-sub"></div>
+      <div class="meta-grid" id="conn-meta"></div>
+    </div>
+    <div class="stat-grid">
+      <div class="card stat-card"><h2>Agents</h2><div class="stat-num" id="st-agents">0</div>
+        <div class="dim" id="st-agents-sub"></div></div>
+      <div class="card stat-card"><h2>Sessions</h2><div class="stat-num" id="st-sessions">0</div>
+        <div class="dim" id="st-sessions-sub"></div></div>
+      <div class="card stat-card"><h2>Voice (ASR)</h2><div class="stat-mid" id="st-voice">—</div>
+        <div class="dim" id="st-voice-sub"></div></div>
+      <div class="card stat-card"><h2>Virtual mic</h2><div class="stat-mid" id="st-mic">—</div>
+        <div class="dim" id="st-mic-sub"></div></div>
+    </div>
+    <h2>Recent activity</h2>
+    <div id="activity"></div>
+  </section>
+
+  <section class="page" id="page-agents">
+    <div class="md-layout">
+      <aside class="md-rail">
+        <div class="md-rail-head">
+          <h1>Agents</h1>
+          <span class="dim" id="agents-count"></span>
+        </div>
+        <div id="agents-rail"></div>
+      </aside>
+      <div class="md-detail" id="agent-detail"></div>
+    </div>
+  </section>
+
+  <section class="page" id="page-voice">
+    <h1>Voice &amp; Mic</h1>
+    <div class="card">
+      <div class="card-head"><h2>Virtual microphone</h2><span id="mic-badge"></span></div>
+      <p class="dim">PTT on the stick (<code>voice.start</code> with <code>mode: "mic"</code>)
+        streams PCM into a PipeWire source named <code class="mono">VibeStick Mic</code> —
+        select it as the input device in any app.</p>
+      <div class="meta-grid" id="mic-meta"></div>
+      <div class="toggle-row"><span>Enable virtual microphone</span>
+        <label class="toggle"><input type="checkbox" id="mic-enabled"><span class="slider"></span></label></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Speech recognition (ASR)</h2><span id="asr-badge"></span></div>
+      <div class="meta-grid" id="asr-meta"></div>
+      <p class="dim" id="asr-note"></p>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Recent transcriptions</h2></div>
+      <div id="asr-recent"></div>
+    </div>
+  </section>
+
+  <section class="page" id="page-settings">
+    <h1>Settings</h1>
+    <div class="card">
+      <div class="card-head"><h2>General</h2></div>
+      <p class="card-desc">Core daemon behaviour. Presence shows running CLIs even
+        without an adapter; voice enables the device voice function.</p>
+      <div class="toggle-row"><span>Process presence watcher</span>
+        <label class="toggle"><input type="checkbox" id="feat-procwatcher"><span class="slider"></span></label></div>
+      <div class="toggle-row"><span>Voice (device voice function + ASR)</span>
+        <label class="toggle"><input type="checkbox" id="feat-voice"><span class="slider"></span></label></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Tools</h2></div>
+      <p class="card-desc">CLIs shown on the stick. Expand a card to edit bindings,
+        launch command and delivery.</p>
+      <div id="tools"></div>
+      <button class="add-card" id="add-tool">+ Add tool</button>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Voice</h2></div>
+      <p class="card-desc">Speech recognition engine used for device ASR
+        (the virtual mic on the Voice &amp; Mic page is independent).</p>
+      <label>Engine</label>
+      <select id="asr-engine">
+        <option value="faster-whisper">faster-whisper (local Whisper)</option>
+        <option value="command">command (external program)</option>
+      </select>
+      <div id="asr-fw">
+        <label>Model size</label>
+        <div class="segmented" id="asr-model"></div>
+        <label>Device</label>
+        <div class="segmented" id="asr-device"></div>
+        <label>Language (empty = auto)</label><input id="asr-language" placeholder="en">
+      </div>
+      <div id="asr-cmd" hidden>
+        <label>Command template (wav path appended; transcript from stdout)</label>
+        <input id="asr-command" placeholder="whisper-cli -m model.bin -f">
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Advanced</h2></div>
+      <p class="card-desc">Runtime paths and diagnostics.</p>
+      <div class="meta-grid" id="adv-meta"></div>
+    </div>
+  </section>
+</main>
+<div id="savebar">
+  <span id="save-note" class="dim"></span>
+  <button id="reload">Discard</button>
+  <button class="primary" id="save">Save</button>
+</div>
+<div id="toast"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

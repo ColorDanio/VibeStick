@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vibestick"
+version = "0.1.0"
+description = "Host daemon for the VibeStick M5StickC Plus AI-CLI session monitor"
+requires-python = ">=3.10"
+dependencies = [
+    "bleak>=0.21",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+]
+asr = [
+    "faster-whisper",
+    "numpy",
+]
+app = [
+    "pywebview",
+]
+
+[project.scripts]
+vibestickd = "vibestick.daemon:main"
+vibestick-web = "vibestick.web:main"
+vibestick-app = "vibestick.app:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["vibestick*"]

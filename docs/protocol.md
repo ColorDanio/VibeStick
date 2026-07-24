@@ -1,0 +1,262 @@
+# VibeStick BLE Protocol (v2)
+
+Communication between the host daemon (computer) and the M5StickC Plus
+uses a single custom GATT service.
+
+- The **device** (M5StickC Plus) is the GATT **server** (BLE peripheral).
+  It advertises the name `VibeStick`.
+- The **daemon** (computer) is the GATT **client** (BLE central).
+- The daemon holds all session/tool state; the device is a display +
+  input terminal with a microphone.
+
+## Service
+
+- Service UUID: `4b1e0001-5a3f-4c8d-9b6e-7f2a1c0d3e5f`
+
+## Characteristics
+
+| Name     | UUID                                   | Properties | Writer | Reader | Payload |
+|----------|----------------------------------------|------------|--------|--------|---------|
+| STATUS   | `4b1e0002-5a3f-4c8d-9b6e-7f2a1c0d3e5f` | write      | daemon | device | JSON    |
+| SESSIONS | `4b1e0003-5a3f-4c8d-9b6e-7f2a1c0d3e5f` | write      | daemon | device | JSON    |
+| INPUT    | `4b1e0004-5a3f-4c8d-9b6e-7f2a1c0d3e5f` | notify     | device | daemon | JSON    |
+| COMMAND  | `4b1e0005-5a3f-4c8d-9b6e-7f2a1c0d3e5f` | notify     | device | daemon | JSON    |
+| TOOLS    | `4b1e0006-5a3f-4c8d-9b6e-7f2a1c0d3e5f` | write      | daemon | device | JSON    |
+| VOICE    | `4b1e0007-5a3f-4c8d-9b6e-7f2a1c0d3e5f` | write      | daemon | device | JSON    |
+| AUDIO    | `4b1e0008-5a3f-4c8d-9b6e-7f2a1c0d3e5f` | notify     | device | daemon | binary  |
+
+JSON payloads are UTF-8, one complete document per write/notify, kept
+under 512 bytes by trimming optional fields. Negotiated MTU is 247, so
+payloads over 244 bytes (TOOLS/SESSIONS with several entries) are sent
+with the ATT long-write procedure — hosts MUST write with response
+(write request), not write-without-response, which BlueZ rejects for
+oversized values.
+
+## Interaction model (device UX, v2.1)
+
+Session-centric flow over a terminal-style ("fake CLI") screen:
+
+- **Tool picker (home)**: `B` = next tool, `A` = select tool.
+- **Session picker** (fake-CLI screen for the selected tool): lists
+  `+ new session` first, then known sessions with an **active dot**
+  (green = session is live in the foreground, see `fg` below; gray =
+  inactive). `B` = next entry, `A` = enter session.
+- **Conversation screen** (same fake-CLI look, one screen only):
+  header shows tool + session, body shows status (`state`, `ctx_pct`,
+  `last` summary), footer is the status line.
+  - **Hold `A`** (>=500 ms) = start recording (`voice.start`); the RMS
+    level bar is shown **only while held** — vertical in portrait,
+    horizontal in landscape. **Release `A`** = stop (`voice.stop`);
+    the host transcribes and pushes the transcript via VOICE.
+  - **Double-click `A`** with a `ready` transcript = `voice.confirm`
+    (send). After sending, the device shows `thinking` when the next
+    STATUS reports `state: "running"`; if the session was already
+    `running` at send time it shows `queue` until the state changes.
+  - **Double-click `A`** while `thinking`/`running` = cancel the
+    ongoing inference (`inference.cancel`).
+  - `B` with a pending transcript = discard (`voice.cancel`).
+- **Power key**: short press = back (conversation -> session picker ->
+  home), double press = home (tool picker).
+- Long-press `B` (>=800 ms, anywhere) = back. Shake = `refresh`.
+
+`fn.activate` remains in the protocol for backwards compatibility but
+the v2.1 device UI no longer emits it; custom key bindings are managed
+host-side only.
+
+## Payloads
+
+### TOOLS (daemon -> device)
+
+The configured vibe-coding CLI tools and their functions.
+
+```json
+{
+  "active": 0,
+  "list": [
+    {
+      "id": "claude-code",
+      "name": "Claude Code",
+      "state": "running",
+      "fns": ["status", "sessions", "voice", "enter", "escape"]
+    },
+    {
+      "id": "codex",
+      "name": "Codex",
+      "state": "idle",
+      "fns": ["status", "voice", "ctrl-c"]
+    }
+  ]
+}
+```
+
+- `state`: aggregate of that tool's sessions (`running` if any session
+  is running, else `waiting` / `error` / `idle`).
+- `fns`: ordered function ids shown in tool view. Well-known ids:
+  `status`, `sessions`, `voice`, `enter`, `escape`. Any other id is a
+  **custom key binding** configured on the host (delivered to the tool
+  as keystrokes, e.g. `ctrl-x`, `shift-tab`, or a literal string).
+
+### STATUS (daemon -> device)
+
+Status of the selected tool's active session:
+
+```json
+{
+  "tool": "claude-code",
+  "model": "claude-opus-4",
+  "session": "fix-auth-bug",
+  "state": "running",
+  "ctx_pct": 42,
+  "cost_usd": 1.23,
+  "last": "Edited src/auth.ts",
+  "tail": [
+    "user: fix the auth redirect",
+    "assistant: Edited src/auth.ts",
+    "assistant: Running tests..."
+  ],
+  "queued": 2,
+  "updated": 1721650000
+}
+```
+
+- `tail` (v2.2): recent conversation lines, oldest first, each prefixed
+  `user: ` / `assistant: `; omitted when empty.
+- `queued` (v2.2): number of host-side messages waiting in the send
+  queue for this session (the daemon queues messages sent while the
+  session is busy and flushes them FIFO when it goes idle); omitted
+  when 0. The firmware already renders a `queue` footer from
+  `state == "running"` — no firmware change required.
+
+- `tail` (v2.2): the most recent few conversation/status lines of the
+  selected session, oldest first, each pre-trimmed by the daemon
+  (~60 chars). The device renders them as the conversation body
+  (terminal style); `last` remains as fallback when `tail` is absent.
+  When the payload would exceed 512 bytes, `tail` entries are dropped
+  first (oldest to newest), then other optional fields.
+
+### SESSIONS (daemon -> device)
+
+Sessions of the **selected tool** (unchanged from v1):
+
+```json
+{
+  "active": 0,
+  "list": [
+    {"id": "a1b2", "tool": "claude-code", "name": "fix-auth-bug", "state": "running", "fg": true}
+  ]
+}
+```
+
+- `fg` (v2.1): `true` when the session is live in the foreground —
+  adapter-reported when available, else heuristic (session file mtime
+  < 3 min and the tool's process is alive). The device renders this as
+  the active dot in the session picker.
+
+### VOICE (daemon -> device)
+
+Voice pipeline state for the device screen:
+
+```json
+{"state": "recording", "text": ""}
+{"state": "transcribing", "text": ""}
+{"state": "ready", "text": "looks good, continue"}
+{"state": "error", "text": "no speech detected"}
+{"state": "idle", "text": ""}
+```
+
+### AUDIO (device -> daemon, binary)
+
+Raw PCM: **8 kHz, 8-bit unsigned, mono**. Each notify carries up to
+180 bytes of samples. Streaming starts after the daemon receives
+`voice.start` and stops after `voice.stop`. Frames arriving outside a
+recording window are ignored.
+
+`voice.start` without `mode` is the ASR flow (transcribe on stop).
+With `"mode": "mic"` (v2.1) the daemon routes the PCM into a virtual
+microphone on the host (a PipeWire `Audio/Source` named "VibeStick
+Mic") instead of transcribing — select it as the input device in any
+application. Mic-mode frames never reach the ASR pipeline and vice
+versa.
+
+### INPUT (device -> daemon)
+
+```json
+{"type": "message", "text": "looks good, continue", "source": "voice"}
+{"type": "message", "text": "typed text", "source": "keyboard"}
+```
+
+`source` is informational; the daemon delivers `text` to the selected
+tool's active session (tmux `send-keys`, tty write, or configured
+delivery), then resumes STATUS pushes (back to monitoring).
+
+### COMMAND (device -> daemon)
+
+```json
+{"cmd": "tool.next"}
+{"cmd": "tool.select", "id": "codex"}
+{"cmd": "fn.activate", "fn": "escape"}
+{"cmd": "session.next"}
+{"cmd": "session.prev"}
+{"cmd": "session.select", "id": "c3d4"}
+{"cmd": "voice.start"}
+{"cmd": "voice.start", "mode": "mic"}
+{"cmd": "voice.stop"}
+{"cmd": "voice.confirm"}
+{"cmd": "voice.cancel"}
+{"cmd": "inference.cancel"}
+{"cmd": "session.new"}
+{"cmd": "refresh"}
+```
+
+- `fn.activate` with a custom binding id makes the host send that key
+  binding to the tool's active session.
+- `voice.confirm` makes the host deliver the `ready` transcript via the
+  normal message delivery path; `voice.cancel` discards it.
+- `inference.cancel` (v2.1) cancels the ongoing inference of the
+  selected session, best-effort: the daemon sends the configured
+  `cancel` key binding (default `Escape`) to the session's delivery
+  target (tmux `send-keys` or tty write).
+- `session.new` (v2.1) asks the daemon to start a fresh session of the
+  selected tool: with tmux delivery configured it opens a new tmux
+  window running the tool's CLI command and selects it; otherwise it
+  replies with STATUS `state: "error"`, `last: "new session
+  unsupported"`.
+- Messages sent to a busy (`running`) session are still delivered —
+  terminal input buffers naturally — so they act as a queue.
+
+## Host-side configuration
+
+The daemon reads `~/.vibestick/config.json` (editable via the setup
+UI, see `host/README.md`):
+
+```json
+{
+  "tools": [
+    {
+      "id": "claude-code",
+      "name": "Claude Code",
+      "adapter": "statusline",
+      "bindings": {"enter": "Enter", "escape": "Escape"}
+    },
+    {
+      "id": "codex",
+      "name": "Codex",
+      "adapter": "wrapper",
+      "bindings": {"ctrl-c": "C-c"}
+    }
+  ],
+  "asr": {
+    "engine": "faster-whisper",
+    "model": "base",
+    "device": "cpu",
+    "language": null
+  }
+}
+```
+
+## Host-side session sources
+
+Unchanged from v1: the daemon watches `~/.vibestick/sessions/*.json`,
+one file per CLI session, written by per-tool adapters
+(`host/adapters/claude_code_statusline.py`, `generic_wrapper.sh`, or
+anything that drops a STATUS-schema JSON file there).
