@@ -204,7 +204,8 @@ delivery.
   discovery (30 s timeout). Without tmux delivery or a launch command it
   replies STATUS `state: "error"`, `last: "new session unsupported"`.
 - **Queue semantics**: messages for a busy (`running`) session are
-  delivered as usual — terminal input buffers naturally, so they queue.
+  queued host-side (per-session FIFO, cap 8) and flushed in order once
+  the session goes idle/waiting — see "Voice / ASR → Send queue".
 - `fn.activate` remains supported for backwards compatibility; the v2.1
   device UI no longer emits it.
 
@@ -251,8 +252,11 @@ are not retried — the message is dropped once with a STATUS error.
 
 Every transcription attempt is logged: a ~20-entry ring buffer plus
 `~/.vibestick/voice-log.jsonl` (timestamp, audio duration, processing
-time, model, detected language, ok / no-speech / error, text preview or
-failure reason). The last attempts show on the dashboard's Voice & Mic
+time, model, detected language, clip file, ok / no-speech / error, text
+preview or failure reason). The raw audio of the last 5 recordings is
+kept in `~/.vibestick/clips/clip-1..5.wav` (rotating); replay one
+offline across models with `host/tools/asr_debug.py <wav>` for
+diagnosis. The last attempts show on the dashboard's Voice & Mic
 page and in `/api/status` under `asr.recent`.
 Input is peak-normalized (99th percentile → 0.7, gain capped at 30) before
 resampling to 16 kHz, the Silero VAD threshold is relaxed
@@ -263,8 +267,10 @@ resampling to 16 kHz, the Silero VAD threshold is relaxed
 Two engines:
 
 - `faster-whisper` (default): local Whisper. Optional dependency —
-  install with `pip install 'vibestick[asr]'` (pulls in `faster-whisper`
-  and `numpy`). Settings: `model` (`tiny`/`base`/`small`, default `small` — `base` is auto-migrated to `small` on load), `device`
+  install with `pip install 'vibestick[asr]'` (pulls in `faster-whisper`,
+  `numpy` and `scipy` — scipy enables polyphase resampling and the
+  DC-blocker filter; without it the pipeline falls back to linear
+  resampling). Settings: `model` (`tiny`/`base`/`small`, default `small` — `base` is auto-migrated to `small` on load), `device`
   (`cpu`), `language` (`null` = auto-detect). If the packages are missing,
   the daemon stays up and VOICE shows an error instead.
 - `command`: run any external program. `asr.command` is a shell-style
@@ -331,13 +337,18 @@ it to the **active** session. Target resolution order (per-tool
 `delivery` config: `"auto"` default, `"tmux"`, `"tty"`):
 
 - `tmux` pane id → `tmux send-keys -t <pane> -- <text> Enter`
-- `tty` path → writes `<text>\r` to the pts device (non-blocking).
-  Presence/discovered sessions inherit the pts of the CLI process (read
-  from `/proc/<pid>/stat`). A **safety gate** applies: the write only
+- `tty` path → bytes are injected into the terminal's input queue with
+  the **TIOCSTI** ioctl, one byte per ioctl (writing the pts slave
+  directly would only *display* the text, not deliver it). Presence/
+  discovered sessions inherit the pts of the CLI process (read from
+  `/proc/<pid>/stat`). A **safety gate** applies: the injection only
   happens while the process is alive, its controlling terminal is still
   that pts, the process (or an ancestor) is in the terminal's
   foreground process group, and the pts is writable — otherwise the
-  message counts as undeliverable.
+  message counts as undeliverable. Kernels with
+  `dev.tty.legacy_tiocsti=0` reject TIOCSTI (`sudo sysctl
+  dev.tty.legacy_tiocsti=1` enables it); failures log the current
+  sysctl value.
 - neither → the message is logged and dropped
 
 All delivery is best-effort with timeouts; failures are logged, never fatal.
