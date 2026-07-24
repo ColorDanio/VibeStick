@@ -34,7 +34,9 @@ MAX_DURATION_SEC = 25  # ~25s of 8 kHz 8-bit mono = 200 KB
 COMMAND_TIMEOUT_SEC = 180
 WHISPER_SAMPLE_RATE = 16000
 LOG_PATH = Path.home() / ".vibestick" / "voice-log.jsonl"
+CLIPS_DIR = Path.home() / ".vibestick" / "clips"
 RECENT_TRANSCRIPTIONS = 20
+SAVED_CLIPS = 5
 
 StateCallback = Callable[[str], None]  # receives VOICE payload JSON strings
 DeliverCallback = Callable[[str], None]
@@ -82,6 +84,7 @@ class VoicePipeline:
         transcriber: Transcriber | None = None,
         max_duration_sec: int = MAX_DURATION_SEC,
         transcription_log: TranscriptionLog | None = None,
+        clips_dir: Path | str | None = CLIPS_DIR,
     ) -> None:
         self.asr = asr
         self._push = push
@@ -89,6 +92,8 @@ class VoicePipeline:
         self._transcriber = transcriber
         self.max_duration_sec = max_duration_sec
         self._tlog = transcription_log
+        self._clips_dir = Path(clips_dir) if clips_dir else None
+        self._clip_seq = 0
         self.state = "idle"
         self.transcript = ""
         self._buf = bytearray()
@@ -117,6 +122,7 @@ class VoicePipeline:
         pcm = bytes(self._buf)
         self._buf = bytearray()
         duration = len(pcm) / protocol.AUDIO_SAMPLE_RATE
+        clip = self._save_clip(pcm)
         self._set_state("transcribing")
         started = time.monotonic()
         meta: dict = {}
@@ -125,7 +131,7 @@ class VoicePipeline:
         except Exception as exc:  # noqa: BLE001 - any ASR failure -> error state
             reason = _summarize_exc(exc)
             log.warning("transcription failed: %s", exc)
-            self._record_attempt(duration, "error", reason=reason,
+            self._record_attempt(duration, "error", reason=reason, clip=clip,
                                  processing_sec=time.monotonic() - started, meta=meta)
             self._set_state("error", str(exc) or "transcription failed")
             return
@@ -136,11 +142,11 @@ class VoicePipeline:
                 "too short" if duration < 0.3
                 else "no speech detected (VAD filtered everything)"
             )
-            self._record_attempt(duration, "no-speech", reason=reason,
+            self._record_attempt(duration, "no-speech", reason=reason, clip=clip,
                                  processing_sec=elapsed, meta=meta)
             self._set_state("error", "no speech detected")
             return
-        self._record_attempt(duration, "ok", text=text,
+        self._record_attempt(duration, "ok", text=text, clip=clip,
                              processing_sec=elapsed, meta=meta)
         self.transcript = text
         self._set_state("ready", text)
@@ -149,7 +155,7 @@ class VoicePipeline:
         return self._tlog.recent() if self._tlog is not None else []
 
     def _record_attempt(self, duration: float, state: str,
-                        text: str = "", reason: str = "",
+                        text: str = "", reason: str = "", clip: str = "",
                         processing_sec: float = 0.0, meta: dict | None = None) -> None:
         if self._tlog is None:
             return
@@ -163,11 +169,27 @@ class VoicePipeline:
         }
         if meta.get("language"):
             entry["language"] = meta["language"]
+        if clip:
+            entry["clip"] = clip
         if text:
             entry["text"] = text[:120]
         if reason:
             entry["reason"] = reason
         self._tlog.record(entry)
+
+    def _save_clip(self, pcm: bytes) -> str:
+        """Persist the recording as a rotating clip-N.wav; returns the name."""
+        if self._clips_dir is None or not pcm:
+            return ""
+        try:
+            self._clips_dir.mkdir(parents=True, exist_ok=True)
+            name = f"clip-{self._clip_seq % SAVED_CLIPS + 1}.wav"
+            self._clip_seq += 1
+            pcm_to_wav(pcm, self._clips_dir / name)
+            return name
+        except OSError as exc:
+            log.debug("clip save failed: %s", exc)
+            return ""
 
     def confirm(self) -> None:
         """voice.confirm: deliver the ready transcript, back to idle."""
@@ -239,34 +261,81 @@ def _transcribe_command(asr: ASRConfig, pcm: bytes) -> tuple[str, dict]:
 INITIAL_PROMPT = "Hello. 你好。以下是简体中文和英文混合的语音转写。"
 
 
-def _transcribe_faster_whisper(asr: ASRConfig, pcm: bytes) -> tuple[str, dict]:
-    """Transcribe with faster-whisper (optional dependency, imported lazily).
-
-    Returns (text, meta) with meta["language"] = detected language code.
-    """
+def _highpass(audio):
+    """First-order DC blocker (scipy preferred; DC subtraction already done)."""
     try:
+        from scipy.signal import lfilter
+
+        return lfilter([1.0, -1.0], [1.0, -0.995], audio)
+    except ImportError:
+        return audio
+
+
+def _resample(audio, src_rate: int, dst_rate: int):
+    """Polyphase resampling (scipy); falls back to linear interpolation."""
+    if src_rate == dst_rate:
+        return audio
+    try:
+        from math import gcd
+
+        from scipy.signal import resample_poly
+
+        g = gcd(dst_rate, src_rate)
+        return resample_poly(audio, dst_rate // g, src_rate // g)
+    except ImportError:
         import numpy as np
-        from faster_whisper import WhisperModel
-    except ImportError as exc:
-        raise RuntimeError(
-            "faster-whisper/numpy not installed; run: pip install 'vibestick[asr]'"
-        ) from exc
-    # 8-bit unsigned PCM -> float32 in [-1, 1]
+
+        factor = dst_rate / src_rate
+        xp = np.arange(len(audio))
+        x = np.linspace(0, len(audio) - 1, int(len(audio) * factor))
+        return np.interp(x, xp, audio).astype(np.float32)
+
+
+def _prepare_audio(pcm: bytes):
+    """u8 8 kHz PCM -> float32 mono 16 kHz: DC removal, first-order
+    high-pass, polyphase resample, p99 peak normalization."""
+    import numpy as np
+
     audio = (np.frombuffer(pcm, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
     if len(audio) == 0:
-        return "", {}
+        return audio
+    audio = audio - float(np.mean(audio))  # DC offset removal
+    audio = _highpass(audio)
+    audio = _resample(audio, protocol.AUDIO_SAMPLE_RATE, WHISPER_SAMPLE_RATE)
     # The stick's PDM mic is quiet; peak-normalize so whisper's VAD can
     # detect normal speech. 99th percentile keeps single clicks from
     # suppressing the gain; the cap avoids boosting pure noise.
     peak = float(np.percentile(np.abs(audio), 99))
     if peak > 1e-4:
         audio = audio * min(0.7 / peak, 30.0)
-    # Whisper expects 16 kHz; our audio is 8 kHz -> linear resample x2.
-    if protocol.AUDIO_SAMPLE_RATE != WHISPER_SAMPLE_RATE:
-        factor = WHISPER_SAMPLE_RATE / protocol.AUDIO_SAMPLE_RATE
-        xp = np.arange(len(audio))
-        x = np.linspace(0, len(audio) - 1, int(len(audio) * factor))
-        audio = np.interp(x, xp, audio).astype(np.float32)
+    return audio.astype(np.float32)
+
+
+# Anti-hallucination decode settings for short PTT utterances.
+_DECODE_PARAMETERS = {
+    "condition_on_previous_text": False,
+    "no_speech_threshold": 0.6,
+    "log_prob_threshold": -1.0,
+    "compression_ratio_threshold": 2.4,
+    "temperature": 0,
+    "beam_size": 5,
+}
+
+
+def _transcribe_faster_whisper(asr: ASRConfig, pcm: bytes) -> tuple[str, dict]:
+    """Transcribe with faster-whisper (optional dependency, imported lazily).
+
+    Returns (text, meta) with meta["language"] = detected language code.
+    """
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError as exc:
+        raise RuntimeError(
+            "faster-whisper/numpy not installed; run: pip install 'vibestick[asr]'"
+        ) from exc
+    audio = _prepare_audio(pcm)
+    if len(audio) == 0:
+        return "", {}
     model = WhisperModel(asr.model, device=asr.device)
     segments, info = model.transcribe(
         audio,
@@ -276,6 +345,7 @@ def _transcribe_faster_whisper(asr: ASRConfig, pcm: bytes) -> tuple[str, dict]:
         # Default threshold 0.5 kills quiet/phone-quality speech even after
         # normalization (observed: a full 1.9 s utterance removed).
         vad_parameters=dict(_VAD_PARAMETERS),
+        **dict(_DECODE_PARAMETERS),
     )
     text = " ".join(seg.text for seg in segments).strip()
     meta = {"language": getattr(info, "language", None)}

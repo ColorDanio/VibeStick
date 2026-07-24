@@ -65,8 +65,22 @@ static void printWrapped(const char* s, int x, int y, int maxWidthChars,
       M5.Lcd.setCursor(x, y + line * 9);
       if (*p == '\n') continue;
     }
-    M5.Lcd.print(*p);
+    {
+      uint8_t c = (uint8_t)*p;
+      M5.Lcd.print((c >= 32 && c <= 126) ? (char)c : '?');
+    }
     ++col;
+  }
+}
+
+// The built-in GLCD font covers 0x20-0xFF but the VibeStick UI is ASCII;
+// non-Latin1 input (e.g. UTF-8 CJK) renders as garbage either way, and
+// high bytes sent through the per-char glyph path have triggered an
+// interrupt-watchdog hang on this display driver. Substitute '?'.
+static void lcdPrintClean(const char* p, int n) {
+  for (int i = 0; i < n; ++i) {
+    uint8_t c = (uint8_t)p[i];
+    M5.Lcd.print((c >= 32 && c <= 126) ? (char)c : '?');
   }
 }
 
@@ -124,7 +138,7 @@ static void mqDrawBand(Marquee& m) {
   if (m.phase == 3) {
     for (int i = 0; i < m.widthChars; ++i) M5.Lcd.print(' ');
   } else {
-    for (int i = 0; i < m.widthChars; ++i) M5.Lcd.print(m.text[m.offset + i]);
+    lcdPrintClean(m.text + m.offset, m.widthChars);
   }
   m.lastDrawAt = millis();
 }
@@ -287,7 +301,9 @@ static void drawStatusBar(const char* title) {
   if (title != nullptr && title[0] != '\0') {
     char t[20];
     strlcpy(t, title, sizeof(t));
-    t[charsFit(sW - 110, 1)] = '\0';
+    int n = charsFit(sW - 110, 1);
+    if (n > (int)sizeof(t) - 1) n = sizeof(t) - 1;  // t[20]: never past end
+    t[n] = '\0';
     centerText(t, 4, 1, COL_ACCENT);
   }
 
@@ -537,7 +553,11 @@ void uiShowSessionPicker(int sel) {
                         ? gTools.list[gTools.active].id
                         : "tool";
   snprintf(prompt, sizeof(prompt), "%s@vibestick ~ %%", tid);
-  prompt[charsFit(sW - 8, 1)] = '\0';
+  {
+    int n = charsFit(sW - 8, 1);
+    if (n > (int)sizeof(prompt) - 1) n = sizeof(prompt) - 1;
+    prompt[n] = '\0';
+  }
   M5.Lcd.setTextSize(1);
   M5.Lcd.setTextColor(COL_GREEN, TFT_BLACK);
   M5.Lcd.setCursor(4, 20);
@@ -579,6 +599,7 @@ void uiShowSessionPicker(int sel) {
     const char* name = e.name[0] ? e.name : e.id;
     int nameChars = charsFit(sW - 26 - 8 - 66, 1);  // room for state at right
     if (nameChars < 6) nameChars = 6;
+    if (nameChars > 21) nameChars = 21;  // buf[22] below: never past end
     if (hl) {
       drawMarquee(MQ_SESSION_ROW, name, 28, y + 2, nameChars, 1, TFT_WHITE,
                   TFT_BLACK);
@@ -768,7 +789,8 @@ static void drawConvoMessage() {
   for (int i = 0; i < shown; ++i) {
     if (i % wrapChars == 0)
       M5.Lcd.setCursor(4, CONTENT_Y0 + (i / wrapChars) * 9);
-    M5.Lcd.print(p[i]);
+    uint8_t c = (uint8_t)p[i];
+    M5.Lcd.print((c >= 32 && c <= 126) ? (char)c : '?');
   }
   if (len > cap) M5.Lcd.print("...");
 

@@ -1,9 +1,11 @@
 """Deliver INPUT messages from the device to the active CLI session.
 
 The delivery method is recorded by the adapter in the session's state
-file: a `tmux` pane id (preferred) or a `tty` device path. Everything
-here is defensive: timeouts, non-blocking writes, and no exceptions
-escaping to the caller.
+file: a `tmux` pane id (preferred) or a `tty` device path. tty delivery
+injects bytes into the terminal's input queue via the TIOCSTI ioctl —
+plain os.write() on a pts slave only *displays* text, it never reaches
+the CLI's stdin. Everything here is defensive: timeouts, non-blocking
+writes, and no exceptions escaping to the caller.
 """
 
 from __future__ import annotations
@@ -11,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from pathlib import Path
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +24,31 @@ DELIVERY_MODES = ("auto", "tmux", "tty")
 # Overridable for tests (fake /proc and pts trees).
 _PROC_ROOT = "/proc"
 _DEVPTS = "/dev/pts"
+
+
+def _legacy_tiocsti() -> str:
+    """Kernel TIOCSTI toggle, for diagnostics ('0' = injection blocked)."""
+    try:
+        return Path("/proc/sys/dev/tty/legacy_tiocsti").read_text().strip()
+    except OSError:
+        return "unknown"
+
+
+def _inject_tty(fd: int, data: bytes) -> None:
+    """Push bytes into the tty input queue, one TIOCSTI per byte."""
+    import fcntl
+    import termios
+
+    for i in range(len(data)):
+        fcntl.ioctl(fd, termios.TIOCSTI, data[i : i + 1])
+
+
+def _write_tty_input(tty: str, data: bytes) -> None:
+    fd = os.open(tty, os.O_WRONLY | os.O_NONBLOCK)
+    try:
+        _inject_tty(fd, data)
+    finally:
+        os.close(fd)
 
 
 def resolve_target(record: dict | None, mode: str = "auto") -> tuple[str, str] | None:
@@ -198,18 +226,18 @@ async def _send_binding_tty(tty: str, binding: str, pid: int = 0) -> bool:
         log.info("tty gate rejected binding delivery to %s", tty)
         return False
 
-    def _write() -> None:
-        fd = os.open(tty, os.O_WRONLY | os.O_NONBLOCK)
-        try:
-            os.write(fd, data.encode("utf-8"))
-        finally:
-            os.close(fd)
-
     try:
-        await asyncio.wait_for(asyncio.to_thread(_write), timeout=TMUX_TIMEOUT_SEC)
+        await asyncio.wait_for(
+            asyncio.to_thread(_write_tty_input, tty, data.encode("utf-8")),
+            timeout=TMUX_TIMEOUT_SEC,
+        )
         return True
     except (OSError, asyncio.TimeoutError) as exc:
-        log.warning("tty binding delivery to %s failed: %s", tty, exc)
+        log.warning(
+            "tty binding delivery to %s failed: %s (dev.tty.legacy_tiocsti=%s; "
+            "TIOCSTI injection requires it to be 1)",
+            tty, exc, _legacy_tiocsti(),
+        )
         return False
 
 
@@ -253,21 +281,18 @@ async def _deliver_tty(tty: str, text: str, pid: int = 0) -> bool:
         log.info("tty gate rejected delivery to %s", tty)
         return False
 
-    def _write() -> None:
-        # O_NONBLOCK + short alarm-like guard via select-free approach:
-        # opening a tty O_WRONLY|O_NONBLOCK won't block on carrier, and a
-        # single small write either fits the buffer or raises.
-        fd = os.open(tty, os.O_WRONLY | os.O_NONBLOCK)
-        try:
-            os.write(fd, (text + "\r").encode("utf-8"))
-        finally:
-            os.close(fd)
-
     try:
-        await asyncio.wait_for(asyncio.to_thread(_write), timeout=TMUX_TIMEOUT_SEC)
+        await asyncio.wait_for(
+            asyncio.to_thread(_write_tty_input, tty, (text + "\r").encode("utf-8")),
+            timeout=TMUX_TIMEOUT_SEC,
+        )
         return True
     except (OSError, asyncio.TimeoutError) as exc:
-        log.warning("tty delivery to %s failed: %s", tty, exc)
+        log.warning(
+            "tty delivery to %s failed: %s (dev.tty.legacy_tiocsti=%s; "
+            "TIOCSTI injection requires it to be 1)",
+            tty, exc, _legacy_tiocsti(),
+        )
         return False
 
 

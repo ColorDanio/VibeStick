@@ -544,6 +544,7 @@ static void applyBleDirty() {
   }
 }
 
+
 // ---- power button (AXP192 PEK) ----
 //
 // M5.Axp.GetBtnPress() returns AXP192 IRQ status reg 0x46 and clears it.
@@ -655,6 +656,7 @@ void loop() {
 
   pollButtons();
 
+
   // Hold-to-record: A held >=500 ms in a hold-to-record screen starts recording.
   if ((sScreen == SCR_CONVO || sScreen == SCR_MIC) && !sRecording &&
       sADownAt != 0 && M5.BtnA.isPressed() &&
@@ -714,6 +716,7 @@ void loop() {
     sNeedRedraw = false;
     redraw();
   }
+
 
   delay(2);
 }

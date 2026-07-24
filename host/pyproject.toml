@@ -18,6 +18,7 @@ dev = [
 asr = [
     "faster-whisper",
     "numpy",
+    "scipy",
 ]
 app = [
     "pywebview",

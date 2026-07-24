@@ -82,13 +82,26 @@ def fake_pts(tmp_path, monkeypatch):
     return proc_root, pts
 
 
-def test_tty_gate_and_message_delivery(fake_pts):
+
+
+@pytest.fixture
+def injected(monkeypatch):
+    calls = []
+
+    def fake_write(tty, data):
+        calls.append((tty, data))
+
+    monkeypatch.setattr(delivery, "_write_tty_input", fake_write)
+    return calls
+
+
+def test_tty_gate_and_message_delivery(fake_pts, injected):
     proc_root, pts = fake_pts
     make_stat(proc_root, 100, ppid=1, pgrp=100, tty_nr=PTS_NR, tpgid=100)
     ok = asyncio.run(delivery.deliver_text(
         {"tty": str(pts), "pid": 100}, "hello stick"))
     assert ok is True
-    assert pts.read_bytes() == b"hello stick\r"
+    assert injected == [(str(pts), b"hello stick\r")]
 
 
 def test_tty_gate_rejects_gone_or_background(fake_pts, tmp_path):
@@ -99,29 +112,28 @@ def test_tty_gate_rejects_gone_or_background(fake_pts, tmp_path):
     # Alive but background (tpgid is another group).
     make_stat(proc_root, 300, ppid=1, pgrp=300, tty_nr=PTS_NR, tpgid=50)
     assert asyncio.run(delivery.deliver_text({"tty": str(pts), "pid": 300}, "x")) is False
-    assert pts.read_bytes() == b""
     # Alive, foreground, but controlling terminal moved elsewhere.
     (tmp_path / "pts" / "9").touch()
     make_stat(proc_root, 400, ppid=1, pgrp=400, tty_nr=(136 << 8) | 9, tpgid=400)
     assert asyncio.run(delivery.deliver_text({"tty": str(pts), "pid": 400}, "x")) is False
 
 
-def test_tty_cancel_binding_delivery(fake_pts):
+def test_tty_cancel_binding_delivery(fake_pts, injected):
     proc_root, pts = fake_pts
     make_stat(proc_root, 100, ppid=1, pgrp=100, tty_nr=PTS_NR, tpgid=100)
     ok = asyncio.run(delivery.send_binding({"tty": str(pts), "pid": 100}, "escape"))
     assert ok is True
-    assert pts.read_bytes() == b"\x1b"
+    assert injected == [(str(pts), b"\x1b")]
 
 
-def test_tty_delivery_mode_restricts(fake_pts):
+def test_tty_delivery_mode_restricts(fake_pts, injected):
     proc_root, pts = fake_pts
     make_stat(proc_root, 100, ppid=1, pgrp=100, tty_nr=PTS_NR, tpgid=100)
     rec = {"tmux": "%1", "tty": str(pts), "pid": 100}
     # mode=tmux with tmux present would spawn tmux; mode=tty forces the pts.
     ok = asyncio.run(delivery.deliver_text(rec, "forced", mode="tty"))
     assert ok is True
-    assert pts.read_bytes() == b"forced\r"
+    assert injected == [(str(pts), b"forced\r")]
 
 
 # -- session.select regression (bug 1) -----------------------------------------
@@ -190,3 +202,49 @@ def test_select_truncated_id_unique_prefix(tmp_path):
     # Ambiguous prefix is rejected.
     assert store.apply_command({"cmd": "session.select", "id": "disc:"}) is False
     assert store.apply_command({"cmd": "session.select", "id": "nope"}) is False
+
+
+# -- TIOCSTI end-to-end (real pty) ----------------------------------------------
+
+import platform
+
+
+def _legacy_tiocsti():
+    try:
+        return open("/proc/sys/dev/tty/legacy_tiocsti").read().strip()
+    except OSError:
+        return "unknown"
+
+
+def test_tiocsti_injection_reaches_input_queue():
+    """Inject via the pts slave; the terminal input queue must yield the
+    bytes (read from the slave side like a CLI's stdin would)."""
+    if platform.system() != "Linux":
+        pytest.skip("TIOCSTI is Linux-only")
+    if _legacy_tiocsti() != "1":
+        pytest.skip("kernel has dev.tty.legacy_tiocsti=0 (injection disabled)")
+    import pty
+
+    master, slave_fd = pty.openpty()
+    slave_name = os.ttyname(slave_fd)
+    ok = asyncio.run(delivery.deliver_text({"tty": slave_name}, "hello stick"))
+    assert ok is True
+    # canonical mode: the injected \r terminates the line (\r -> \n via ICRNL)
+    data = os.read(slave_fd, 64)
+    assert data == b"hello stick\n"
+    # control bytes inject too (Escape)
+    ok = asyncio.run(delivery.send_binding({"tty": slave_name}, "escape"))
+    assert ok is True
+    assert os.read(slave_fd, 1) == b"\x1b"
+    os.close(master)
+    os.close(slave_fd)
+
+
+def test_tiocsti_failure_is_graceful(monkeypatch, caplog):
+    def boom(tty, data):
+        raise OSError(1, "Operation not permitted")
+
+    monkeypatch.setattr(delivery, "_write_tty_input", boom)
+    ok = asyncio.run(delivery.deliver_text({"tty": "/dev/pts/0"}, "x"))
+    assert ok is False  # logged and dropped, never raised
+    assert any("legacy_tiocsti" in r.message for r in caplog.records)
