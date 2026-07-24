@@ -31,8 +31,8 @@ Hardware: [M5StickC Plus](https://docs.m5stack.com/en/core/m5stickc_plus)
                  │           └─────────────┘            │                     │
                  │                    ┌─────────────────┼─────────────────┐   │
                  │                    ▼                 ▼                 ▼   │
-                 │             tmux send-keys    TIOCSTI tty inject   virtual │
-                 │             (tmux sessions)  (plain terminals)   mic source│
+                 │          tmux / zellij      TIOCSTI tty inject   virtual │
+                 │          (multiplexers)      (plain terminals)   mic source│
                  └───────────────────────────────────────────────────────────┘
 ```
 
@@ -43,7 +43,8 @@ Hardware: [M5StickC Plus](https://docs.m5stack.com/en/core/m5stickc_plus)
 - **host/** — Python daemon (`vibestickd`). Collects session state from
   three sources (adapter files > on-disk discovery > /proc presence),
   owns tool/session selection, queues and delivers messages
-  (tmux `send-keys` or TIOCSTI tty injection), transcribes voice
+  (tmux `send-keys`, zellij actions, or TIOCSTI tty injection),
+  transcribes voice
   (faster-whisper or an external command), feeds the virtual microphone,
   and serves the dashboard at `http://127.0.0.1:7860`.
 - **docs/** — protocol spec and architecture notes.

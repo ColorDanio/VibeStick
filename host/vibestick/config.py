@@ -116,7 +116,7 @@ class ToolConfig:
             # `process` field — fall back to the well-known name for the id.
             process = DEFAULT_PROCESSES.get(tool_id, "")
         delivery = str(data.get("delivery") or "auto")
-        if delivery not in ("auto", "tmux", "tty"):
+        if delivery not in ("auto", "tmux", "zellij", "tty"):
             log.warning("tool %r: unknown delivery %r, using 'auto'", tool_id, delivery)
             delivery = "auto"
         return cls(

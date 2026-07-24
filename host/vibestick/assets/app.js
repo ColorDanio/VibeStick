@@ -445,6 +445,7 @@ function toolCard(tool, i) {
           <select data-f="delivery">
             <option value="auto">auto</option>
             <option value="tmux">tmux</option>
+            <option value="zellij">zellij</option>
             <option value="tty">tty</option>
           </select></div>
         <div><label>Process name</label><input data-f="process" value="${esc(tool.process || "")}"></div>

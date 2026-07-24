@@ -56,6 +56,13 @@ def main() -> None:
     pane = os.environ.get("TMUX_PANE")
     if pane:
         record["tmux"] = pane
+    if os.environ.get("ZELLIJ"):
+        zellij_session = os.environ.get("ZELLIJ_SESSION_NAME") or ""
+        if zellij_session:
+            record["zellij"] = zellij_session
+        zellij_pane = os.environ.get("ZELLIJ_PANE_ID")  # 0.44+; may be absent
+        if zellij_pane:
+            record["zellij_pane"] = zellij_pane
 
     os.makedirs(STATE_DIR, exist_ok=True)
     path = os.path.join(STATE_DIR, f"{session_id}.json")

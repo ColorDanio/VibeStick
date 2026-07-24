@@ -14,7 +14,7 @@ covers everything around it.
 | Session store    | `host/vibestick/store.py`  | Merges adapter files, discovery, presence; selection; state rules |
 | Discovery        | `host/vibestick/discover.py` | Reads each CLI's on-disk session store |
 | Presence watcher | `host/vibestick/procwatch.py` | `/proc` scan for live CLI processes |
-| Delivery         | `host/vibestick/delivery.py` | tmux send-keys / TIOCSTI tty injection / new tmux windows |
+| Delivery         | `host/vibestick/delivery.py` | tmux send-keys / zellij actions / TIOCSTI tty injection |
 | Voice pipeline   | `host/vibestick/voice.py`  | PCM buffering, preprocessing, ASR, transcription log, clips |
 | Virtual mic      | `host/vibestick/mic.py`    | PipeWire virtual source fed from device audio |
 | Dashboard        | `host/vibestick/setupui.py` + `assets/` | stdlib HTTP server + vanilla JS SPA |
@@ -97,12 +97,19 @@ ChatGPT app, or anywhere else; hold A to talk.
 
 ## Delivery targets
 
-Each session record may carry a `tmux` pane id or a `tty` path
-(discovered/presence sessions inherit the CLI process's controlling
-terminal, resolved from `/proc/<pid>/stat`). Per-tool `delivery`
-config (`auto`/`tmux`/`tty`) picks the transport:
+Each session record may carry a `tmux` pane id, a `zellij` session
+name (plus optional `zellij_pane`), or a `tty` path (discovered/presence
+sessions inherit the CLI process's controlling terminal, resolved from
+`/proc/<pid>/stat`). Per-tool `delivery` config
+(`auto`/`tmux`/`zellij`/`tty`) picks the transport; auto order is
+tmux -> zellij -> tty:
 
 - **tmux** — `tmux send-keys -t <pane> -- <text> Enter`. Always works.
+- **zellij** — `zellij --session <s> action write-chars <text>` followed
+  by `action write 13` (Enter); key bindings go out as `action write
+  <bytes>` (ctrl bytes and ANSI escape sequences for arrows/F-keys).
+  `session.new` uses `action new-pane -- <cli>`. Works everywhere tmux
+  does — either multiplexer is a first-class target.
 - **tty** — bytes are injected into the terminal's input queue with the
   **TIOCSTI** ioctl (one ioctl per byte, control bytes included).
   Writing to the pts slave would only *display* text, not deliver it.
@@ -111,8 +118,9 @@ config (`auto`/`tmux`/`tty`) picks the transport:
   Kernels ~6.15+ restrict TIOCSTI to the caller's controlling terminal,
   which a background daemon cannot satisfy — the daemon probes
   injection at startup (`/api/status` → `tiocsti`) and the dashboard
-  recommends tmux when the probe fails. tmux delivery is unaffected
-  and works everywhere.
+  recommends tmux or zellij when the probe fails — run your CLI in
+  either multiplexer and delivery works everywhere (tmux delivery is
+  unaffected).
 
 All delivery is best-effort with timeouts; failures are logged, never
 fatal.

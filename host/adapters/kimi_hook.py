@@ -177,6 +177,15 @@ def main() -> None:
     if pane:
         record["tmux"] = pane
 
+    # zellij session (tmux still wins at resolve time when both exist).
+    if os.environ.get("ZELLIJ"):
+        zellij_session = os.environ.get("ZELLIJ_SESSION_NAME") or ""
+        if zellij_session:
+            record["zellij"] = zellij_session
+        zellij_pane = os.environ.get("ZELLIJ_PANE_ID")  # 0.44+; may be absent
+        if zellij_pane:
+            record["zellij_pane"] = zellij_pane
+
     # Delivery fallback for non-tmux terminals: pid + controlling pts.
     pid = cli_pid()
     if pid:

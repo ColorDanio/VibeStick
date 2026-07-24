@@ -345,9 +345,15 @@ so otherwise-unsupported tools at least show presence on the device.
 
 When you type a message on the device (INPUT notify), the daemon delivers
 it to the **active** session. Target resolution order (per-tool
-`delivery` config: `"auto"` default, `"tmux"`, `"tty"`):
+`delivery` config: `"auto"` default, `"tmux"`, `"zellij"`, `"tty"`):
 
 - `tmux` pane id → `tmux send-keys -t <pane> -- <text> Enter`
+- `zellij` session name (+ optional `zellij_pane`) →
+  `zellij --session <s> action write-chars <text>` then `action write 13`;
+  key bindings go out as `action write <bytes>` (ctrl bytes, ANSI escape
+  sequences for arrows/F-keys); `session.new` uses `action new-pane`.
+  Adapters record these fields automatically inside zellij
+  (`$ZELLIJ`/`$ZELLIJ_SESSION_NAME`/`$ZELLIJ_PANE_ID`).
 - `tty` path → bytes are injected into the terminal's input queue with
   the **TIOCSTI** ioctl, one byte per ioctl (writing the pts slave
   directly would only *display* the text, not deliver it). Presence/
@@ -361,7 +367,9 @@ it to the **active** session. Target resolution order (per-tool
   `dev.tty.legacy_tiocsti=1` no longer lifts this for a background
   daemon). The daemon probes injection at startup, exposes the result
   as `tiocsti` in `/api/status`, and the dashboard banner recommends
-  running CLIs inside tmux when the probe fails.
+  running CLIs inside tmux or zellij when the probe fails — on modern
+  kernels without usable TIOCSTI, either multiplexer works as a
+  first-class delivery target.
 - neither → the message is logged and dropped
 
 All delivery is best-effort with timeouts; failures are logged, never fatal.

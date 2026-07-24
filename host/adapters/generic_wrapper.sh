@@ -18,14 +18,21 @@ vibe_wrap() {
     _vw_id="$_vw_tool-$$"
     _vw_file="$VIBESTICK_STATE_DIR/$_vw_id.json"
 
-    # Delivery field fragment (leading comma, empty when unknown).
+    # Delivery field fragments (leading comma, empty when unknown).
+    # tmux wins at resolve time; zellij is recorded alongside it.
     _vw_extra=""
     if [ -n "$TMUX_PANE" ]; then
-        _vw_extra=", \"tmux\": \"$TMUX_PANE\""
-    else
+        _vw_extra="$_vw_extra, \"tmux\": \"$TMUX_PANE\""
+    fi
+    if [ -n "$ZELLIJ" ] && [ -n "$ZELLIJ_SESSION_NAME" ]; then
+        _vw_extra="$_vw_extra, \"zellij\": \"$ZELLIJ_SESSION_NAME\""
+        [ -n "$ZELLIJ_PANE_ID" ] \
+            && _vw_extra="$_vw_extra, \"zellij_pane\": \"$ZELLIJ_PANE_ID\""
+    fi
+    if [ -z "$TMUX_PANE" ] && [ -z "$ZELLIJ" ]; then
         _vw_tty=$(tty 2>/dev/null || true)
         [ -n "$_vw_tty" ] && [ "$_vw_tty" != "not a tty" ] \
-            && _vw_extra=", \"tty\": \"$_vw_tty\""
+            && _vw_extra="$_vw_extra, \"tty\": \"$_vw_tty\""
     fi
 
     _vw_write() { # $1 = state, $2 = last

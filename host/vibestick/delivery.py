@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 TMUX_TIMEOUT_SEC = 5.0
 
-DELIVERY_MODES = ("auto", "tmux", "tty")
+DELIVERY_MODES = ("auto", "tmux", "zellij", "tty")
 
 # Overridable for tests (fake /proc and pts trees).
 _PROC_ROOT = "/proc"
@@ -76,25 +76,31 @@ def _write_tty_input(tty: str, data: bytes) -> None:
         os.close(fd)
 
 
-def resolve_target(record: dict | None, mode: str = "auto") -> tuple[str, str] | None:
-    """Pick a delivery target ("tmux"|"tty", value) per the tool's mode.
+def resolve_target(record: dict | None, mode: str = "auto") -> tuple[str, object] | None:
+    """Pick a delivery target ("tmux"|"zellij"|"tty", value) per mode.
 
-    auto: tmux pane preferred, tty fallback; tmux/tty: restrict.
-    Records that carry a pid but no tty get one resolved from
-    /proc/<pid>/stat (controlling terminal) — e.g. discovered sessions
-    whose presence scan ran before the terminal existed.
+    auto: tmux pane preferred, then zellij session, then tty fallback;
+    tmux/zellij/tty: restrict to that transport. zellij values are
+    (session, pane) tuples. Records that carry a pid but no tty get one
+    resolved from /proc/<pid>/stat (controlling terminal).
     """
     record = record or {}
     tmux_pane = str(record.get("tmux") or "")
+    zellij_session = str(record.get("zellij") or "")
+    zellij_pane = str(record.get("zellij_pane") or "")
     tty = str(record.get("tty") or "")
     if not tty and record.get("pid"):
         tty = _tty_for_pid(int(record["pid"])) or ""
     if mode == "tmux":
         return ("tmux", tmux_pane) if tmux_pane else None
+    if mode == "zellij":
+        return ("zellij", (zellij_session, zellij_pane)) if zellij_session else None
     if mode == "tty":
         return ("tty", tty) if tty else None
     if tmux_pane:
         return ("tmux", tmux_pane)
+    if zellij_session:
+        return ("zellij", (zellij_session, zellij_pane))
     if tty:
         return ("tty", tty)
     return None
@@ -192,8 +198,9 @@ async def send_binding(record: dict | None, binding: str, mode: str = "auto") ->
     """Send a key binding to the session described by a raw state file.
 
     tmux: `send-keys` with mapped key names or `-l` for literal strings.
-    tty: best-effort write of common control bytes / literal text
-    (gated by tty_gate_ok). Returns True on handoff to some transport.
+    zellij: `action write <bytes>` for keys / `action write-chars` for literals.
+    tty: TIOCSTI injection (gated by tty_gate_ok).
+    Returns True on handoff to some transport.
     """
     if not binding or not binding.strip():
         return False
@@ -205,6 +212,9 @@ async def send_binding(record: dict | None, binding: str, mode: str = "auto") ->
     kind, value = target
     if kind == "tmux":
         return await _send_binding_tmux(value, binding)
+    if kind == "zellij":
+        session, pane = value
+        return await _send_binding_zellij(session, pane, binding)
     return await _send_binding_tty(value, binding, pid=int(record.get("pid") or 0))
 
 
@@ -232,6 +242,90 @@ async def _send_binding_tmux(pane: str, binding: str) -> bool:
 
 
 _TTY_KEYS = {"enter": "\r", "escape": "\x1b", "tab": "\t", "backspace": "\x7f"}
+
+# zellij `action write <bytes>` key codes (tmux key name -> byte list).
+_ZJ_KEY_BYTES: dict[str, list[int]] = {
+    "Enter": [13],
+    "Escape": [27],
+    "Tab": [9],
+    "Space": [32],
+    "BSpace": [127],
+    "DC": [27, 91, 51, 126],       # Delete: ESC [ 3 ~
+    "Up": [27, 91, 65],            # ESC [ A
+    "Down": [27, 91, 66],
+    "Right": [27, 91, 67],
+    "Left": [27, 91, 68],
+    "Home": [27, 91, 72],          # ESC [ H
+    "End": [27, 91, 70],           # ESC [ F
+    "PageUp": [27, 91, 53, 126],   # ESC [ 5 ~
+    "PageDown": [27, 91, 54, 126], # ESC [ 6 ~
+    "F1": [27, 79, 80], "F2": [27, 79, 81], "F3": [27, 79, 82], "F4": [27, 79, 83],
+    "F5": [27, 91, 49, 53, 126], "F6": [27, 91, 49, 55, 126],
+    "F7": [27, 91, 49, 56, 126], "F8": [27, 91, 49, 57, 126],
+    "F9": [27, 91, 50, 48, 126], "F10": [27, 91, 50, 49, 126],
+    "F11": [27, 91, 50, 51, 126], "F12": [27, 91, 50, 52, 126],
+}
+
+
+def _zellij_argv(session: str, pane: str, *args: str) -> list[str]:
+    argv = ["zellij"]
+    if session:
+        argv += ["--session", session]
+    argv += ["action", *args]
+    if pane:
+        argv += ["-p", pane]
+    return argv
+
+
+async def _run_zellij(argv: list[str]) -> bool:
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *argv,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=TMUX_TIMEOUT_SEC)
+        if proc.returncode != 0:
+            log.warning("zellij %s failed: %s", " ".join(argv[1:4]),
+                        stderr.decode(errors="replace").strip())
+            return False
+        return True
+    except (OSError, asyncio.TimeoutError) as exc:
+        log.warning("zellij action failed: %s", exc)
+        return False
+
+
+def _binding_to_zellij_bytes(binding: str) -> list[int] | None:
+    """Map a key binding to zellij byte codes; None for literal strings."""
+    args, literal = map_binding(binding)
+    if literal:
+        return None
+    key = args[0]
+    if key.startswith("C-") and len(key) == 3:
+        return [ord(key[2].lower()) & 0x1F]  # ctrl byte, e.g. C-c -> 3
+    if key.startswith("M-") and len(key) == 3:
+        return [27, ord(key[2])]  # alt -> ESC prefix
+    if key.startswith("S-") and len(key) == 2:
+        return [ord(key[1].upper())]  # shift+char is just the uppercase char
+    mapped = _ZJ_KEY_BYTES.get(key)
+    if mapped is not None:
+        return mapped
+    if len(key) == 1:
+        return [ord(key)]
+    return None
+
+
+async def _send_binding_zellij(session: str, pane: str, binding: str) -> bool:
+    codes = _binding_to_zellij_bytes(binding)
+    if codes is None:
+        args, literal = map_binding(binding)
+        if literal:
+            return await _run_zellij(_zellij_argv(session, pane, "write-chars", args[0]))
+        log.info("binding %r not representable via zellij; dropped", binding)
+        return False
+    return await _run_zellij(
+        _zellij_argv(session, pane, "write", *(str(b) for b in codes))
+    )
 
 
 async def _send_binding_tty(tty: str, binding: str, pid: int = 0) -> bool:
@@ -281,6 +375,9 @@ async def deliver_text(record: dict | None, text: str, mode: str = "auto") -> bo
     kind, value = target
     if kind == "tmux":
         return await _deliver_tmux(value, text)
+    if kind == "zellij":
+        session, pane = value
+        return await _deliver_zellij(session, pane, text)
     return await _deliver_tty(value, text, pid=int(record.get("pid") or 0))
 
 
@@ -299,6 +396,13 @@ async def _deliver_tmux(pane: str, text: str) -> bool:
     except (OSError, asyncio.TimeoutError) as exc:
         log.warning("tmux delivery to %s failed: %s", pane, exc)
         return False
+
+
+async def _deliver_zellij(session: str, pane: str, text: str) -> bool:
+    """Type `text` + Enter into a zellij pane (write-chars, then write 13)."""
+    if not await _run_zellij(_zellij_argv(session, pane, "write-chars", text)):
+        return False
+    return await _run_zellij(_zellij_argv(session, pane, "write", "13"))
 
 
 async def _deliver_tty(tty: str, text: str, pid: int = 0) -> bool:
@@ -344,4 +448,33 @@ async def launch_tmux_window(target_pane: str, name: str, command: str) -> bool:
         return True
     except (OSError, asyncio.TimeoutError) as exc:
         log.warning("tmux new-window failed: %s", exc)
+        return False
+
+
+async def launch_zellij_pane(session: str, name: str, command: str) -> bool:
+    """Open a new zellij pane running `command` (session.new).
+
+    `name` is currently informational (kept for API symmetry with
+    launch_tmux_window); the pane runs `command` split shell-style.
+    """
+    if not session or not command:
+        return False
+    import shlex
+
+    argv = ["zellij", "--session", session, "action", "new-pane", "--",
+            *shlex.split(command)]
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *argv,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=TMUX_TIMEOUT_SEC)
+        if proc.returncode != 0:
+            log.warning("zellij new-pane failed: %s", stderr.decode(errors="replace").strip())
+            return False
+        log.info("launched new zellij pane in %r running %r", session, command)
+        return True
+    except (OSError, asyncio.TimeoutError) as exc:
+        log.warning("zellij new-pane failed: %s", exc)
         return False
