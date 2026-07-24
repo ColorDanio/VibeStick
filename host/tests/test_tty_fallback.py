@@ -223,6 +223,9 @@ def test_tiocsti_injection_reaches_input_queue():
         pytest.skip("TIOCSTI is Linux-only")
     if _legacy_tiocsti() != "1":
         pytest.skip("kernel has dev.tty.legacy_tiocsti=0 (injection disabled)")
+    if not delivery.tiocsti_probe():
+        pytest.skip("kernel restricts TIOCSTI to the controlling terminal "
+                    "(>= ~6.15); injection unavailable without CAP_SYS_ADMIN")
     import pty
 
     master, slave_fd = pty.openpty()

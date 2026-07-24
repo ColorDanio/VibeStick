@@ -26,7 +26,7 @@
   <section class="page" id="page-overview">
     <h1>Overview</h1>
     <div class="warn-banner" id="tiocsti-banner" hidden>
-      ⚠ tty 注入被内核禁用（dev.tty.legacy_tiocsti=0）——非 tmux 会话的消息与 cancel 将无法投递。修复：<code>sudo sysctl dev.tty.legacy_tiocsti=1</code>
+      ⚠ tty 注入在当前内核不可用（TIOCSTI 被限制为仅控制终端，sysctl 已无法放开）——非 tmux 会话的消息与 cancel 将无法投递。建议在 tmux 中运行 CLI：<code>tmux new -s vibe</code> 后启动你的 CLI，daemon 会自动改用 tmux 投递。
     </div>
     <div class="card conn-card" id="conn-card">
       <div class="conn-big"><span class="dot big breath" id="conn-dot"></span>

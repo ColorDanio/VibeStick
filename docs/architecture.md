@@ -108,9 +108,11 @@ config (`auto`/`tmux`/`tty`) picks the transport:
   Writing to the pts slave would only *display* text, not deliver it.
   A safety gate requires the process alive, still attached to that
   terminal, in its foreground process group, and the pts writable.
-  Kernels with `dev.tty.legacy_tiocsti=0` reject TIOCSTI — enable it
-  with `sudo sysctl dev.tty.legacy_tiocsti=1`; the daemon logs the
-  current value on failure.
+  Kernels ~6.15+ restrict TIOCSTI to the caller's controlling terminal,
+  which a background daemon cannot satisfy — the daemon probes
+  injection at startup (`/api/status` → `tiocsti`) and the dashboard
+  recommends tmux when the probe fails. tmux delivery is unaffected
+  and works everywhere.
 
 All delivery is best-effort with timeouts; failures are logged, never
 fatal.

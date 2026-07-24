@@ -356,10 +356,12 @@ it to the **active** session. Target resolution order (per-tool
   happens while the process is alive, its controlling terminal is still
   that pts, the process (or an ancestor) is in the terminal's
   foreground process group, and the pts is writable — otherwise the
-  message counts as undeliverable. Kernels with
-  `dev.tty.legacy_tiocsti=0` reject TIOCSTI (`sudo sysctl
-  dev.tty.legacy_tiocsti=1` enables it); failures log the current
-  sysctl value.
+  message counts as undeliverable. **Kernel caveat**: kernels ~6.15+
+  restrict TIOCSTI to the caller's controlling terminal (the sysctl
+  `dev.tty.legacy_tiocsti=1` no longer lifts this for a background
+  daemon). The daemon probes injection at startup, exposes the result
+  as `tiocsti` in `/api/status`, and the dashboard banner recommends
+  running CLIs inside tmux when the probe fails.
 - neither → the message is logged and dropped
 
 All delivery is best-effort with timeouts; failures are logged, never fatal.

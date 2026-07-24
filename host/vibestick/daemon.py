@@ -39,11 +39,13 @@ async def run_daemon(
     runtime: dict | None = None,
 ) -> None:
     started = time.time()
-    tiocsti_enabled = delivery._legacy_tiocsti() == "1"
+    tiocsti_enabled = delivery.tiocsti_probe()
     if not tiocsti_enabled:
         log.warning(
-            "TIOCSTI is disabled on this kernel (dev.tty.legacy_tiocsti=0); "
-            "tty delivery will fail — run: sudo sysctl dev.tty.legacy_tiocsti=1"
+            "TIOCSTI injection unavailable (dev.tty.legacy_tiocsti=%s; recent "
+            "kernels also restrict it to the controlling terminal) — tty "
+            "delivery will fail; run CLIs inside tmux for reliable delivery",
+            delivery._legacy_tiocsti(),
         )
     holder: dict = {
         "bridge": None,

@@ -559,6 +559,7 @@ class SessionStore:
             return protocol.ToolsPayload().to_json()
         voice_enabled = self.config.features.voice_enabled
         adapter_tools = {r.status.tool for r in self._records.values()}
+        discovered_tools = {r.status.tool for r in self._discovered.values()}
         merged = list(self._records.values()) + [
             r for r in self._discovered.values() if r.status.tool not in adapter_tools
         ]
@@ -573,9 +574,13 @@ class SessionStore:
         tools = []
         for t in visible:
             state = states.get(t.id)
-            if t.id not in adapter_tools and self._presence.get(t.id) is not None:
+            if (
+                t.id not in adapter_tools
+                and t.id not in discovered_tools
+                and self._presence.get(t.id) is not None
+            ):
                 # A live CLI process means running — but adapter records
-                # (richer state) always win when present.
+                # and discovered sessions (richer state) always win.
                 state = "running"
             elif state is None:
                 state = "idle"

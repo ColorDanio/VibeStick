@@ -34,6 +34,31 @@ def _legacy_tiocsti() -> str:
         return "unknown"
 
 
+def tiocsti_probe() -> bool:
+    """Runtime check: can this process actually inject via TIOCSTI?
+
+    The sysctl alone is not sufficient — recent kernels (>= ~6.15) also
+    reject TIOCSTI on terminals that are not the caller's controlling
+    tty unless the process holds CAP_SYS_ADMIN. A background daemon
+    meets neither condition, so probe once on a scratch pty and treat
+    EPERM as "tty delivery unavailable".
+    """
+    import pty
+
+    try:
+        master, slave_fd = pty.openpty()
+    except OSError:
+        return False
+    try:
+        _write_tty_input(os.ttyname(slave_fd), b"\x00")  # scratch pty, discarded
+        return True
+    except OSError:
+        return False
+    finally:
+        os.close(master)
+        os.close(slave_fd)
+
+
 def _inject_tty(fd: int, data: bytes) -> None:
     """Push bytes into the tty input queue, one TIOCSTI per byte."""
     import fcntl

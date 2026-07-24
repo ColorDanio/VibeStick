@@ -100,9 +100,12 @@ Double-shake the stick to force a status refresh.
    (GNOME launcher entry + daemon autostart).
 
 > tty delivery (voice messages and cancel into CLIs running in plain
-> terminals) uses the TIOCSTI ioctl. On kernels with
-> `dev.tty.legacy_tiocsti=0`, enable it once:
-> `sudo sysctl dev.tty.legacy_tiocsti=1` (tmux sessions are unaffected).
+> terminals) uses the TIOCSTI ioctl. Recent kernels (~6.15+) restrict
+> TIOCSTI to the caller's controlling terminal, which a background
+> daemon can never satisfy — on such systems tty delivery is
+> unavailable and the dashboard shows a warning. The reliable path is
+> to run your CLI inside tmux (`tmux new -s vibe`, then start the CLI);
+> delivery then uses `tmux send-keys` and works everywhere.
 
 ## Development
 
