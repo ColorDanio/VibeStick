@@ -25,6 +25,9 @@
 <main id="main">
   <section class="page" id="page-overview">
     <h1>Overview</h1>
+    <div class="warn-banner" id="tiocsti-banner" hidden>
+      ⚠ tty 注入被内核禁用（dev.tty.legacy_tiocsti=0）——非 tmux 会话的消息与 cancel 将无法投递。修复：<code>sudo sysctl dev.tty.legacy_tiocsti=1</code>
+    </div>
     <div class="card conn-card" id="conn-card">
       <div class="conn-big"><span class="dot big breath" id="conn-dot"></span>
         <span id="conn-title">…</span></div>

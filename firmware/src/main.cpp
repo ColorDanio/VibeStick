@@ -1,4 +1,4 @@
-#include <M5StickCPlus.h>
+#include "board.h"
 
 #include "ble.h"
 #include "mic.h"
@@ -113,7 +113,7 @@ static void activity() {
   sLastActivity = millis();
   if (sDimmed) {
     sDimmed = false;
-    M5.Axp.ScreenBreath(80);
+    boardBrightness(80);
     sNeedRedraw = true;
   }
 }
@@ -306,21 +306,21 @@ static void pollButtons() {
   bool convo = (sScreen == SCR_CONVO);
   bool holdTalk = convo || (sScreen == SCR_MIC);  // hold-to-record screens
 
-  if (M5.BtnA.wasPressed()) {
+  if (boardBtnA_wasPressed()) {
     if (sDimmed) sSwallowGesture = true;  // wake-only gesture
     activity();
     sADownAt = millis();
   }
-  if (M5.BtnB.wasPressed()) {
+  if (boardBtnB_wasPressed()) {
     if (sDimmed) sSwallowGesture = true;
     activity();
     sBDownAt = millis();
   }
 
-  if (M5.BtnA.wasReleased() && sADownAt != 0) {
+  if (boardBtnA_wasReleased() && sADownAt != 0) {
     uint32_t dur = millis() - sADownAt;
     sADownAt = 0;
-    if (sSwallowGesture && !M5.BtnA.isPressed() && !M5.BtnB.isPressed()) {
+    if (sSwallowGesture && !boardBtnA_isPressed() && !boardBtnB_isPressed()) {
       sSwallowGesture = false;
     } else if (!sSwallowGesture) {
       if (holdTalk) {
@@ -356,10 +356,10 @@ static void pollButtons() {
     }
   }
 
-  if (M5.BtnB.wasReleased() && sBDownAt != 0) {
+  if (boardBtnB_wasReleased() && sBDownAt != 0) {
     uint32_t dur = millis() - sBDownAt;
     sBDownAt = 0;
-    if (sSwallowGesture && !M5.BtnA.isPressed() && !M5.BtnB.isPressed()) {
+    if (sSwallowGesture && !boardBtnA_isPressed() && !boardBtnB_isPressed()) {
       sSwallowGesture = false;
     } else if (!sSwallowGesture) {
       pushEvent(dur >= LONG_PRESS_MS ? EV_B_LONG : EV_B_SHORT);
@@ -405,7 +405,7 @@ static void pollImu() {
   sImuNext = now + 50;
 
   float ax, ay, az;
-  M5.IMU.getAccelData(&ax, &ay, &az);
+  boardGetAccel(&ax, &ay, &az);
   if (!sImuPrimed) {
     sPrevAx = ax; sPrevAy = ay; sPrevAz = az;
     sImuPrimed = true;
@@ -459,10 +459,7 @@ static void pollBattery(bool force) {
   if (!force && now < sBatNext) return;
   sBatNext = now + 15000;
 
-  float v = M5.Axp.GetBatVoltage();
-  int pct = (int)((v - 3.3f) / (4.2f - 3.3f) * 100.0f);
-  if (pct < 0) pct = 0;
-  if (pct > 100) pct = 100;
+  int pct = boardBatteryPct();
   if (pct != sBatteryPct) {
     sBatteryPct = pct;
     uiSetBatteryPct(pct);
@@ -547,7 +544,7 @@ static void applyBleDirty() {
 
 // ---- power button (AXP192 PEK) ----
 //
-// M5.Axp.GetBtnPress() returns AXP192 IRQ status reg 0x46 and clears it.
+// boardPowerButtonEvent() returns AXP192 IRQ status reg 0x46 and clears it.
 // On this unit: 0 = none, 1 = long press (>=2 s), 2 = short press.
 // Short press = back one level; double press (two short presses within
 // 400 ms) = home. Long press is ignored (the PMU owns power-off).
@@ -563,7 +560,7 @@ static void powerHome() {
 
 static void pollPowerButton() {
   uint32_t now = millis();
-  uint8_t btn = M5.Axp.GetBtnPress();
+  uint8_t btn = boardPowerButtonEvent();
   if (btn != 0) {
     Serial.printf("[PWR] power button event: %d\n", btn);
     activity();
@@ -588,12 +585,16 @@ static void pollPowerButton() {
 // ---- status LED: off when connected, slow blink when advertising ----
 
 static void pollLed() {
+#ifdef VIBESTICK_BOARD_S3
+  // no user LED documented on StickS3
+#else
   if (bleConnected()) {
     digitalWrite(PIN_LED, HIGH);  // off
   } else {
     bool on = (millis() % 1600) < 80;
     digitalWrite(PIN_LED, on ? LOW : HIGH);
   }
+#endif
 }
 
 // ---- audio streaming ----
@@ -620,9 +621,9 @@ static void pumpAudio() {
 // ---- Arduino ----
 
 void setup() {
-  M5.begin();
+  Serial.begin(115200);
   Serial.println();
-  Serial.println("[BOOT] VibeStick v2.2 (M5StickC Plus)");
+  Serial.println("[BOOT] " BOARD_NAME);
   {
     // Reset diagnostics: distinguishes crash-watchdog/brownout/panic from
     // a clean power-on when investigating "jumped back to home" reports.
@@ -634,12 +635,13 @@ void setup() {
                   (r >= 1 && r <= 10) ? reasons[r] : "?");
   }
 
+#ifndef VIBESTICK_BOARD_S3
   pinMode(PIN_LED, OUTPUT);
   digitalWrite(PIN_LED, HIGH);  // off
+#endif
 
-  M5.Axp.ScreenBreath(80);
-  M5.IMU.Init();
-  Serial.println("[BOOT] IMU init done");
+  boardInit();
+  Serial.println("[BOOT] board init done");
 
   uiInit();
   Serial.println("[BOOT] branded waiting screen (until host connects)");
@@ -652,14 +654,14 @@ void setup() {
 }
 
 void loop() {
-  M5.update();
+  boardUpdate();
 
   pollButtons();
 
 
   // Hold-to-record: A held >=500 ms in a hold-to-record screen starts recording.
   if ((sScreen == SCR_CONVO || sScreen == SCR_MIC) && !sRecording &&
-      sADownAt != 0 && M5.BtnA.isPressed() &&
+      sADownAt != 0 && boardBtnA_isPressed() &&
       millis() - sADownAt >= REC_HOLD_MS) {
     startRecording(sScreen == SCR_MIC);
   }
@@ -668,6 +670,13 @@ void loop() {
   while (popEvent(&e)) handleEvent(e);
 
   applyBleDirty();
+#if VIBESTICK_DEBUG_FORCE_CONVO
+  // TEMPORARY: exercise the convo render path without physical buttons.
+  if (sScreen == SCR_HOME && gStatus.valid &&
+      (gStatus.tailCount > 0 || (gVoice.valid && gVoice.text[0]))) {
+    setScreen(SCR_CONVO);
+  }
+#endif
   pollImu();
   pollPowerButton();
   pollBattery(false);
@@ -688,7 +697,7 @@ void loop() {
   // Display idle dim.
   if (!sDimmed && millis() - sLastActivity > DIM_AFTER_MS) {
     sDimmed = true;
-    M5.Axp.ScreenBreath(15);
+    boardBrightness(15);
     Serial.println("[UI] display dimmed (idle)");
   }
 

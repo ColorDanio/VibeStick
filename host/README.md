@@ -316,6 +316,17 @@ command = "python3 /path/to/host/adapters/kimi_hook.py"
 # ... same command for UserPromptSubmit, PreToolUse, Stop, SessionEnd
 ```
 
+Records carry delivery fields: `tmux` (when `$TMUX_PANE` is set), else
+`pid` (the CLI process, shell wrappers skipped) and `tty` (its
+controlling pts from `/proc/<pid>/stat`), so non-tmux kimi sessions are
+deliverable too. `UserPromptSubmit` stores the prompt in `last`. Every
+hook firing appends to `~/.vibestick/hook-log.jsonl` (last 50) — check
+it to confirm Stop -> waiting actually happens at turn end.
+
+Note: tty delivery uses the TIOCSTI ioctl; on kernels with
+`dev.tty.legacy_tiocsti=0` it is blocked (the dashboard shows a warning
+banner) — enable with `sudo sysctl dev.tty.legacy_tiocsti=1`.
+
 Mapping: SessionStart/UserPromptSubmit/PreToolUse → `running`,
 Stop/Interrupt → `waiting`, SessionEnd → state file removed.
 Hooks load at session start, so restart kimi after registering.

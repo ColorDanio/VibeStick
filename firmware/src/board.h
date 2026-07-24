@@ -1,0 +1,48 @@
+#pragma once
+
+#include <Arduino.h>
+
+// Board abstraction: VibeStick runs on M5StickC Plus (ESP32-PICO, AXP192,
+// MPU6886, SPM1423 PDM mic) and M5StickS3 (ESP32-S3-PICO, M5PM1, BMI270,
+// ES8311 codec mic). Everything board-specific goes through these wrappers;
+// app/UI code stays board-agnostic.
+//
+// M5Lcd aliases the display object (M5.Lcd on StickC Plus' TFT_eSPI fork,
+// M5.Display on M5Unified/LovyanGFX -- the calls we use exist in both).
+
+#ifdef VIBESTICK_BOARD_S3
+#include <M5Unified.h>
+#define M5Lcd M5.Display
+#define BOARD_NAME "VibeStick v2.2 (M5StickS3)"
+#else
+#include <M5StickCPlus.h>
+#define M5Lcd M5.Lcd
+#define BOARD_NAME "VibeStick v2.2 (M5StickC Plus)"
+#endif
+
+// One-time board init (M5.begin + display brightness).
+void boardInit();
+// Per-loop update (button scanning etc.).
+void boardUpdate();
+
+// Buttons A (front/KEY1) and B (side/KEY2), same semantics on both boards.
+bool boardBtnA_wasPressed();
+bool boardBtnA_wasReleased();
+bool boardBtnA_isPressed();
+bool boardBtnB_wasPressed();
+bool boardBtnB_wasReleased();
+bool boardBtnB_isPressed();
+
+// Power key edge events: 0 = none, 1 = long press, 2 = short press.
+// StickC Plus: AXP192 PEK IRQ. StickS3: no equivalent (reset button is
+// hardware power/reset) -- always 0; back/home uses long-B only there.
+uint8_t boardPowerButtonEvent();
+
+// Battery level 0..100, -1 when unknown.
+int boardBatteryPct();
+
+// Display backlight 0..100.
+void boardBrightness(int pct);
+
+// IMU: returns false when no IMU data is available.
+bool boardGetAccel(float* x, float* y, float* z);

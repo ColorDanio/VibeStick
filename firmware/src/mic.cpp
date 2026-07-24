@@ -1,8 +1,14 @@
 #include "mic.h"
 
-#include <driver/i2s.h>
+#include "board.h"
 
-// SPM1423 on M5StickC Plus: PDM mic, clock = GPIO0, data = GPIO34.
+#ifndef VIBESTICK_BOARD_S3
+#include <driver/i2s.h>
+#endif
+
+// Mic hardware: StickC Plus has a PDM SPM1423 on I2S0 (CLK=GPIO0,
+// DATA=GPIO34); StickS3 has a MEMS mic behind the ES8311 codec, captured
+// through M5Unified's Mic_Class.
 #define MIC_I2S_PORT I2S_NUM_0
 #define MIC_PIN_CLK 0
 #define MIC_PIN_DATA 34
@@ -23,6 +29,15 @@ static volatile bool sStopReq = false;  // cooperative task shutdown
 
 void micInit() {
   if (sDriverInstalled) return;
+#ifdef VIBESTICK_BOARD_S3
+  if (M5.Mic.begin()) {
+    sDriverInstalled = true;
+    Serial.println("[MIC] ES8311 via M5Unified (8 kHz mono)");
+  } else {
+    Serial.println("[MIC] M5.Mic.begin failed");
+  }
+  return;
+#endif
 
   i2s_config_t cfg = {};
   cfg.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM);
@@ -85,10 +100,18 @@ static void micTask(void* arg) {
 
   Serial.println("[MIC] capture task started (core 0)");
   while (!sStopReq) {
+#ifdef VIBESTICK_BOARD_S3
+    if (!M5.Mic.record(raw, READ_SAMPLES, MIC_SAMPLE_RATE)) {
+      vTaskDelay(pdMS_TO_TICKS(10));
+      continue;
+    }
+    bytesRead = sizeof(raw);
+#else
     if (i2s_read(MIC_I2S_PORT, raw, sizeof(raw), &bytesRead,
                  pdMS_TO_TICKS(100)) != ESP_OK || bytesRead == 0) {
       continue;
     }
+#endif
     size_t n = bytesRead / sizeof(int16_t);
     uint32_t acc = 0;
     for (size_t i = 0; i < n; ++i) {
@@ -122,8 +145,10 @@ void micStart() {
   sLevel = 0;
   sPeak = 2500;
   sStopReq = false;
+#ifndef VIBESTICK_BOARD_S3
   i2s_zero_dma_buffer(MIC_I2S_PORT);
   i2s_start(MIC_I2S_PORT);
+#endif
   xTaskCreatePinnedToCore(micTask, "mic", 4096, nullptr,
                           1,  // low priority: BLE must keep its CPU budget
                           &sTask, 0);
@@ -141,7 +166,9 @@ void micStop() {
       sTask = nullptr;
     }
   }
+#ifndef VIBESTICK_BOARD_S3
   if (sDriverInstalled) i2s_stop(MIC_I2S_PORT);
+#endif
   sLevel = 0;
   Serial.println("[MIC] capture stopped");
 }

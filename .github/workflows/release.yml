@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v0.2.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: platformio-${{ hashFiles('firmware/platformio.ini') }}
+          restore-keys: platformio-
+      - name: Install build tools
+        run: pip install platformio build
+      - name: Build firmware (all boards)
+        run: pio run -d firmware
+      - name: Run host tests
+        run: |
+          pip install -e "./host[dev]"
+          python -m pytest host/tests/ -q
+      - name: Build host package
+        run: python -m build host/
+      - name: Collect artifacts
+        run: |
+          mkdir -p dist-release
+          for d in firmware/.pio/build/*/; do
+            env=$(basename "$d")
+            cp "$d/firmware.bin" "dist-release/vibestick-firmware-${env}.bin"
+          done
+          cp host/dist/*.whl host/dist/*.tar.gz dist-release/
+          ls -la dist-release/
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: dist-release/*

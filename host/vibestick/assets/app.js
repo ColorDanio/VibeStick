@@ -127,6 +127,7 @@ function renderStatus() {
   const on = !!st.connected;
   $("side-dot").className = "dot" + (on ? " on" : "");
   $("side-conn").textContent = on ? "connected" : "scanning…";
+  $("tiocsti-banner").hidden = st.tiocsti !== false;
 
   $("conn-dot").className = "dot big breath" + (on ? " on" : "");
   $("conn-title").textContent = on ? "Stick connected" : "Not connected";

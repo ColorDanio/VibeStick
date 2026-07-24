@@ -39,6 +39,12 @@ async def run_daemon(
     runtime: dict | None = None,
 ) -> None:
     started = time.time()
+    tiocsti_enabled = delivery._legacy_tiocsti() == "1"
+    if not tiocsti_enabled:
+        log.warning(
+            "TIOCSTI is disabled on this kernel (dev.tty.legacy_tiocsti=0); "
+            "tty delivery will fail — run: sudo sysctl dev.tty.legacy_tiocsti=1"
+        )
     holder: dict = {
         "bridge": None,
         "config": cfg,
@@ -291,6 +297,7 @@ async def run_daemon(
             "send_queue": [
                 {"session": sid, "text": text[:60]} for sid, text in send_queue
             ],
+            "tiocsti": tiocsti_enabled,
             "selected_tool": store.selected_tool,
             "config_path": str(config_path) if config_path else None,
             "uptime_sec": int(time.time() - started),

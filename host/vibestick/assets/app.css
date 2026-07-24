@@ -268,3 +268,10 @@ input.saved-flash { border-color: var(--green); transition: border-color .3s; }
   background: transparent; color: var(--dim); cursor: pointer; font: inherit;
 }
 .add-card:hover { border-color: var(--green); color: var(--green); }
+
+/* warning banner (e.g. TIOCSTI disabled) */
+.warn-banner {
+  background: #3d2e12; border: 1px solid #5c4a24; color: var(--amber);
+  border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 13px;
+}
+.warn-banner code { color: #ffd98a; }
