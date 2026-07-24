@@ -241,10 +241,16 @@ def test_tiocsti_injection_reaches_input_queue():
 
 
 def test_tiocsti_failure_is_graceful(monkeypatch, caplog):
+    import pty
+
     def boom(tty, data):
         raise OSError(1, "Operation not permitted")
 
+    master, slave_fd = pty.openpty()  # real pts so the gate passes anywhere
+    slave_name = os.ttyname(slave_fd)
     monkeypatch.setattr(delivery, "_write_tty_input", boom)
-    ok = asyncio.run(delivery.deliver_text({"tty": "/dev/pts/0"}, "x"))
+    ok = asyncio.run(delivery.deliver_text({"tty": slave_name}, "x"))
+    os.close(master)
+    os.close(slave_fd)
     assert ok is False  # logged and dropped, never raised
     assert any("legacy_tiocsti" in r.message for r in caplog.records)

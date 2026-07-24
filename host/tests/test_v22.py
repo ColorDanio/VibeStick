@@ -16,6 +16,9 @@ NOW = int(time.time())
 
 
 def test_asr_status_faster_whisper_installed():
+    import pytest
+
+    pytest.importorskip("faster_whisper", reason="asr extra not installed")
     st = voice.detect_asr_status(ASRConfig(engine="faster-whisper", device="cpu"))
     assert st["installed"] is True
     assert st["version"] is not None  # faster-whisper is installed in the venv
