@@ -306,6 +306,9 @@ class SessionStore:
         tty = str(getattr(info, "tty", "") or "")
         if tty:
             raw["tty"] = tty
+        if getattr(info, "zellij", ""):
+            raw["zellij"] = info.zellij
+            raw["zellij_pane"] = getattr(info, "zellij_pane", "")
         return SessionRecord(id=raw["id"], status=status, raw=raw, mtime=since)
 
     def _record_for(self, session_id: str | None) -> SessionRecord | None:

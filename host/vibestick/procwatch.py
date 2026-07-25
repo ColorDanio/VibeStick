@@ -102,6 +102,8 @@ class ProcInfo:
     name: str  # matched executable basename
     cwd: str  # process working directory, "" if unreadable
     tty: str = ""  # /dev/pts/X of its controlling terminal, "" if none
+    zellij: str = ""
+    zellij_pane: str = ""
 
     @property
     def cwd_basename(self) -> str:
@@ -161,7 +163,15 @@ class ProcessWatcher:
             stat = read_proc_stat(int(entry), self.proc_root)
             if stat is not None and stat.tty_nr:
                 tty = tty_path_for(stat.tty_nr) or ""
-            found[match] = ProcInfo(pid=int(entry), name=match, cwd=cwd, tty=tty)
+            try:
+                env = (self.proc_root / entry / "environ").read_bytes().split(b"\0")
+                vals = {x.split(b"=", 1)[0]: x.split(b"=", 1)[1].decode(errors="replace")
+                        for x in env if b"=" in x}
+            except OSError:
+                vals = {}
+            found[match] = ProcInfo(pid=int(entry), name=match, cwd=cwd, tty=tty,
+                                    zellij=vals.get(b"ZELLIJ_SESSION_NAME", ""),
+                                    zellij_pane=vals.get(b"ZELLIJ_PANE_ID", ""))
             if len(found) == len(names):
                 break
         return found
