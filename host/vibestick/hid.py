@@ -13,11 +13,11 @@ EV_SYN = 0x00
 EV_KEY = 0x01
 SYN_REPORT = 0
 BUS_BLUETOOTH = 0x05
-KEY_F13 = 183
 KEY_F14 = 184
-HID_USAGE_F13 = 0x68
+KEY_F15 = 185
 HID_USAGE_F14 = 0x69
-USAGE_TO_KEYCODE = {HID_USAGE_F13: KEY_F13, HID_USAGE_F14: KEY_F14}
+HID_USAGE_F15 = 0x6A
+USAGE_TO_KEYCODE = {HID_USAGE_F15: KEY_F15, HID_USAGE_F14: KEY_F14}
 
 
 def _ioc(direction: int, kind: int, number: int, size: int) -> int:
@@ -52,7 +52,7 @@ class VirtualKeyboard:
         try:
             fd = os.open(self._path, os.O_WRONLY | os.O_NONBLOCK)
             fcntl.ioctl(fd, UI_SET_EVBIT, EV_KEY)
-            for key in (KEY_F13, KEY_F14):
+            for key in (KEY_F14, KEY_F15):
                 fcntl.ioctl(fd, UI_SET_KEYBIT, key)
             # struct uinput_user_dev: name, input_id, ff_effects_max, absinfo
             setup = struct.pack("80sHHHHI" + "i" * 256,
@@ -78,8 +78,8 @@ class VirtualKeyboard:
         if len(data) != 8:
             log.debug("ignored malformed HID report: %s", data.hex())
             return
-        # Keyboard reports carry USB HID usages (F13=0x68, F14=0x69), while
-        # uinput expects Linux input-event keycodes (183/184).
+        # Keyboard reports carry USB HID usages (F14=0x69, F15=0x6A), while
+        # uinput expects Linux input-event keycodes (184/185).
         keys = {USAGE_TO_KEYCODE[usage] for usage in data[2:] if usage in USAGE_TO_KEYCODE}
         if keys == self._pressed:
             return

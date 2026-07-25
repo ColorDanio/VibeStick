@@ -19,7 +19,7 @@
 //   home:            B = next tool (slide animation), A = select tool
 //   session picker:  B = next entry,         A = enter (new session / select)
 //   conversation:    hold A >=500 ms = record (voice.start), release = stop
-//   microphone:      A press = F13 + PTT start, A release = PTT stop + F13 up;
+//   microphone:      A press = F15 + PTT start, A release = PTT stop + F15 up;
 //                    B is F14 only (power key exits Microphone mode)
 //                    (voice.stop); transcript ready: A = send, B = discard;
 //                    thinking/running: A = inference.cancel;

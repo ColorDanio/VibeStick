@@ -6,7 +6,7 @@
 #include "ble.h"
 
 // Standard boot-keyboard report, extended to usage max 0x73 (F13-F24) so
-// F13/F14 are available as application-bindable special keys.  The Report ID
+// F14/F15 are available as application-bindable special keys.  The Report ID
 // is advertised by the Report Reference descriptor; it must not be prepended
 // to the GATT value. BlueZ 5.85 otherwise treats 0x01 as the modifier bitmap
 // and leaves Left Ctrl pressed.
@@ -70,7 +70,7 @@ void hidInit(NimBLEServer* pServer) {
   // v1.11, country 0, flags: remote-wake + normally-connectable.
   hid->hidInfo(0x00, 0x03);
   hid->startServices();
-  Serial.println("[HID] keyboard service up (Vibe Mic: A=F13, B=F14)");
+  Serial.println("[HID] keyboard service up (Vibe Mic: A=F15, B=F14)");
 }
 
 void hidKey(uint8_t keycode, bool pressed) {
@@ -83,6 +83,6 @@ void hidKey(uint8_t keycode, bool pressed) {
   sInput->setValue(report, sizeof(report));
   sInput->notify();
   Serial.printf("[HID] %s %s (subscribers=%u)\n",
-                keycode == VIBESTICK_HID_KEY_A ? "F13" : "F14",
+                keycode == VIBESTICK_HID_KEY_A ? "F15" : "F14",
                 pressed ? "press" : "release", (unsigned)subscribers);
 }

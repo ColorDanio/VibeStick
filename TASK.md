@@ -122,14 +122,14 @@
 - [x] session 阅读 footer 可视化：将控制图标下移，使 7px 圆形完全位于分界线下方；
       翻页改为 `A 圈 + 左箭头`、`B 圈 + 右箭头`，并以白底黑 `A` 表示长按 A 录音，
       去除容易误解的 `AA` 提示。横竖屏预览均已目检。
-- [x] Vibe Mic 模式 PTT/HID 语义：A 按下即发送 HID F13 down 并启动 `mode=mic`
-      的 BLE raw-audio 流，松开即停止流并发送 F13 up；B 为纯 HID F14 down/up，长按 B
+- [x] Vibe Mic 模式 PTT/HID 语义：A 按下即发送 HID F15 down 并启动 `mode=mic`
+      的 BLE raw-audio 流，松开即停止流并发送 F15 up；B 为纯 HID F14 down/up，长按 B
       不再离开该模式（侧边电源键返回）。Host 将流送入 PipeWire `Vibe Mic`，供任意
       选择该系统输入的程序使用。
 - [x] Vibe Mic 命名与输入源清理：首页、模式页与 PipeWire source 统一为 `Vibe Mic`；daemon
       启动时移除遗留的 `VibeStick Mic` 虚拟源，当前 PipeWire 中只保留 `Vibe Mic`。M5StickC
       Plus 已重刷（2026-07-25）。
-- [ ] Vibe Mic HID 实机回归：A/F13、B/F14 的目标应用快捷键响应待用户最终确认。
+- [ ] Vibe Mic HID 实机回归：A/F15、B/F14 的目标应用快捷键响应待用户最终确认。
       已定位并修复 HID input-report 特征在 service 启动后才创建、以及 NimBLE `READ_ENC`
       导致未升级加密 HID 链路静默丢弃通知的问题；并改为单一无 Report-ID 键盘报告以避免
       BlueZ HOGP 的 report-id 兼容性问题。设备端已实测 A/F13、B/F14 的 press/release

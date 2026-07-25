@@ -1,4 +1,4 @@
-from vibestick.hid import HID_USAGE_F13, HID_USAGE_F14, KEY_F13, KEY_F14, VirtualKeyboard
+from vibestick.hid import HID_USAGE_F14, HID_USAGE_F15, KEY_F14, KEY_F15, VirtualKeyboard
 
 
 class CaptureKeyboard(VirtualKeyboard):
@@ -14,11 +14,11 @@ class CaptureKeyboard(VirtualKeyboard):
         self.events.append(("sync", 0))
 
 
-def test_explicit_report_id_generates_f13_press_and_release():
+def test_explicit_report_id_generates_f15_press_and_release():
     keyboard = CaptureKeyboard()
-    keyboard.report(bytes([1, 0, 0, HID_USAGE_F13, 0, 0, 0, 0, 0]))
+    keyboard.report(bytes([1, 0, 0, HID_USAGE_F15, 0, 0, 0, 0, 0]))
     keyboard.report(bytes([1, 0, 0, 0, 0, 0, 0, 0, 0]))
-    assert keyboard.events == [(KEY_F13, 1), ("sync", 0), (KEY_F13, 0), ("sync", 0)]
+    assert keyboard.events == [(KEY_F15, 1), ("sync", 0), (KEY_F15, 0), ("sync", 0)]
 
 
 def test_report_without_id_generates_f14():
