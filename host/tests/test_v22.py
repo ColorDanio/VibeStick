@@ -78,7 +78,7 @@ def test_presence_matches_alias(tmp_path):
     assert store.refresh_presence() is True
     assert store.presence("kimi-cli") is not None
     tools = json.loads(store.tools_payload())
-    assert tools["list"][0]["state"] == "running"
+    assert tools["list"][0]["state"] == "ready"
 
 
 def test_default_config_kimi_aliases():
@@ -125,6 +125,6 @@ def test_apply_gain():
 def test_create_argv_gnome_visibility_props():
     argv = " ".join(mic.CREATE_ARGV)
     assert "Audio/Source/Virtual" in argv
-    assert 'device.description="VibeStick Mic"' in argv
+    assert 'device.description="Vibe Mic"' in argv
     assert "device.class=sound" in argv
     assert "node.virtual=true" in argv

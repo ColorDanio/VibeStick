@@ -89,7 +89,7 @@ covers everything around it.
 ### Microphone mode (stick → desktop apps)
 
 With `voice.start {"mode": "mic"}` the daemon routes audio to a
-PipeWire virtual source named **VibeStick Mic** (a persistent
+PipeWire virtual source named **Vibe Mic** (a persistent
 `support.null-audio-sink` adapter node with the `device.*` properties
 GNOME Settings needs, fed per-press by `pw-cat` with ×3 software gain).
 The stick behaves like any USB microphone: bind it in openwhispr, the

@@ -1272,8 +1272,8 @@ void uiShowMic(const char* errorText) {
     }
   }
 
-  // "VibeStick Mic" (16 px rich text) + connection state below it.
-  const char* title = "VibeStick Mic";
+  // "Vibe Mic" (16 px rich text) + connection state below it.
+  const char* title = "Vibe Mic";
   drawText16((sW - textWidth16(title)) / 2, cy + ringR + 10, title, TFT_WHITE,
              TFT_BLACK);
   const char* st = bleConnected() ? "connected" : "advertising";

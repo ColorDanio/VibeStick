@@ -238,7 +238,7 @@ async def run_daemon(
     )
     relay = mic_mod.MicRelay(enabled=cfg.mic.enabled)
     holder["audio_route"] = None  # "mic" during a PTT mic session, else None
-    spawn(relay.warmup())  # register "VibeStick Mic" up-front
+    spawn(relay.warmup())  # register "Vibe Mic" up-front
 
     def on_audio(data: bytes) -> None:
         # MIC-mode frames go to the virtual microphone only; ASR frames

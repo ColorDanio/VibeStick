@@ -13,7 +13,7 @@ from vibestick.store import SessionStore
 NODE_DUMP = json.dumps([{
     "id": 47,
     "type": "PipeWire:Interface:Node",
-    "info": {"props": {"node.name": "vibestick-mic", "media.class": "Audio/Source/Virtual"}},
+    "info": {"props": {"node.name": "vibe-mic", "media.class": "Audio/Source/Virtual"}},
 }]).encode()
 
 
@@ -116,7 +116,7 @@ def test_relay_creates_node_when_missing(monkeypatch, spawned):
     assert asyncio.run(relay.start()) is True
     creates = [a for a in argv_of(spawned, "pw-cli") if "create-node" in a]
     assert len(creates) == 1
-    assert any("VibeStick Mic" in a for a in creates[0])
+    assert any("Vibe Mic" in a for a in creates[0])
     assert any("Audio/Source/Virtual" in a for a in creates[0])
     # close destroys the node we created
     asyncio.run(relay.close())

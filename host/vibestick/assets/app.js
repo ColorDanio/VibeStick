@@ -157,7 +157,7 @@ function renderStatus() {
     : (asr.note || "not installed");
   const mic = st.mic || {};
   $("st-mic").textContent = mic.enabled ? (mic.active ? "feeding" : "ready") : "disabled";
-  $("st-mic-sub").textContent = mic.enabled ? '"VibeStick Mic" source' : "mic.enabled=false";
+  $("st-mic-sub").textContent = mic.enabled ? '"Vibe Mic" source' : "mic.enabled=false";
 
   const acts = [];
   tools.forEach((t) => (t.sessions || []).forEach((s) => acts.push({ tool: t.name, ...s })));
@@ -322,7 +322,7 @@ function renderMic() {
     ? '<span class="badge ok">enabled</span>' : '<span class="badge err">disabled</span>';
   $("mic-meta").innerHTML = [
     ["state", mic.active ? "feeding (PTT active)" : "idle"],
-    ["source", "VibeStick Mic"],
+    ["source", "Vibe Mic"],
     ["format", "8 kHz · 8-bit · mono"],
   ].map(([k, v]) => `<span>${k}: <b>${esc(v)}</b></span>`).join("");
 }

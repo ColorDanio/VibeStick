@@ -343,6 +343,11 @@ static void pollButtons() {
     if (hidMicMode) hidKey(VIBESTICK_HID_KEY_A, false);
     if (sSwallowGesture && !boardBtnA_isPressed() && !boardBtnB_isPressed()) {
       sSwallowGesture = false;
+    } else if (hidMicMode) {
+      // PTT must always end on the matching physical A release. This is
+      // intentionally outside the conversation's delayed holdTalk branch.
+      if (sRecAutoStopped) sRecAutoStopped = false;
+      else if (sRecording) stopRecording();
     } else if (!sSwallowGesture) {
       if (holdTalk) {
         // Hold-to-record: release stops. Conversation clicks: page actions

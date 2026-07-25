@@ -66,7 +66,7 @@ A deeper dive lives in [docs/architecture.md](docs/architecture.md).
 - **Inference cancel** — single-click A while a session is thinking
   sends the tool's cancel key (Escape by default).
 - **Microphone mode** — the stick registers as a system input device
-  ("VibeStick Mic", PipeWire virtual source); press A to talk into any
+  ("Vibe Mic", PipeWire virtual source); press A to talk into any
   desktop app that binds a microphone.
 - **Dashboard** — local web app: Overview cards, master-detail Agents
   monitor, modern Settings center, Voice & Mic diagnostics with recent

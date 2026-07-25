@@ -409,7 +409,7 @@ routes the AUDIO PCM (8 kHz u8 mono) into a **virtual microphone**
 instead of the ASR pipeline: a persistent PipeWire adapter node
 (`support.null-audio-sink`, `media.class=Audio/Source/Virtual`, dsp
 monitor, with the `device.*` properties GNOME Settings needs to list
-it) registers an `Audio/Source` named **"VibeStick Mic"** that appears
+it) registers an `Audio/Source` named **"Vibe Mic"** that appears
 in the system input device list. A per-press `pw-cat --playback --raw`
 feeder (linked into the node's input ports with `pw-link`) writes the
 frames, applying a small software gain (x3) to compensate for monitor

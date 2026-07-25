@@ -8,7 +8,7 @@ Verified recipe on PipeWire 1.6 (see host/README.md):
 
 - one persistent `null-audio-sink` adapter node with
   `media.class=Audio/Source/Virtual` — apps see an `Audio/Source` named
-  "VibeStick Mic"; audio written to its input ports is mirrored to its
+  "Vibe Mic"; audio written to its input ports is mirrored to its
   capture ports (dsp monitor), which is what apps record from;
 - per PTT session, a `pw-cat --playback --raw` feeder (uniquely named
   stream, no auto-target) reads PCM from stdin and is linked into the
@@ -27,8 +27,8 @@ import logging
 
 log = logging.getLogger(__name__)
 
-NODE_NAME = "vibestick-mic"
-NODE_DESC = "VibeStick Mic"
+NODE_NAME = "vibe-mic"
+NODE_DESC = "Vibe Mic"
 FEED_STREAM = "vibestick-mic-feed"
 
 CREATE_ARGV = [
@@ -141,7 +141,7 @@ class MicRelay:
 
     async def warmup(self) -> bool:
         """Register the virtual source without starting a feed session, so
-        apps can list/bind \"VibeStick Mic\" before the first PTT."""
+        apps can list/bind \"Vibe Mic\" before the first PTT."""
         if not self.enabled:
             return False
         return await self._ensure_node()

@@ -54,7 +54,7 @@ void hidInit(NimBLEServer* pServer) {
   hid->hidInfo(0x00, 0x03);
   hid->startServices();
   sInput = hid->inputReport(1);
-  Serial.println("[HID] keyboard service up (A=F19, B=F20)");
+  Serial.println("[HID] keyboard service up (Vibe Mic: A=F19, B=F20)");
 }
 
 void hidKey(uint8_t keycode, bool pressed) {
