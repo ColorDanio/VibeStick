@@ -556,21 +556,21 @@ void uiTickWaiting(int animPhase) {
   waitingDrawMsg(animPhase);
 }
 
-// ---- Home: major-menu carousel ----
-// Agent CLI appears only when the paired host advertises supported tools;
-// Microphone is always available on-device.
+// ---- Home: tool picker carousel ----
+// Entries = host tools + one device-local "Microphone" entry appended
+// at the end (index == gTools.count); it exists even with no host tools.
 
 static int homeEntryCount() {
-  return (gTools.valid && gTools.count > 0) ? 2 : 1;
+  return (gTools.valid ? gTools.count : 0) + 1;
 }
 
 static bool isMicEntry(int idx) {
-  return !gTools.valid || gTools.count == 0 || idx == 1;
+  return !gTools.valid || idx >= gTools.count;
 }
 
 static const uint16_t* entryLogo(int idx) {
   if (isMicEntry(idx)) return icon_mic24;
-  return icon_tool;
+  return toolLogo(gTools.list[idx].id);
 }
 
 void uiShowHome(int selTool) {
@@ -587,8 +587,9 @@ void uiShowHome(int selTool) {
     name = "Microphone";
     state = "voice input";
   } else {
-    name = "Agent CLI";
-    state = "paired host";
+    const ToolEntry& t = gTools.list[selTool];
+    name = t.name;  // global buffer: safe for the marquee to keep
+    state = t.state;
   }
 
   int cx = sW / 2;
@@ -667,54 +668,6 @@ void uiShowHome(int selTool) {
   for (int i = 0; i < n; ++i) {
     M5Lcd.fillCircle(dx + i * 10, dotsY, 2,
                       i == selTool ? COL_ACCENT : COL_FAINT);
-  }
-}
-
-// ---- Agent CLI picker ----
-// This second level lists exactly the tools advertised by the paired host.
-// Selecting one retains the existing session browser and conversation flow.
-
-void uiShowToolPicker(int selTool) {
-  M5Lcd.fillScreen(TFT_BLACK);
-  drawStatusBar(nullptr);
-
-  M5Lcd.setTextSize(1);
-  M5Lcd.setTextColor(COL_GREEN, TFT_BLACK);
-  M5Lcd.setCursor(4, 20);
-  M5Lcd.print("agent CLI");
-
-  static const int ROW_H = 22;
-  static const int FIRST_Y = 34;
-  int n = gTools.valid ? gTools.count : 0;
-  if (n == 0) {
-    M5Lcd.setTextColor(COL_FAINT, TFT_BLACK);
-    M5Lcd.setCursor(16, FIRST_Y + 6);
-    M5Lcd.print("(no supported CLI)");
-    return;
-  }
-  if (selTool < 0) selTool = 0;
-  if (selTool >= n) selTool = n - 1;
-  int visible = (sH - FIRST_Y - 4) / ROW_H;
-  int top = selTool - visible + 1;
-  if (top < 0) top = 0;
-
-  for (int row = 0; row < visible && top + row < n; ++row) {
-    int idx = top + row;
-    int y = FIRST_Y + row * ROW_H;
-    const ToolEntry& t = gTools.list[idx];
-    bool hl = idx == selTool;
-    if (hl) {
-      M5Lcd.setTextColor(COL_AMBER, TFT_BLACK);
-      M5Lcd.setCursor(4, y + 6);
-      M5Lcd.print(">");
-    }
-    M5Lcd.pushImage(16, y - 1, 24, 24, toolLogo(t.id), ICON_TRANSPARENT);
-    M5Lcd.fillCircle(46, y + 10, 3, stateColor(t.state));
-    int namePx = sW - 54;
-    if (hl) drawMarquee16(MQ_SESSION_ROW, t.name, 54, y + 2, namePx,
-                           TFT_WHITE, TFT_BLACK);
-    else drawText16N(54, y + 2, t.name, strlen(t.name), COL_DIM, TFT_BLACK,
-                     namePx);
   }
 }
 

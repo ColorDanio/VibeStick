@@ -28,13 +28,12 @@ void uiMarqueeResetAll();
 
 void uiShowWaiting(int animPhase);     // branded boot/waiting, static draw
 void uiTickWaiting(int animPhase);     // rings + message line only
-void uiShowHome(int selEntry);         // major-menu carousel
+void uiShowHome(int selTool);          // tool picker carousel
 // Start a ~150 ms slide animation of the center icon (from -> to).
 void uiHomeAnimate(int fromIdx, int toIdx);
 // Draw the next animation frame; returns true once on completion (caller
 // should then do a full home redraw). Cheap no-op when not animating.
 bool uiHomeAnimTick();
-void uiShowToolPicker(int selTool);    // paired host's supported Agent CLIs
 void uiShowSessionPicker(int sel);     // fake-CLI; sel 0 = "+ new session"
 
 // Conversation screen (fake-CLI). sendMarked/sentBusy drive the queue /
