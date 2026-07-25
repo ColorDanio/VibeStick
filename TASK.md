@@ -119,6 +119,9 @@
 - [x] `session.new` 陈旧 session 防御：presence/discovery 刷新可在选中 id 仍保留时移除
       record；tmux/zellij anchor 查找改为跳过失效 id，避免 BLE COMMAND callback 抛出
       `KeyError` 丢失 new-session 请求。已重启 daemon 加载当前代码。
+- [x] session 阅读 footer 可视化：将控制图标下移，使 7px 圆形完全位于分界线下方；
+      翻页改为 `A 圈 + 左箭头`、`B 圈 + 右箭头`，并以白底黑 `A` 表示长按 A 录音，
+      去除容易误解的 `AA` 提示。横竖屏预览均已目检。
 - [x] BLE HID/GATT 自动重连：daemon 持久保存首次发现的 VibeStick 地址，后续优先
       直连该地址、失败才扫描，避免 HID 自动连接后停止广播导致 Agent 状态无法同步。
       固件进一步在任一 host 连接后继续 advertising（NimBLE 默认支持多条 peripheral

@@ -225,7 +225,7 @@ def foot_div_y():
 
 
 def foot_l1_y():
-    return H - (13 if landscape() else 24)
+    return H - (10 if landscape() else 21)
 
 
 def foot_l2_y():
@@ -236,6 +236,12 @@ def hint_button(img, x, y, key, color=FAINT):
     d = ImageDraw.Draw(img)
     d.ellipse([x - 7, y - 7, x + 7, y + 7], outline=color)
     small(img, x - 3, y - 4, key, color)
+
+
+def hint_hold_a(img, x, y):
+    d = ImageDraw.Draw(img)
+    d.ellipse([x - 7, y - 7, x + 7, y + 7], fill=WHITE)
+    small(img, x - 3, y - 4, "A", BLACK)
 
 
 def hint_arrow(img, x, y, right, color=FAINT):
@@ -257,7 +263,7 @@ def footer_hints(img, mode):
     if mode == "page":
         hint_button(img, 12, y, "A"); hint_arrow(img, 25, y, False)
         hint_button(img, 48, y, "B"); hint_arrow(img, 61, y, True)
-        hint_button(img, W - 44, y, "A"); hint_button(img, W - 35, y, "A")
+        hint_hold_a(img, W - 31, y)
         hint_mic(img, W - 12, y)
     elif mode == "busy":
         x = W - 45
@@ -285,6 +291,20 @@ def preview_convo():
         y += 18
     small(img, W - 32, foot_div_y() - 10, "1/3", FAINT)
     footer_thinking(img)
+    return img
+
+
+def preview_page():
+    img = screen()
+    convo_chrome(img, "修复登录跳转问题", "idle", busy=False)
+    tail = "assistant: 已完成检查，A 看更早内容，B 看更新内容。"
+    y = 52
+    max_lines = (foot_div_y() - 12 - y) // 18
+    for line in wrap16(tail, W - 8)[:max_lines]:
+        draw_text16(img, 4, y, line, GREEN)
+        y += 18
+    small(img, W - 32, foot_div_y() - 10, "1/3", FAINT)
+    footer_hints(img, "page")
     return img
 
 
@@ -317,6 +337,7 @@ def main():
         set_size(*size)
         outs = {
             f"session_picker_{orientation}": preview_picker(),
+            f"session_convo_page_{orientation}": preview_page(),
             f"session_convo_running_{orientation}": preview_convo(),
             f"session_convo_ready_{orientation}": preview_transcript(),
         }

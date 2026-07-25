@@ -826,7 +826,9 @@ void uiShowSessionPicker(int sel) {
 // transcribing dots and tail scrolling are partial redraws only.
 
 static int footDivY() { return landscape() ? sH - 19 : sH - 30; }
-static int footL1Y() { return landscape() ? sH - 13 : sH - 24; }
+// Keep all 7 px-radius footer controls below the divider: the old centres
+// put their upper arcs over the rule in both orientations.
+static int footL1Y() { return landscape() ? sH - 10 : sH - 21; }
 static int footL2Y() { return sH - 13; }  // portrait only
 #define CONTENT_Y0 52
 
@@ -1065,6 +1067,16 @@ static void hintButton(int x, int y, char key, uint16_t color = COL_FAINT) {
   M5Lcd.print(key);
 }
 
+// White filled A = hold A to record. It distinguishes the hold gesture from
+// the outlined A used for one-tap paging.
+static void hintHoldA(int x, int y) {
+  M5Lcd.fillCircle(x, y, 7, TFT_WHITE);
+  M5Lcd.setTextSize(1);
+  M5Lcd.setTextColor(TFT_BLACK, TFT_WHITE);
+  M5Lcd.setCursor(x - 3, y - 3);
+  M5Lcd.print('A');
+}
+
 static void hintArrow(int x, int y, bool right, uint16_t color = COL_FAINT) {
   if (right) M5Lcd.fillTriangle(x + 5, y, x - 3, y - 5, x - 3, y + 5, color);
   else M5Lcd.fillTriangle(x - 5, y, x + 3, y - 5, x + 3, y + 5, color);
@@ -1094,7 +1106,7 @@ static void drawFooterHints(const char* mode, int y) {
   if (strcmp(mode, "page") == 0) {
     hintButton(12, y, 'A'); hintArrow(25, y, false);
     hintButton(48, y, 'B'); hintArrow(61, y, true);
-    hintDoubleA(sW - 40, y); hintMic(sW - 12, y);
+    hintHoldA(sW - 31, y); hintMic(sW - 12, y);
   } else if (strcmp(mode, "record") == 0) {
     int x = sW - 36;
     hintMic(x, y, TFT_RED); hintButton(x + 20, y, 'A');
