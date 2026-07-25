@@ -49,12 +49,15 @@ void hidInit(NimBLEServer* pServer) {
   hid->manufacturer("M5Stack");
   hid->pnp(0x01, 0x02AC, 0x0001, PNPVersionField(2, 2, 0));
   hid->reportMap((uint8_t*)sReportMap, sizeof(sReportMap));
+  // All report characteristics must be part of the service before it is
+  // started.  Creating this after startServices() lets BlueZ see the HID
+  // service but leaves no discoverable/subscribable input-report endpoint.
+  sInput = hid->inputReport(1);
   // HID Information characteristic (0x2a4a) is created empty by the
   // library; BlueZ's hog-lib refuses to set up the profile without it.
   // v1.11, country 0, flags: remote-wake + normally-connectable.
   hid->hidInfo(0x00, 0x03);
   hid->startServices();
-  sInput = hid->inputReport(1);
   Serial.println("[HID] keyboard service up (Vibe Mic: A=F13, B=F14)");
 }
 

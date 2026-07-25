@@ -130,6 +130,7 @@
       启动时移除遗留的 `VibeStick Mic` 虚拟源，当前 PipeWire 中只保留 `Vibe Mic`。M5StickC
       Plus 已重刷（2026-07-25）。
 - [ ] Vibe Mic HID 实机回归：A/F13、B/F14 的真实 Linux input 事件与目标应用快捷键响应待确认。
+      已定位并修复 HID input-report 特征在 service 启动后才创建的错误；需重刷并实机验证。
 - [x] BLE HID/GATT 自动重连：daemon 持久保存首次发现的 VibeStick 地址，后续优先
       直连该地址、失败才扫描，避免 HID 自动连接后停止广播导致 Agent 状态无法同步。
       固件进一步在任一 host 连接后继续 advertising（NimBLE 默认支持多条 peripheral
