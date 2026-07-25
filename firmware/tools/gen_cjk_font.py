@@ -49,6 +49,20 @@ def gb2312_level1():
     return sorted(ord(c) for c in chars)
 
 
+def gb2312_symbols():
+    """GB2312 rows 0xA1-0xAF: full-width punctuation, symbols, full-width
+    ASCII/digits, kana, Greek, Russian, box-drawing. CLI output is full of
+    these （，。：；？！“”（）【】《》、…— etc.)."""
+    chars = []
+    for hi in range(0xA1, 0xB0):
+        for lo in range(0xA1, 0xFF):
+            try:
+                chars.append(bytes([hi, lo]).decode("gb2312"))
+            except UnicodeDecodeError:
+                pass
+    return sorted(ord(c) for c in chars)
+
+
 def rasterize(font, ch, width):
     """Render one glyph on the shared baseline, return row bytes (MSB left),
     ceil(width/8) bytes per row."""
@@ -68,7 +82,8 @@ def rasterize(font, ch, width):
 
 
 def main():
-    hanzi = gb2312_level1()
+    hanzi = sorted(set(gb2312_level1() + gb2312_symbols()))
+    print(f"glyphs: {len(hanzi)} (level-1 hanzi + A1-AF symbols)")
     font = ImageFont.truetype(TTC, FONT_SIZE, index=0)
     print("metrics:", font.getmetrics())
 
@@ -102,7 +117,7 @@ def main():
         f.write("};\n")
 
     # Preview sheet: mixed sample rendered with the SAME pipeline semantics.
-    sample = "VibeStick kimi 你好，世界！修复登录 中英混排 baseline 0123 ?"
+    sample = "VibeStick kimi 你好，世界！修复登录：《协议》v2.1（测试）…— 中英混排 baseline 0123 ?"
     cell = 20
     sheet = Image.new("RGB", (26 * cell, ((len(sample) + 25) // 26) * cell),
                       (24, 24, 32))

@@ -1,5 +1,6 @@
 #include "board.h"
 
+
 #include <esp_task_wdt.h>
 
 #include "ble.h"
@@ -625,6 +626,7 @@ static void pumpAudio() {
 
 // ---- Arduino ----
 
+
 void setup() {
   Serial.begin(115200);
   Serial.println();
@@ -653,7 +655,6 @@ void setup() {
 
   bleInit();
   micInit();
-
   sLastActivity = millis();
   pollBattery(true);
 

@@ -1,0 +1,258 @@
+#!/usr/bin/env python3
+"""Render VibeStick firmware screens to PNGs using the EXACT font data and
+layout logic of the firmware (16px surfaces), for visual verification.
+
+Loads firmware/src/assets/cjk_font.h, reimplements the 16px text pipeline
+(utf-8 codepoints, 8/16 px cells, pixel wrap) and the screen layouts of
+home / session picker / conversation / transcript.
+
+Output: /tmp/preview_{home,picker,convo,transcript}.png (3x scale)
+"""
+
+import re
+
+from PIL import Image, ImageDraw
+
+SCALE = 3
+W, H = 240, 135
+
+SRC = open("firmware/src/assets/cjk_font.h").read()
+
+
+def extract(name):
+    m = re.search(name + r"\[[\d\s]*\] = \{(.*?)\};", SRC, re.S)
+    return [int(x, 16) for x in re.findall(r"0x([0-9A-Fa-f]+)", m.group(1))]
+
+
+ASCII_G = extract("cjk_ascii_glyphs")
+INDEX = extract("cjk_hanzi_index")
+HANZI_G = extract("cjk_hanzi_glyphs")
+
+WHITE = (255, 255, 255)
+DIM = (123, 239, 123)      # ~COL_DIM light grey
+FAINT = (90, 90, 90)
+BLACK = (0, 0, 0)
+CYAN = (0, 255, 255)
+GREEN = (0, 255, 0)
+AMBER = (255, 190, 0)
+RED = (255, 0, 0)
+BLUE = (0, 0, 255)
+HL = (16, 30, 68)          # COL_HL dark steel blue
+
+
+def hanzi_index(cp):
+    lo, hi = 0, len(INDEX) - 1
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if INDEX[mid] == cp:
+            return mid
+        if INDEX[mid] < cp:
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return -1
+
+
+def cp_width(cp):
+    if cp < 0x20:
+        return 0
+    if cp < 0x7F:
+        return 8
+    return 16 if hanzi_index(cp) >= 0 else 8
+
+
+def text_width(s):
+    return sum(cp_width(ord(c)) for c in s)
+
+
+def glyph_rows(cp):
+    if cp < 0x7F:
+        off = (cp - 0x20) * 16
+        return ASCII_G[off:off + 16], 8
+    i = hanzi_index(cp)
+    if i < 0:
+        off = (ord("?") - 0x20) * 16
+        return ASCII_G[off:off + 16], 8
+    rows = []
+    for r in range(16):
+        rows.append(HANZI_G[i * 32 + r * 2])
+        rows.append(HANZI_G[i * 32 + r * 2 + 1])
+    return rows, 16
+
+
+def draw_text16(img, x, y, s, color, max_w=232):
+    """Render s into img at (x, y) with firmware glyph semantics; returns width."""
+    max_w = min(max_w, W - x)
+    w = 0
+    for ch in s:
+        cw = cp_width(ord(ch))
+        if cw == 0:
+            continue
+        if w + cw > max_w:
+            break
+        w += cw
+    cx = 0
+    px = img.load()
+    for ch in s:
+        cp = ord(ch)
+        if cp < 0x20:
+            continue
+        rows, gw = glyph_rows(cp)
+        if cx + gw > w:
+            break
+        for row in range(16):
+            if gw == 8:
+                bits = rows[row]
+                for col in range(8):
+                    if bits & (0x80 >> col):
+                        px[x + cx + col, y + row] = color
+            else:
+                b0, b1 = rows[row * 2], rows[row * 2 + 1]
+                for col in range(16):
+                    b = b0 if col < 8 else b1
+                    if b & (0x80 >> (col % 8)):
+                        px[x + cx + col, y + row] = color
+        cx += gw
+    return w
+
+
+def wrap16(s, max_w):
+    """Firmware drawWrapped16: greedy pixel wrap, returns list of lines."""
+    lines = []
+    cur = s
+    while cur:
+        w = 0
+        end = 0
+        for i, ch in enumerate(cur):
+            cw = cp_width(ord(ch))
+            if w + cw > max_w:
+                break
+            w += cw
+            end = i + 1
+        if end == 0:
+            break
+        lines.append(cur[:end])
+        cur = cur[end:]
+    return lines
+
+
+def small(img, x, y, s, color):
+    """6 px chrome text (PIL default bitmap font ~8px)."""
+    ImageDraw.Draw(img).text((x, y), s, fill=color)
+
+
+def screen():
+    return Image.new("RGB", (W, H), BLACK)
+
+
+def status_bar(img):
+    d = ImageDraw.Draw(img)
+    d.rectangle([222, 0, 238, 16], outline=WHITE)  # battery placeholder
+    d.rectangle([2, 0, 18, 16], outline=CYAN)      # bt placeholder
+    d.line([0, 15, W, 15], fill=FAINT)
+    small(img, W - 50, 4, "100%", DIM)
+
+
+def frame(img, x, y, w, h, outline=CYAN):
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([x, y, x + w, y + h], radius=8, fill=HL, outline=outline)
+
+
+def dot(img, x, y, r, color):
+    ImageDraw.Draw(img).ellipse([x - r, y - r, x + r, y + r], fill=color)
+
+
+def preview_home():
+    img = screen()
+    status_bar(img)
+    cx = W // 2
+    frame(img, cx - 28, 26, 56, 56)
+    ImageDraw.Draw(img).rectangle([cx - 12, 36, cx + 12, 60], outline=WHITE)
+    name = "Claude Code"
+    draw_text16(img, (W - text_width(name)) // 2, 90, name, WHITE)
+    dot(img, 96, 118, 4, GREEN)
+    small(img, 104, 114, "running", GREEN)
+    for i, c in enumerate([CYAN, FAINT, FAINT, FAINT]):
+        dot(img, 108 + i * 10, 130, 2, c)
+    return img
+
+
+def preview_picker():
+    img = screen()
+    status_bar(img)
+    small(img, 4, 20, "kimi-cli@vibestick ~ %", GREEN)
+    rows = [
+        (0, "+ new session", None, False),
+        (1, "修复登录跳转问题", "running", True),
+        (2, "refactor-api-and-cleanup", "idle", False),
+        (3, "《协议》v2.1 评审：数据库层", "idle", False),
+    ]
+    y = 36
+    for _, name, st, fg in rows:
+        dot(img, 18, y + 8, 3, GREEN if fg else FAINT)
+        draw_text16(img, 28, y, name, WHITE, max_w=W - 28 - 8 - 66)
+        if st:
+            small(img, W - 8 - len(st) * 6, y + 5, st, FAINT)
+        y += 18
+    return img
+
+
+def convo_chrome(img, sess, state, busy):
+    status_bar(img)
+    d = ImageDraw.Draw(img)
+    dot(img, 12, 27, 4, RED if busy else BLUE)
+    draw_text16(img, 24, 20, sess, GREEN, max_w=W - 24 - 10 - 62)
+    bw = len(state) * 6 + 8
+    d.rounded_rectangle([W - 6 - bw, 20, W - 6, 34], radius=3, outline=GREEN)
+    small(img, W - 6 - bw + 4, 23, state, GREEN)
+    d.line([0, 38, W, 38], fill=FAINT)
+    small(img, 4, 44, "ctx", FAINT)
+    d.rectangle([24, 43, 88, 52], outline=DIM)
+    d.rectangle([25, 44, 25 + 26, 51], fill=GREEN)
+    small(img, 92, 44, "42%", WHITE)
+    small(img, W - 40, 44, "$1.23", AMBER)
+    d.line([0, 116, W, 116], fill=FAINT)
+
+
+def preview_convo():
+    img = screen()
+    convo_chrome(img, "修复登录跳转问题", "running", busy=False)
+    tail = "user: 修复登录跳转的问题，顺便看看《权限校验》这块：边界条件、超时重试、还有 session 过期后的重定向……"
+    y = 52
+    for line in wrap16(tail, W - 8)[:3]:
+        draw_text16(img, 4, y, line, AMBER)
+        y += 18
+    small(img, W - 32, 106, "1/3", FAINT)
+    small(img, 4, 122, "transcribing...", AMBER)
+    return img
+
+
+def preview_transcript():
+    img = screen()
+    convo_chrome(img, "fix-auth-bug", "idle", busy=False)
+    dot(img, 12, 27, 4, BLUE)  # ready = blue
+    text = "looks good, please continue with the refactoring and add integration tests for the login flow"
+    y = 52
+    for line in wrap16(text, W - 8)[:3]:
+        draw_text16(img, 4, y, line, GREEN)
+        y += 18
+    small(img, 4, 122, "A: send  dbl-A: drop  hold A: redo", AMBER)
+    return img
+
+
+def main():
+    outs = {
+        "home": preview_home(),
+        "picker": preview_picker(),
+        "convo": preview_convo(),
+        "transcript": preview_transcript(),
+    }
+    for name, img in outs.items():
+        big = img.resize((W * SCALE, H * SCALE), Image.NEAREST)
+        path = f"/tmp/preview_{name}.png"
+        big.save(path)
+        print(path)
+
+
+if __name__ == "__main__":
+    main()

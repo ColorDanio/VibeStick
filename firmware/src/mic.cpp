@@ -6,16 +6,28 @@
 #include <driver/i2s.h>
 #endif
 
+#include <math.h>
+
 // Mic hardware: StickC Plus has a PDM SPM1423 on I2S0 (CLK=GPIO0,
 // DATA=GPIO34); StickS3 has a MEMS mic behind the ES8311 codec, captured
 // through M5Unified's Mic_Class.
+//
+// P1 fix (data-driven): the SPM1423 needs a 1-3.072 MHz PDM clock; the
+// ESP32 PDM RX downsamples by 64, so an 8 kHz PCM rate means a 512 kHz PDM
+// clock -- far out of spec (weak/noisy signal, confirmed by MICSTAT:
+// acrms ~10-40 of 32768 full scale). The M5 reference example runs 44.1
+// kHz (2.8 MHz PDM clock, in spec). We run the I2S at 16 kHz (1.024 MHz,
+// in spec) and decimate 2:1 in software, keeping the 8 kHz stream.
 #define MIC_I2S_PORT I2S_NUM_0
 #define MIC_PIN_CLK 0
 #define MIC_PIN_DATA 34
-#define MIC_SAMPLE_RATE 8000
+#define MIC_SAMPLE_RATE 8000   // output stream rate (protocol)
+#define MIC_I2S_RATE 16000     // I2S rate: PDM clock = 16000*64 = 1.024 MHz
+#define MIC_GAIN 16            // digital gain after DC removal
+#define MIC_GAIN_S3 4
 
 #define RING_SIZE 8192
-#define READ_SAMPLES 256  // 32 ms per i2s_read at 8 kHz
+#define READ_SAMPLES 512  // 32 ms per i2s_read at 16 kHz
 
 static uint8_t sRing[RING_SIZE];
 static volatile size_t sHead = 0;  // write pos (mic task)
@@ -41,7 +53,7 @@ void micInit() {
 
   i2s_config_t cfg = {};
   cfg.mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM);
-  cfg.sample_rate = MIC_SAMPLE_RATE;
+  cfg.sample_rate = MIC_I2S_RATE;
   cfg.bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT;
   cfg.channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT;
   cfg.communication_format = I2S_COMM_FORMAT_STAND_I2S;
@@ -63,11 +75,12 @@ void micInit() {
   pins.data_out_num = I2S_PIN_NO_CHANGE;
   pins.data_in_num = MIC_PIN_DATA;
   i2s_set_pin(MIC_I2S_PORT, &pins);
-  i2s_set_clk(MIC_I2S_PORT, MIC_SAMPLE_RATE, I2S_BITS_PER_SAMPLE_16BIT,
+  i2s_set_clk(MIC_I2S_PORT, MIC_I2S_RATE, I2S_BITS_PER_SAMPLE_16BIT,
               I2S_CHANNEL_MONO);
 
   sDriverInstalled = true;
-  Serial.println("[MIC] I2S0 PDM installed (8 kHz mono)");
+  Serial.printf("[MIC] I2S0 PDM %d Hz (PDM clk %d kHz) -> %d Hz stream\n",
+                MIC_I2S_RATE, MIC_I2S_RATE * 64 / 1000, MIC_SAMPLE_RATE);
 }
 
 static void ringWrite(const uint8_t* data, size_t len) {
@@ -94,9 +107,10 @@ bool micRunning() { return sTask != nullptr; }
 
 static void micTask(void* arg) {
   int16_t raw[READ_SAMPLES];
-  uint8_t out[READ_SAMPLES];
+  uint8_t out[READ_SAMPLES / 2];
   size_t bytesRead = 0;
   uint32_t smooth = 0;
+  int32_t dc = 0;  // running DC estimate (~1 s time constant at 16 kHz)
 
   Serial.println("[MIC] capture task started (core 0)");
   while (!sStopReq) {
@@ -112,7 +126,11 @@ static void micTask(void* arg) {
       continue;
     }
 #endif
-    size_t n = bytesRead / sizeof(int16_t);
+    size_t n16 = bytesRead / sizeof(int16_t);
+
+
+#ifdef VIBESTICK_BOARD_S3
+    size_t n = n16;
     uint32_t acc = 0;
     for (size_t i = 0; i < n; ++i) {
       int16_t s = raw[i];
@@ -120,11 +138,28 @@ static void micTask(void* arg) {
       int v = (s >> 8) + 128;  // 16-bit signed -> 8-bit unsigned
       out[i] = (uint8_t)(v < 0 ? 0 : (v > 255 ? 255 : v));
     }
+#else
+    // Decimate 2:1, remove DC, apply digital gain.
+    size_t n = n16 / 2;
+    uint32_t acc = 0;
+    for (size_t i = 0; i < n; ++i) {
+      int32_t s = ((int32_t)raw[2 * i] + raw[2 * i + 1]) / 2;
+      dc = (dc * 1023 + s) / 1024;  // ~1 s DC tracking at 8 kHz
+      int32_t v = (s - dc) * MIC_GAIN;
+      acc += (uint32_t)abs(v);
+      if (v > 32767) v = 32767;
+      if (v < -32768) v = -32768;
+      v = (v >> 8) + 128;
+      out[i] = (uint8_t)(v < 0 ? 0 : (v > 255 ? 255 : v));
+    }
+#endif
+
+
     if (n > 0) {
       // RMS-ish level: mean |sample|, smoothed, then auto-gained against a
       // running peak (last ~1-2 s) with a floor, so normal speech volume
       // drives the bar to the middle instead of needing shouting.
-      uint32_t mean = acc / n;  // full-scale 32768
+      uint32_t mean = acc / n;
       smooth = (smooth * 7 + mean) / 8;
       sPeak = smooth > sPeak ? smooth : (sPeak * 995) / 1000;
       uint32_t ref = sPeak > 2500 ? sPeak : 2500;  // floor: no silence boost
