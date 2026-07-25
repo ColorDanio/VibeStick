@@ -6,13 +6,14 @@
 #include "ble.h"
 
 // Standard boot-keyboard report, extended to usage max 0x73 (F13-F24) so
-// F13/F14 are available as application-bindable special keys. Report: 8
-// bytes = modifiers, reserved, 6 key slots.
+// F13/F14 are available as application-bindable special keys. There is only
+// one input report, so deliberately use no Report ID: BlueZ HOGP's report-id
+// handling is otherwise ambiguous across reconnects. Report: 8 bytes =
+// modifiers, reserved, 6 key slots.
 static const uint8_t sReportMap[] = {
     0x05, 0x01,  // Usage Page (Generic Desktop)
     0x09, 0x06,  // Usage (Keyboard)
     0xA1, 0x01,  // Collection (Application)
-    0x85, 0x01,  //   Report ID (1)
     0x05, 0x07,  //   Usage Page (Key Codes)
     0x19, 0xE0,  //   Usage Minimum (224)
     0x29, 0xE7,  //   Usage Maximum (231)
@@ -54,12 +55,12 @@ void hidInit(NimBLEServer* pServer) {
   // every report READ_ENC and NimBLE then silently drops notifications until
   // the host happens to upgrade the HID link. BlueZ HOGP can subscribe before
   // that upgrade, leaving a visible keyboard which never emits a key. The
-  // report-reference descriptor keeps this a normal Report ID 1 input report.
+  // report-reference descriptor keeps this a normal no-ID input report.
   sInput = hid->hidService()->createCharacteristic(
       (uint16_t)0x2A4D, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
   NimBLEDescriptor* reportRef = sInput->createDescriptor(
       (uint16_t)0x2908, NIMBLE_PROPERTY::READ);
-  const uint8_t reportRefValue[] = {0x01, 0x01};  // report ID 1, input report
+  const uint8_t reportRefValue[] = {0x00, 0x01};  // no report ID, input report
   reportRef->setValue(reportRefValue, sizeof(reportRefValue));
   // HID Information characteristic (0x2a4a) is created empty by the
   // library; BlueZ's hog-lib refuses to set up the profile without it.

@@ -131,7 +131,8 @@
       Plus 已重刷（2026-07-25）。
 - [ ] Vibe Mic HID 实机回归：A/F13、B/F14 的真实 Linux input 事件与目标应用快捷键响应待确认。
       已定位并修复 HID input-report 特征在 service 启动后才创建、以及 NimBLE `READ_ENC`
-      导致未升级加密 HID 链路静默丢弃通知的问题；需重刷并实机验证。
+      导致未升级加密 HID 链路静默丢弃通知的问题；并改为单一无 Report-ID 键盘报告以避免
+      BlueZ HOGP 的 report-id 兼容性问题；需重刷并实机验证。
 - [x] BLE HID/GATT 自动重连：daemon 持久保存首次发现的 VibeStick 地址，后续优先
       直连该地址、失败才扫描，避免 HID 自动连接后停止广播导致 Agent 状态无法同步。
       固件进一步在任一 host 连接后继续 advertising（NimBLE 默认支持多条 peripheral
