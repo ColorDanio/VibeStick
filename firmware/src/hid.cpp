@@ -6,7 +6,8 @@
 #include "ble.h"
 
 // Standard boot-keyboard report, extended to usage max 0x73 (F13-F24) so
-// F19/F20 fit. Report: 8 bytes = modifiers, reserved, 6 key slots.
+// F13/F14 are available as application-bindable special keys. Report: 8
+// bytes = modifiers, reserved, 6 key slots.
 static const uint8_t sReportMap[] = {
     0x05, 0x01,  // Usage Page (Generic Desktop)
     0x09, 0x06,  // Usage (Keyboard)
@@ -54,7 +55,7 @@ void hidInit(NimBLEServer* pServer) {
   hid->hidInfo(0x00, 0x03);
   hid->startServices();
   sInput = hid->inputReport(1);
-  Serial.println("[HID] keyboard service up (Vibe Mic: A=F19, B=F20)");
+  Serial.println("[HID] keyboard service up (Vibe Mic: A=F13, B=F14)");
 }
 
 void hidKey(uint8_t keycode, bool pressed) {
@@ -63,6 +64,6 @@ void hidKey(uint8_t keycode, bool pressed) {
   if (pressed) report[2] = keycode;
   sInput->setValue(report, sizeof(report));
   sInput->notify();
-  Serial.printf("[HID] %s %s\n", keycode == VIBESTICK_HID_KEY_A ? "F19" : "F20",
+  Serial.printf("[HID] %s %s\n", keycode == VIBESTICK_HID_KEY_A ? "F13" : "F14",
                 pressed ? "press" : "release");
 }

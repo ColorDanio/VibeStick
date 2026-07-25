@@ -1285,10 +1285,10 @@ void uiShowMic(const char* errorText) {
   M5Lcd.setTextSize(1);
   M5Lcd.setTextColor(COL_FAINT, TFT_BLACK);
   if (land) {
-    centerText("A: PTT + F19  B: F20  pwr: back", footL1Y(), 1, COL_FAINT);
+    centerText("A: PTT + F13  B: F14  pwr: back", footL1Y(), 1, COL_FAINT);
   } else {
-    centerText("A: PTT + F19", footL1Y(), 1, COL_FAINT);
-    centerText("B: F20  pwr: back", footL2Y(), 1, COL_FAINT);
+    centerText("A: PTT + F13", footL1Y(), 1, COL_FAINT);
+    centerText("B: F14  pwr: back", footL2Y(), 1, COL_FAINT);
   }
 
   // Recent voice error, if any (replaces the hint line).

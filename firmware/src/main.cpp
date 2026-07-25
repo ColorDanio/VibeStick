@@ -19,8 +19,8 @@
 //   home:            B = next tool (slide animation), A = select tool
 //   session picker:  B = next entry,         A = enter (new session / select)
 //   conversation:    hold A >=500 ms = record (voice.start), release = stop
-//   microphone:      A press = F19 + PTT start, A release = PTT stop + F19 up;
-//                    B is F20 only (power key exits Microphone mode)
+//   microphone:      A press = F13 + PTT start, A release = PTT stop + F13 up;
+//                    B is F14 only (power key exits Microphone mode)
 //                    (voice.stop); transcript ready: A = send, B = discard;
 //                    thinking/running: A = inference.cancel;
 //                    otherwise A/B = scroll content down/up
@@ -207,7 +207,7 @@ static void back() {  // one level up
 
 static void handleEvent(Event e) {
   // Long B is back except in Microphone mode, where B belongs exclusively
-  // to the host HID mapping (F20).
+  // to the host HID mapping (F14).
   if (e == EV_B_LONG && sScreen != SCR_MIC) {
     back();
     return;

@@ -127,7 +127,8 @@
       不再离开该模式（侧边电源键返回）。Host 将流送入 PipeWire `VibeStick Mic`，供任意
       选择该系统输入的程序使用。
 - [ ] Microphone 模式实机回归：修复 A 松开未停流（即时 PTT 改动遗漏 release 分支）并将
-      显示与 PipeWire source 统一命名为 `Vibe Mic`；重刷后验证 A/F19、B/F20 真实进入 Linux
+      显示与 PipeWire source 统一命名为 `Vibe Mic`；因目标 app 忽略 F19/F20，改为更兼容的
+      A/F13、B/F14，重刷后验证真实进入 Linux
       input 设备与 PTT start/stop 成对发生。
 - [x] BLE HID/GATT 自动重连：daemon 持久保存首次发现的 VibeStick 地址，后续优先
       直连该地址、失败才扫描，避免 HID 自动连接后停止广播导致 Agent 状态无法同步。

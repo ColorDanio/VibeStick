@@ -83,7 +83,7 @@ A deeper dive lives in [docs/architecture.md](docs/architecture.md).
 | Conversation| older message · thinking: **cancel** · transcript ready: **send** | newer message | back |
 | Recording   | **hold to record**, release to transcribe | discard draft   | back (cancels)        |
 | Transcript  | 2×A: discard · A: send                    | discard         | back                  |
-| Microphone  | **PTT + F19** (press/release)             | **F20**          | back                  |
+| Microphone  | **PTT + F13** (press/release)             | **F14**          | back                  |
 | Anywhere    | —                                         | long-press: back| short: back · **2×: home** |
 
 Double-shake the stick to force a status refresh.
