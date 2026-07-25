@@ -153,3 +153,33 @@ def test_config_migration_base_to_small(tmp_path):
     # explicit other choices survive
     path.write_text(json.dumps({"tools": [{"id": "codex"}], "asr": {"model": "tiny"}}))
     assert config_mod.load(path).asr.model == "tiny"
+
+
+def test_poll_loop_survives_sync_failure(tmp_path):
+    """A failing bridge.sync (BLE drop mid-sync) must not kill the poll loop:
+    state changes afterwards are still picked up and synced."""
+    store = make_store(tmp_path)
+    write_session(tmp_path / "sessions", "c1", "running")
+
+    class FlakyTransport(FakeTransport):
+        def __init__(self):
+            super().__init__()
+            self.fail_status = 1  # first STATUS write raises
+
+        async def write_status(self, payload):
+            if self.fail_status:
+                self.fail_status -= 1
+                raise OSError("BLE disconnected mid-sync")
+            await super().write_status(payload)
+
+    transport = FlakyTransport()
+
+    async def body():
+        await asyncio.sleep(0.1)
+        # state change after the failed sync: poll must still see it
+        write_session(tmp_path / "sessions", "c1", "waiting")
+        await asyncio.sleep(0.3)
+
+    run_daemon_briefly(store, transport, body)
+    states = [json.loads(w)["state"] for w in transport.writes["STATUS"]]
+    assert "waiting" in states  # synced after the failure, loop alive

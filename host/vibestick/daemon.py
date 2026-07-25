@@ -338,26 +338,29 @@ async def run_daemon(
         last_presence = 0.0
         last_discovery = 0.0
         while True:
-            changed = store.poll()
-            now = time.time()
-            if now - last_presence >= presence_interval:
-                last_presence = now
-                try:
-                    if store.refresh_presence():
-                        changed = True
-                except Exception as exc:  # noqa: BLE001 - presence is best-effort
-                    log.warning("presence refresh failed: %s", exc)
-            if now - last_discovery >= discovery_interval:
-                last_discovery = now
-                try:
-                    if store.refresh_discovery():
-                        changed = True
-                except Exception as exc:  # noqa: BLE001 - discovery is best-effort
-                    log.warning("session discovery failed: %s", exc)
-            reloaded = reload_config_if_changed(holder, store, pipeline, relay)
-            if changed or reloaded:
-                await bridge.sync()
-            maybe_flush_queue()
+            try:
+                changed = store.poll()
+                now = time.time()
+                if now - last_presence >= presence_interval:
+                    last_presence = now
+                    try:
+                        if store.refresh_presence():
+                            changed = True
+                    except Exception as exc:  # noqa: BLE001 - presence is best-effort
+                        log.warning("presence refresh failed: %s", exc)
+                if now - last_discovery >= discovery_interval:
+                    last_discovery = now
+                    try:
+                        if store.refresh_discovery():
+                            changed = True
+                    except Exception as exc:  # noqa: BLE001 - discovery is best-effort
+                        log.warning("session discovery failed: %s", exc)
+                reloaded = reload_config_if_changed(holder, store, pipeline, relay)
+                if changed or reloaded:
+                    await bridge.sync()
+                maybe_flush_queue()
+            except Exception:  # noqa: BLE001 - one bad iteration must never kill polling
+                log.exception("poll loop iteration failed")
             await asyncio.sleep(poll_interval)
 
     poll_task = asyncio.ensure_future(poll_loop())
