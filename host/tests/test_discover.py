@@ -308,3 +308,30 @@ def test_tools_payload_presence_does_not_override_idle_discovered(tmp_path):
     store.refresh_discovery()
     tools = json.loads(store.tools_payload())
     assert tools["list"][0]["state"] == "idle"
+
+
+def test_adapter_record_absorbs_discovered_tail(tmp_path):
+    # kimi case: adapter file (live state, no tail) + discovery (tail from
+    # the CLI's own transcript) with the same session id — the adapter
+    # record shows the tail on the device.
+    from vibestick.discover import DiscoveredSession
+
+    cfg = Config(tools=[ToolConfig(id="kimi-cli", name="Kimi", process="kimi")])
+    stub = StubDiscovery({"kimi-cli": [
+        DiscoveredSession(id="session_abc", tool="kimi-cli", name="proj",
+                          last="assistant: done", updated=NOW, cost_usd=-1.0,
+                          tail=["user: 改一下按钮", "assistant: done"]),
+    ]})
+    store = SessionStore(tmp_path / "sessions", config=cfg, discovery=stub)
+    store.dir.mkdir(parents=True)
+    (tmp_path / "sessions" / "session_abc.json").write_text(json.dumps({
+        "id": "session_abc", "tool": "kimi-cli", "session": "proj",
+        "state": "waiting", "updated": NOW, "fg": True}))
+    store.poll()
+    store.refresh_discovery()
+
+    sessions = json.loads(store.sessions_payload())
+    assert [e["id"] for e in sessions["list"]] == ["session_abc"]  # no duplicate
+    status = json.loads(store.status_payload())
+    assert status["state"] == "waiting"  # adapter state wins
+    assert status["tail"] == ["user: 改一下按钮", "assistant: done"]

@@ -227,6 +227,8 @@ class SessionStore:
             changed = True
         if self._ensure_active():
             changed = True
+        if self._merge_discovered_tails():
+            changed = True
         return changed
 
     @staticmethod
@@ -499,6 +501,37 @@ class SessionStore:
         if self._check_pending_new():
             changed = True
         if self._ensure_active():
+            changed = True
+        if self._merge_discovered_tails():
+            changed = True
+        return changed
+
+    def _merge_discovered_tails(self) -> bool:
+        """Fill adapter records' empty tail/last from discovery.
+
+        Adapter files carry rich live state but no conversation tail;
+        discovery parses tails from the CLI's own transcripts. When both
+        describe the same session (kimi: adapter id == session dir name),
+        discovery is suppressed from the list — merge its tail into the
+        adapter record so the device reader has content.
+        """
+        if not self._discovered:
+            return False
+        by_stable: dict[tuple[str, str], SessionRecord] = {}
+        for drec in self._discovered.values():
+            stable = str(drec.raw.get("disc_id") or "")
+            if stable and drec.status.tail:
+                by_stable.setdefault((drec.status.tool, stable), drec)
+        changed = False
+        for rec in self._records.values():
+            if rec.status.tail:
+                continue
+            drec = by_stable.get((rec.status.tool, rec.id))
+            if drec is None:
+                continue
+            rec.status.tail = list(drec.status.tail)
+            if not rec.status.last and drec.status.last:
+                rec.status.last = drec.status.last
             changed = True
         return changed
 
