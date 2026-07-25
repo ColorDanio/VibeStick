@@ -97,10 +97,21 @@ async def run_daemon(
             return
         asyncio.ensure_future(_deliver_now(rec, text))
 
+    def _delivery_hint(rec) -> str:
+        """Precise failure reason for the STATUS error line."""
+        raw = rec.raw if rec else {}
+        if raw.get("tmux") or raw.get("zellij"):
+            return "delivery failed"
+        if not (raw.get("tty") or raw.get("pid")):
+            return "delivery failed: no target (run CLI in tmux/zellij)"
+        if not tiocsti_enabled:
+            return "tty blocked by kernel; run CLI in tmux/zellij"
+        return "delivery failed"
+
     async def _deliver_now(rec, text: str) -> bool:
         ok = await delivery.deliver_text(rec.raw if rec else None, text, mode=_delivery_mode())
         if not ok:
-            push_status_error("delivery failed: no target")
+            push_status_error(_delivery_hint(rec))
         return ok
 
     async def _flush_queue() -> None:
@@ -119,7 +130,7 @@ async def run_daemon(
                 )
                 if not ok:
                     # no retry loop: drop and report once
-                    push_status_error("delivery failed: no target")
+                    push_status_error(_delivery_hint(target))
                 if send_queue:
                     await asyncio.sleep(flush_interval)
         finally:
@@ -187,7 +198,7 @@ async def run_daemon(
                 rec.raw if rec else None, binding, mode=_delivery_mode()
             )
             if not ok:
-                push_status_error("cancel failed: no delivery target")
+                push_status_error("cancel failed: " + _delivery_hint(rec))
 
         asyncio.ensure_future(do_cancel())
 
