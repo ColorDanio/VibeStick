@@ -9,6 +9,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import time
 from collections import deque
 from pathlib import Path
@@ -405,6 +406,28 @@ def reload_config_if_changed(
     return True
 
 
+def _acquire_singleton_lock(lock_path: Path | None = None) -> int | None:
+    """Process-singleton flock; returns the held fd or None if taken.
+
+    Two daemons (autostart + manual, vibestickd + vibestick-web spawn)
+    fight over the BLE link and kick each other off the device. The lock
+    file makes the second instance exit immediately with a clear log.
+    """
+    import fcntl
+
+    path = lock_path or (Path.home() / ".vibestick" / "daemon.lock")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(fd)
+        return None
+    os.ftruncate(fd, 0)
+    os.write(fd, str(os.getpid()).encode())
+    return fd  # held until process exit (kernel releases the flock)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="vibestickd", description="VibeStick host daemon")
     parser.add_argument("--sessions-dir", default=None, help="override ~/.vibestick/sessions")
@@ -420,6 +443,12 @@ def main() -> None:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+
+    lock_env = os.environ.get("VIBESTICK_LOCK_PATH")  # tests override
+    lock_fd = _acquire_singleton_lock(Path(lock_env) if lock_env else None)
+    if lock_fd is None:
+        log.error("another vibestick daemon is already running; exiting")
+        raise SystemExit(2)
 
     config_path = Path(args.config) if args.config else config_mod.DEFAULT_PATH
     cfg = config_mod.load(config_path)

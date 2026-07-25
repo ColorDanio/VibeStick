@@ -22,6 +22,7 @@ def patched_main(monkeypatch, tmp_path):
 
     monkeypatch.setattr(setupui, "serve_in_thread", fake_serve)
     monkeypatch.setattr(daemon, "run_daemon", fake_run_daemon)
+    monkeypatch.setenv("VIBESTICK_LOCK_PATH", str(tmp_path / "daemon.lock"))
     argv = ["vibestickd", "--config", str(tmp_path / "config.json"),
             "--sessions-dir", str(tmp_path / "sessions")]
     return served, argv
@@ -64,3 +65,24 @@ def test_dashboard_port_busy_is_not_fatal(patched_main, monkeypatch):
 
     monkeypatch.setattr(setupui, "serve_in_thread", busy)
     run_main(argv)  # must not raise
+
+
+def test_singleton_lock_blocks_second_instance(tmp_path):
+    import os
+
+    lock = tmp_path / "daemon.lock"
+    fd = daemon._acquire_singleton_lock(lock)
+    assert fd is not None
+    assert daemon._acquire_singleton_lock(lock) is None  # taken
+    os.close(fd)  # releases the flock
+    fd2 = daemon._acquire_singleton_lock(lock)
+    assert fd2 is not None
+    os.close(fd2)
+
+
+def test_main_exits_when_lock_held(patched_main, tmp_path, monkeypatch):
+    monkeypatch.setattr(daemon, "_acquire_singleton_lock", lambda *a, **k: None)
+    _served, argv = patched_main
+    with pytest.raises(SystemExit) as exc:
+        run_main(argv)
+    assert exc.value.code == 2
