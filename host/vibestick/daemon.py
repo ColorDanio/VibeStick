@@ -91,6 +91,42 @@ async def run_daemon(
     send_queue: deque[tuple[str, str]] = deque()  # (session_id, text), FIFO
     flushing = {"active": False}
 
+    def _needs_delivery_handoff(rec) -> bool:
+        """True for a live plain-terminal session that cannot accept input."""
+        if rec is None:
+            return False
+        raw = rec.raw
+        if raw.get("tmux") or raw.get("zellij"):
+            return False
+        return bool(raw.get("tty") or raw.get("pid")) and not tiocsti_enabled
+
+    async def _handoff_to_wrapped_session(rec, text: str) -> bool:
+        """Start a reliable replacement session and deliver one pending message."""
+        tool = store.config.tool_by_id(rec.status.tool) if store.config else None
+        command = tool.launch_command() if tool is not None else ""
+        if not command:
+            push_status_error("delivery failed: no launch command")
+            return False
+        known = {item.id for item in store.sessions_for_tool(tool.id)}
+        if not await delivery.launch_tmux_session(tool.id, command):
+            push_status_error("delivery failed: new tmux session")
+            return False
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline:
+            store.poll()
+            for item in store.sessions_for_tool(tool.id):
+                if item.id in known or not item.raw.get("tmux"):
+                    continue
+                store.apply_command({"cmd": "session.select", "id": item.id})
+                ok = await delivery.deliver_text(item.raw, text, mode=_delivery_mode())
+                if not ok:
+                    push_status_error("delivery failed: replacement session")
+                sync()
+                return ok
+            await asyncio.sleep(0.1)
+        push_status_error("delivery failed: session start timeout")
+        return False
+
     def deliver_message(text: str) -> None:
         """Queue-aware delivery shared by INPUT messages and transcripts.
 
@@ -98,6 +134,10 @@ async def run_daemon(
         dropping the message; the queue flushes FIFO when it goes idle.
         """
         rec = store.active()
+        if _needs_delivery_handoff(rec):
+            log.info("plain tty session %s: creating wrapped delivery session", rec.id)
+            spawn(_handoff_to_wrapped_session(rec, text))
+            return
         if rec is not None and rec.status.state == "running" and text:
             if len(send_queue) >= QUEUE_MAX:
                 log.warning("send queue full; dropping oldest")

@@ -206,6 +206,11 @@ delivery.
   auto-selects the new session once it surfaces via an adapter file or
   discovery (30 s timeout). Without a launch command it replies STATUS
   `state: "error"`, `last: "new session unsupported"`.
+- **Voice handoff for a plain tty**: on kernels where TIOCSTI is blocked, a
+  confirmed voice message for a live process that has no tmux/zellij target
+  automatically starts a standalone VibeStick-wrapped tmux session for that
+  tool, waits for its adapter record, delivers the message there, and selects
+  it on the Stick. The original process is never injected or interrupted.
 - **Queue semantics**: messages for a busy (`running`) session are
   queued host-side (per-session FIFO, cap 8) and flushed in order once
   the session goes idle/waiting — see "Voice / ASR → Send queue".

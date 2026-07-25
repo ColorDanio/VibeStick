@@ -87,6 +87,10 @@
       `/proc` live CLI 的 cwd 精确匹配后，presence 会话显示真实 title、最近 tail、成本和
       基于更新时间的状态，而非空白 `hermes-agent` 占位。实机 bridge 已同步该会话的 5 条
       tail 到 M5StickC Plus（2026-07-25）。
+- [x] plain tty 语音自动接力：确认语音若目标是内核禁止 TIOCSTI 的 live 普通终端，
+      不再报错/丢弃；daemon 自动为同工具启动 wrapper-backed tmux，等待 adapter 记录后
+      投递文本并切换 Stick 到新 session。单测覆盖启动、发现、投递、选择的完整流程；旧进程
+      不会被注入或中断。
 - [x] BLE HID/GATT 自动重连：daemon 持久保存首次发现的 VibeStick 地址，后续优先
       直连该地址、失败才扫描，避免 HID 自动连接后停止广播导致 Agent 状态无法同步。
       固件进一步在任一 host 连接后继续 advertising（NimBLE 默认支持多条 peripheral

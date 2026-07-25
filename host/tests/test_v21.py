@@ -217,6 +217,41 @@ def test_session_new_launches_window_and_selects_session(tmp_path, monkeypatch):
     assert sessions["list"][sessions["active"]]["id"] == "c2"
 
 
+def test_plain_tty_message_handoffs_to_wrapped_tmux_session(tmp_path, monkeypatch):
+    watcher = StubWatcher({"codex": ProcInfo(
+        pid=4321, name="codex", cwd="/x", tty="/dev/pts/99"
+    )})
+    store = make_store(tmp_path, watcher=watcher)
+    store.refresh_presence()
+    calls = []
+
+    async def fake_launch(name, command):
+        calls.append(("launch", name, command))
+        return True
+
+    async def fake_deliver(record, text, mode="auto"):
+        calls.append(("deliver", record["id"], text, mode))
+        return True
+
+    monkeypatch.setattr(delivery, "tiocsti_probe", lambda: False)
+    monkeypatch.setattr(delivery, "launch_tmux_session", fake_launch)
+    monkeypatch.setattr(delivery, "deliver_text", fake_deliver)
+    transport = FakeTransport()
+
+    async def body():
+        transport.notify("INPUT", b'{"type":"message","text":"voice text"}')
+        await asyncio.sleep(0.1)
+        write_session(tmp_path / "sessions", "wrapped", tmux="%new", state="idle")
+        await asyncio.sleep(0.4)
+
+    run_daemon_briefly(store, transport, body)
+    assert calls == [
+        ("launch", "codex", "codex"),
+        ("deliver", "wrapped", "voice text", "auto"),
+    ]
+    assert store.active_id == "wrapped"
+
+
 def test_busy_session_message_queues_then_flushes(tmp_path, monkeypatch):
     store = make_store(tmp_path)
     write_session(tmp_path / "sessions", "c1", state="running", tmux="%1")
