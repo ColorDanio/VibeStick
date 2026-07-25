@@ -255,6 +255,28 @@ def test_asr_mode_unaffected_and_never_touches_mic(tmp_path, spawned):
     assert states[:2] == ["recording", "transcribing"]
 
 
+def test_asr_start_reclaims_audio_after_unclosed_mic_mode(tmp_path, spawned):
+    """A missing Vibe Mic stop (e.g. link loss) cannot poison later ASR."""
+    store = make_store(tmp_path)
+    transport = FakeTransport()
+
+    async def body():
+        transport.notify("COMMAND", b'{"cmd":"voice.start","mode":"mic"}')
+        await asyncio.sleep(0.3)
+        transport.notify("AUDIO", b"\x90" * 10)
+        # Simulate reconnect recovery: next recording is ordinary Agent CLI
+        # voice and the prior mode's voice.stop never arrived.
+        transport.notify("COMMAND", b'{"cmd":"voice.start"}')
+        transport.notify("AUDIO", b"\x91" * 10)
+        await asyncio.sleep(0.1)
+
+    run_daemon_briefly(store, transport, body)
+    feeder = next(p for p in spawned if p.argv[0] == "pw-cat")
+    assert bytes(feeder.stdin.buf) == mic._apply_gain(b"\x90" * 10)
+    states = [json.loads(w)["state"] for w in transport.writes["VOICE"]]
+    assert "recording" in states
+
+
 def test_mic_mode_disabled_config_is_safe(tmp_path, spawned):
     store = make_store(tmp_path, mic_enabled=False)
     transport = FakeTransport()

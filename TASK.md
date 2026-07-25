@@ -65,6 +65,9 @@
       注册表，异常会写入 journal 而非静默丢失；PipeWire 图查询增加超时，避免单个
       `pw-dump`/`pw-link` 卡住麦克风路径；uinput 键盘在 daemon 退出时显式释放按键并
       销毁设备，避免异常退出遗留修饰键状态（2026-07-26）。
+- [x] Vibe Mic / Agent CLI 音频路由审计：Vibe Mic 的 `mode:"mic"` 直接送 PipeWire，
+      Agent CLI 不带 mode 的录音送 ASR；普通录音开始时会主动清除因断链漏掉 `voice.stop`
+      的旧 mic route 并停止遗留 feeder，避免 CLI 音频被错误送到 Vibe Mic（2026-07-26）。
 
 - [ ] 用户验证：麦克风修复后实测（10cm 说"一二三，测试麦克风"，看 RMS +
       `tail -1 ~/.vibestick/voice-log.jsonl`）；不行则发 clips 做频谱分析

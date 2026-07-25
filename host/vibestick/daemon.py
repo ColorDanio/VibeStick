@@ -363,6 +363,12 @@ async def run_daemon(
                 holder["audio_route"] = "mic"
                 spawn(relay.start())
             else:
+                # A lost BLE link can drop Vibe Mic's matching voice.stop.
+                # A normal Agent CLI recording must always reclaim AUDIO for
+                # ASR instead of inheriting that stale PipeWire route.
+                if holder["audio_route"] == "mic":
+                    spawn(relay.stop())
+                holder["audio_route"] = None
                 pipeline.start()
         elif cmd == protocol.CMD_VOICE_STOP:
             if holder["audio_route"] == "mic":
