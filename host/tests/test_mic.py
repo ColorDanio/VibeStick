@@ -16,6 +16,12 @@ NODE_DUMP = json.dumps([{
     "info": {"props": {"node.name": "vibe-mic", "media.class": "Audio/Source/Virtual"}},
 }]).encode()
 
+LEGACY_NODE_DUMP = json.dumps([{
+    "id": 46,
+    "type": "PipeWire:Interface:Node",
+    "info": {"props": {"node.name": "vibestick-mic"}},
+}]).encode()
+
 
 class FakeStdin:
     def __init__(self):
@@ -103,8 +109,9 @@ def test_relay_creates_node_when_missing(monkeypatch, spawned):
         out = b""
         if argv[0] == "pw-dump":
             calls["dumps"] += 1
-            # first lookup: absent; after create-node: present
-            out = b"[]" if calls["dumps"] == 1 else NODE_DUMP
+            # Legacy and current lookups are absent; after create-node the
+            # current source appears.
+            out = b"[]" if calls["dumps"] <= 2 else NODE_DUMP
         elif argv[0] == "pw-link" and "-o" in argv:
             out = b"vibestick-mic-feed:output_MONO\n"
         proc = FakeProc(argv, out)
@@ -122,6 +129,29 @@ def test_relay_creates_node_when_missing(monkeypatch, spawned):
     asyncio.run(relay.close())
     destroys = [a for a in argv_of(spawned, "pw-cli") if tuple(a[:2]) == ("pw-cli", "destroy")]
     assert destroys == [("pw-cli", "destroy", "47")]
+
+
+def test_relay_removes_obsolete_source_before_creating(monkeypatch, spawned):
+    calls = {"dumps": 0}
+
+    async def fake_exec(*argv, **kwargs):
+        out = b""
+        if argv[0] == "pw-dump":
+            calls["dumps"] += 1
+            # Legacy source is present, the current source is absent, then it
+            # appears after create-node.
+            out = (LEGACY_NODE_DUMP if calls["dumps"] == 1 else b"[]"
+                   if calls["dumps"] == 2 else NODE_DUMP)
+        elif argv[0] == "pw-link" and "-o" in argv:
+            out = b"vibestick-mic-feed:output_MONO\n"
+        proc = FakeProc(argv, out)
+        spawned.append(proc)
+        return proc
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+    assert asyncio.run(MicRelay().start()) is True
+    destroys = [a for a in argv_of(spawned, "pw-cli") if tuple(a[:2]) == ("pw-cli", "destroy")]
+    assert destroys == [("pw-cli", "destroy", "46")]
 
 
 def test_relay_disabled_refuses(spawned):

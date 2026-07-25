@@ -557,7 +557,7 @@ void uiTickWaiting(int animPhase) {
 }
 
 // ---- Home: tool picker carousel ----
-// Entries = host tools + one device-local "Microphone" entry appended
+// Entries = host tools + one device-local "Vibe Mic" entry appended
 // at the end (index == gTools.count); it exists even with no host tools.
 
 static int homeEntryCount() {
@@ -584,8 +584,8 @@ void uiShowHome(int selTool) {
   const char* name;
   const char* state;
   if (isMicEntry(selTool)) {
-    name = "Microphone";
-    state = "voice input";
+    name = "Vibe Mic";
+    state = "system input";
   } else {
     const ToolEntry& t = gTools.list[selTool];
     name = t.name;  // global buffer: safe for the marquee to keep

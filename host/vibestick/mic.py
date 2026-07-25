@@ -30,6 +30,10 @@ log = logging.getLogger(__name__)
 NODE_NAME = "vibe-mic"
 NODE_DESC = "Vibe Mic"
 FEED_STREAM = "vibestick-mic-feed"
+# A previous release used this node name.  Adapter nodes linger by design, so
+# remove the obsolete source once when the daemon starts; otherwise desktop
+# apps show both names and users can accidentally select the dead one.
+LEGACY_NODE_NAMES = ("vibestick-mic",)
 
 CREATE_ARGV = [
     "pw-cli", "create-node", "adapter",
@@ -147,6 +151,9 @@ class MicRelay:
         return await self._ensure_node()
 
     async def _ensure_node(self) -> bool:
+        # Run migration even when the current source is already registered.
+        # PipeWire adapter objects linger across daemon restarts.
+        await _remove_legacy_nodes()
         if await _find_node_id() is not None:
             return True
         rc, _ = await _run(*CREATE_ARGV)
@@ -212,17 +219,27 @@ async def _run_capture(*argv: str) -> str:
     return out.decode(errors="replace")
 
 
-async def _find_node_id() -> int | None:
-    """The mic node's object id, or None if not registered."""
+async def _find_node_id(node_name: str = NODE_NAME) -> int | None:
+    """The requested virtual-mic node's object id, or None if absent."""
     try:
         data = json.loads(await _run_capture("pw-dump"))
     except (json.JSONDecodeError, OSError):
         return None
     for obj in data:
         props = ((obj.get("info") or {}).get("props") or {})
-        if props.get("node.name") == NODE_NAME:
+        if props.get("node.name") == node_name:
             return obj.get("id")
     return None
+
+
+async def _remove_legacy_nodes() -> None:
+    """Remove virtual sources from older VibeStick releases, if any."""
+    for node_name in LEGACY_NODE_NAMES:
+        node_id = await _find_node_id(node_name)
+        if node_id is not None:
+            rc, _ = await _run("pw-cli", "destroy", str(node_id))
+            if rc == 0:
+                log.info("mic: removed obsolete virtual source %r", node_name)
 
 
 async def _list_output_ports() -> list[str]:
