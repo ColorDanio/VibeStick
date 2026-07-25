@@ -54,6 +54,9 @@ async def run_daemon(
         "config_path": config_path,
         "config_mtime": _mtime(config_path),
     }
+    event_loop = asyncio.get_running_loop()
+    if runtime is not None:
+        runtime["loop"] = event_loop
 
     def _delivery_mode() -> str:
         tool = store.selected_tool_config()
@@ -545,9 +548,13 @@ def main() -> None:
     if not args.no_dashboard:
         def command_handler(cmd: dict) -> None:
             handler = runtime.get("command")
-            if handler is None:
+            loop = runtime.get("loop")
+            if handler is None or loop is None:
                 raise RuntimeError("daemon not ready")
-            handler(cmd)
+            # The dashboard is served by ThreadingHTTPServer.  All daemon
+            # callbacks create asyncio work, so schedule the command back on
+            # the owning loop instead of calling it in the HTTP thread.
+            loop.call_soon_threadsafe(handler, cmd)
 
         try:
             server, _ = setupui.serve_in_thread(

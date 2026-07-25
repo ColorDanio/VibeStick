@@ -97,6 +97,10 @@
 - [x] systemd zellij 投递路径：user service 的 PATH 不含 `~/.cargo/bin`，曾使活跃
       Kimi/zellij session 报 `No such file or directory: zellij`。delivery 现优先 PATH，
       再回退到 `~/.cargo/bin/zellij`（或显式 `VIBESTICK_ZELLIJ_BIN`），已覆盖测试。
+- [x] Dashboard 命令线程安全：`/api/command` 原在 HTTP worker 线程直接调用 daemon，
+      `sync()` 创建 asyncio task 时会报 “no current event loop”，虽然 selection 已变更却
+      返回失败。现统一 `call_soon_threadsafe` 回 daemon loop；dashboard 选择和 Stick 同步
+      均可可靠完成。
 - [x] BLE HID/GATT 自动重连：daemon 持久保存首次发现的 VibeStick 地址，后续优先
       直连该地址、失败才扫描，避免 HID 自动连接后停止广播导致 Agent 状态无法同步。
       固件进一步在任一 host 连接后继续 advertising（NimBLE 默认支持多条 peripheral
