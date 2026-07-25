@@ -440,7 +440,13 @@ class SessionStore:
         active = self.active()
         if active is not None:
             candidates.append(active)
-        candidates.extend(self._records[i] for i in self._selected_ids())
+        # Presence/discovery refresh can remove a record between the active
+        # selection snapshot and this lookup. A stale id must not make the
+        # device COMMAND callback throw (and silently lose session.new).
+        candidates.extend(
+            rec for sid in self._selected_ids()
+            if (rec := self._records.get(sid)) is not None
+        )
         for rec in candidates:
             pane = str(rec.raw.get("tmux") or "")
             if pane:
@@ -459,7 +465,10 @@ class SessionStore:
         active = self.active()
         if active is not None:
             candidates.append(active)
-        candidates.extend(self._records[i] for i in self._selected_ids())
+        candidates.extend(
+            rec for sid in self._selected_ids()
+            if (rec := self._records.get(sid)) is not None
+        )
         for rec in candidates:
             session = str(rec.raw.get("zellij") or "")
             if session:

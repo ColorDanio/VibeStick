@@ -191,6 +191,14 @@ def test_session_new_starts_standalone_tmux_without_anchor(tmp_path, monkeypatch
     assert calls == [("codex", "codex", "codex", str(Path.home()))]
 
 
+def test_session_new_ignores_stale_selected_record(tmp_path):
+    store = make_store(tmp_path)
+    store.poll()
+    store.active_id = "proc:gone"
+    assert store.tmux_target_for_selected() is None
+    assert store.zellij_target_for_selected() is None
+
+
 def test_session_new_launches_window_and_selects_session(tmp_path, monkeypatch):
     store = make_store(tmp_path)
     write_session(tmp_path / "sessions", "c1", tmux="%1")
