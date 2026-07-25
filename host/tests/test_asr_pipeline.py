@@ -106,7 +106,7 @@ def test_decode_parameters_hardened(monkeypatch):
     assert kw["temperature"] == 0
     assert kw["beam_size"] == 5
     assert kw["initial_prompt"] == voice.INITIAL_PROMPT
-    assert kw["vad_parameters"]["threshold"] == 0.3
+    assert kw["vad_parameters"]["threshold"] == 0.25
 
 
 def test_voice_log_carries_clip_and_language(tmp_path):

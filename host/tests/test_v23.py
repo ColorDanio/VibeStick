@@ -121,7 +121,7 @@ def test_faster_whisper_normalizes_and_relaxes_vad(monkeypatch):
     # relaxed VAD parameters passed through
     vad = kwargs.get("vad_parameters")
     assert vad is not None
-    assert vad["threshold"] == 0.3
+    assert vad["threshold"] == 0.25
     assert kwargs["vad_filter"] is True
 
 

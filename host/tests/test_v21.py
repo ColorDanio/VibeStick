@@ -269,7 +269,8 @@ def test_voice_confirm_delivers_to_discovered_session_tty(tmp_path, monkeypatch)
             return dict(self.found)
 
     class StubDiscovery:
-        session = DiscoveredSession(id="u1", tool="codex", name="eastcorp", updated=NOW)
+        session = DiscoveredSession(id="u1", tool="codex", name="eastcorp",
+                                    updated=int(time.time()))
 
         def scan(self, tool_ids):
             return {"codex": [self.session]}
@@ -300,10 +301,13 @@ def test_voice_confirm_delivers_to_discovered_session_tty(tmp_path, monkeypatch)
         await asyncio.sleep(0.5)  # command ASR runs in a thread
         transport.notify("COMMAND", b'{"cmd":"voice.confirm"}')
         await asyncio.sleep(0.2)
-        assert calls == []  # busy session: transcript queued
+        assert calls == [], f'expected empty queue, got {calls!r}  # busy session: transcript queued'
         # turn ends: mtime goes stale -> state idle (process still alive) -> flush
         StubDiscovery.session.updated = NOW - 3600
-        await asyncio.sleep(0.6)
+        for _ in range(60):  # poll for the flush instead of a fixed sleep
+            if calls:
+                break
+            await asyncio.sleep(0.1)
 
     run_daemon_briefly(store, transport, body)
     assert len(calls) == 1

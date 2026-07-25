@@ -66,15 +66,25 @@ async def run_daemon(
             # Keys other than mapped commands are handled on-device; log only.
             log.info("key input: %r", payload.get("key"))
 
+    # Tracked background tasks (delivery, flush, sync, relay ops) — all
+    # cancelled on shutdown so nothing fires after the daemon exits.
+    _bg: set[asyncio.Task] = set()
+
+    def spawn(coro) -> asyncio.Task:
+        task = asyncio.ensure_future(coro)
+        _bg.add(task)
+        task.add_done_callback(_bg.discard)
+        return task
+
     def sync() -> None:
         bridge = holder["bridge"]
         if bridge is not None:
-            asyncio.ensure_future(bridge.sync(force=True))
+            spawn(bridge.sync(force=True))
 
     def push_voice(voice_json: str) -> None:
         bridge = holder["bridge"]
         if bridge is not None:
-            asyncio.ensure_future(bridge.push_voice(voice_json))
+            spawn(bridge.push_voice(voice_json))
 
     # -- per-session send queue ---------------------------------------------
 
@@ -96,7 +106,7 @@ async def run_daemon(
             log.info("queued message for busy session %s (%d pending)", rec.id, len(send_queue))
             sync()  # STATUS now carries the queued count
             return
-        asyncio.ensure_future(_deliver_now(rec, text))
+        spawn(_deliver_now(rec, text))
 
     def _delivery_hint(rec) -> str:
         """Precise failure reason for the STATUS error line."""
@@ -143,7 +153,7 @@ async def run_daemon(
             return
         rec = store.active()
         if rec is None or rec.status.state != "running":
-            asyncio.ensure_future(_flush_queue())
+            spawn(_flush_queue())
 
     def deliver_transcript(text: str) -> None:
         deliver_message(text)
@@ -167,7 +177,7 @@ async def run_daemon(
     )
     relay = mic_mod.MicRelay(enabled=cfg.mic.enabled)
     holder["audio_route"] = None  # "mic" during a PTT mic session, else None
-    asyncio.ensure_future(relay.warmup())  # register "VibeStick Mic" up-front
+    spawn(relay.warmup())  # register "VibeStick Mic" up-front
 
     def on_audio(data: bytes) -> None:
         # MIC-mode frames go to the virtual microphone only; ASR frames
@@ -184,7 +194,7 @@ async def run_daemon(
             log.warning("fn.activate for unknown binding %r", fn)
             return
         rec = store.active()
-        asyncio.ensure_future(delivery.send_binding(rec.raw if rec else None, tool.bindings[fn]))
+        spawn(delivery.send_binding(rec.raw if rec else None, tool.bindings[fn]))
 
     def on_inference_cancel() -> None:
         """Send the cancel key (default Escape) to the selected session."""
@@ -201,7 +211,7 @@ async def run_daemon(
             if not ok:
                 push_status_error("cancel failed: " + _delivery_hint(rec))
 
-        asyncio.ensure_future(do_cancel())
+        spawn(do_cancel())
 
     def on_session_new() -> None:
         """Start a fresh session of the selected tool (tmux window or zellij pane)."""
@@ -224,7 +234,7 @@ async def run_daemon(
             else:
                 push_status_error("new session failed")
 
-        asyncio.ensure_future(do_launch())
+        spawn(do_launch())
 
     def on_command(payload: dict) -> None:
         cmd = payload.get("cmd")
@@ -237,22 +247,22 @@ async def run_daemon(
         elif cmd == protocol.CMD_VOICE_START:
             if payload.get("mode") == "mic":
                 holder["audio_route"] = "mic"
-                asyncio.ensure_future(relay.start())
+                spawn(relay.start())
             else:
                 pipeline.start()
         elif cmd == protocol.CMD_VOICE_STOP:
             if holder["audio_route"] == "mic":
                 holder["audio_route"] = None
-                asyncio.ensure_future(relay.stop())
+                spawn(relay.stop())
             else:
-                asyncio.ensure_future(pipeline.stop())
+                spawn(pipeline.stop())
         elif cmd == protocol.CMD_VOICE_CONFIRM:
             pipeline.confirm()
         elif cmd == protocol.CMD_VOICE_CANCEL:
             pipeline.cancel()
             if holder["audio_route"] == "mic":
                 holder["audio_route"] = None
-                asyncio.ensure_future(relay.stop())
+                spawn(relay.stop())
         else:
             changed = store.apply_command(payload)
             if changed or cmd == protocol.CMD_REFRESH:
@@ -370,6 +380,10 @@ async def run_daemon(
     finally:
         poll_task.cancel()
         await asyncio.gather(poll_task, return_exceptions=True)
+        for task in list(_bg):
+            task.cancel()
+        if _bg:
+            await asyncio.gather(*_bg, return_exceptions=True)
         await relay.close()
 
 

@@ -76,7 +76,11 @@ def make_server(
                 self._send(200, body, content_type)
             elif self.path == "/api/config":
                 cfg = config_mod.load(config_path)
-                self._send_json(200, cfg.to_dict())
+                d = cfg.to_dict()
+                # never leak the online api key to the UI (masked round-trip:
+                # POSTing the masked value preserves the stored key)
+                d["asr"]["online"]["api_key"] = cfg.asr.online.masked_key()
+                self._send_json(200, d)
             elif self.path == "/api/status":
                 if status_provider is None:
                     self._send_json(503, {"error": "status unavailable"})
@@ -97,6 +101,15 @@ def make_server(
                 self._send_json(400, {"error": "missing or invalid body"})
                 return
             body = self.rfile.read(length)
+
+            if self.path == "/api/asr/test":
+                try:
+                    data = json.loads(body.decode("utf-8"))
+                except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    self._send_json(400, {"error": f"invalid JSON: {exc}"})
+                    return
+                self._handle_asr_test(data)
+                return
 
             if self.path == "/api/command":
                 if command_handler is None:
@@ -121,6 +134,18 @@ def make_server(
             if self.path != "/api/config":
                 self._send_json(404, {"error": "not found"})
                 return
+            # Preserve the stored api key when the UI posts back the mask.
+            try:
+                data = json.loads(body.decode("utf-8"))
+                posted_key = (
+                    data.get("asr", {}).get("online", {}).get("api_key", "")
+                )
+                if isinstance(posted_key, str) and "•••" in posted_key:
+                    existing = config_mod.load(config_path).asr.online.api_key
+                    data["asr"]["online"]["api_key"] = existing
+                    body = json.dumps(data, ensure_ascii=False).encode("utf-8")
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                pass
             try:
                 cfg = config_mod.validate_json(body.decode("utf-8"))
             except (config_mod.ConfigError, UnicodeDecodeError) as exc:
@@ -133,6 +158,37 @@ def make_server(
                 return
             log.info("config saved via setup UI (%d tools)", len(cfg.tools))
             self._send_json(200, {"ok": True})
+
+        def _handle_asr_test(self, data: dict) -> None:
+            """POST /api/asr/test: transcribe the newest clip with the
+            form's online config (no save required)."""
+            from . import voice
+
+            engine = str(data.get("engine", "online"))
+            if engine != "online":
+                self._send_json(400, {"error": "test only supported for engine=online"})
+                return
+            cfg = config_mod.OnlineASRConfig.from_dict(data.get("online"))
+            clips_dir = Path(data.get("clips_dir") or voice.CLIPS_DIR)
+            try:
+                clips = sorted(clips_dir.glob("clip-*.wav"),
+                               key=lambda p: p.stat().st_mtime, reverse=True)
+            except OSError:
+                clips = []
+            if not clips:
+                self._send_json(200, {
+                    "ok": False,
+                    "error": f"no clips in {clips_dir} yet — record something on the stick first",
+                })
+                return
+            try:
+                wav_bytes = clips[0].read_bytes()
+            except OSError as exc:
+                self._send_json(200, {"ok": False, "error": f"cannot read clip: {exc}"})
+                return
+            result = voice.test_online_transcription(cfg, wav_bytes)
+            result["clip"] = clips[0].name
+            self._send_json(200, result)
 
     return ThreadingHTTPServer((host, port), Handler)
 

@@ -228,7 +228,7 @@ def test_discovered_sessions_in_payloads(tmp_path):
 
 def test_discovered_running_only_with_live_process_and_recent(tmp_path):
     stub = StubDiscovery({"codex": [
-        disc_session("recent", "codex", "a", NOW - 10),
+        disc_session("recent", "codex", "a", NOW - 5),
         disc_session("open", "codex", "c", NOW - 120),
         disc_session("old", "codex", "b", NOW - 3600),
     ]})

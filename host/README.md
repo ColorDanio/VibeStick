@@ -264,15 +264,27 @@ resampling to 16 kHz, the Silero VAD threshold is relaxed
 `initial_prompt` biases output toward simplified Chinese + English
 (auto language detection stays on).
 
-Two engines:
+Three engines:
 
 - `faster-whisper` (default): local Whisper. Optional dependency —
   install with `pip install 'vibestick[asr]'` (pulls in `faster-whisper`,
   `numpy` and `scipy` — scipy enables polyphase resampling and the
   DC-blocker filter; without it the pipeline falls back to linear
-  resampling). Settings: `model` (`tiny`/`base`/`small`, default `small` — `base` is auto-migrated to `small` on load), `device`
+  resampling). Settings: `model` (`tiny`/`base`/`small`/`medium`, default
+  `small` — `base` is auto-migrated to `small` on load; `medium` is much
+  more accurate and much slower on CPU), `device`
   (`cpu`), `language` (`null` = auto-detect). If the packages are missing,
   the daemon stays up and VOICE shows an error instead.
+- `online`: any OpenAI-compatible transcription API
+  (`POST {api_base}/audio/transcriptions`, multipart + model field) —
+  covers OpenAI, Groq (`whisper-large-v3-turbo`, free tier, fast),
+  SiliconFlow, DeepInfra. Configure under `asr.online` (`api_base`,
+  `api_key`, `model`, `language`); the key is stored in config.json
+  (0600) and masked in the dashboard. The recording WAV is uploaded
+  as-is (no re-encode), 30 s timeout; auth/rate-limit/network failures
+  land in the voice log as readable errors. Settings → Voice has
+  provider presets and a **Test** button (`POST /api/asr/test`,
+  transcribes your newest clip with the unsaved form config).
 - `command`: run any external program. `asr.command` is a shell-style
   template; the daemon appends the path of a temporary WAV file as the last
   argument and reads the transcript from stdout. Example:

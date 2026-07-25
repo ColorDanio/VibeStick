@@ -366,7 +366,12 @@ function renderConfigForms() {
   $("asr-engine").value = cfg.asr?.engine || "faster-whisper";
   $("asr-language").value = cfg.asr?.language || "";
   $("asr-command").value = cfg.asr?.command || "";
-  renderSegmented($("asr-model"), ["tiny", "base", "small"], cfg.asr?.model || "base",
+  const online = cfg.asr?.online || {};
+  $("asr-api-base").value = online.api_base || "";
+  $("asr-api-key").value = online.api_key || "";  // masked by the server
+  $("asr-online-model").value = online.model || "";
+  $("asr-online-language").value = online.language || "";
+  renderSegmented($("asr-model"), ["tiny", "base", "small", "medium"], cfg.asr?.model || "small",
     (v) => { cfg.asr = { ...cfg.asr, model: v }; markDirty(); });
   renderAsrDevice(cfg);
   asrVisibility();
@@ -519,10 +524,17 @@ function bindingRow(id, key) {
 }
 
 function asrVisibility() {
-  const fw = $("asr-engine").value === "faster-whisper";
-  $("asr-fw").hidden = !fw;
-  $("asr-cmd").hidden = fw;
+  const engine = $("asr-engine").value;
+  $("asr-fw").hidden = engine !== "faster-whisper";
+  $("asr-online").hidden = engine !== "online";
+  $("asr-cmd").hidden = engine !== "command";
 }
+
+const ASR_PRESETS = {
+  openai: { api_base: "https://api.openai.com/v1", model: "whisper-1" },
+  groq: { api_base: "https://api.groq.com/openai/v1", model: "whisper-large-v3-turbo" },
+  siliconflow: { api_base: "https://api.siliconflow.cn/v1", model: "FunAudioLLM/SenseVoiceSmall" },
+};
 
 /* ---------- save flow ---------- */
 
@@ -553,10 +565,16 @@ function collect() {
   });
   cfg.asr = {
     engine: $("asr-engine").value,
-    model: cfg.asr?.model || "base",
+    model: cfg.asr?.model || "small",
     device: cfg.asr?.device || "cpu",
     language: $("asr-language").value.trim() || null,
     command: $("asr-command").value.trim(),
+    online: {
+      api_base: $("asr-api-base").value.trim(),
+      api_key: $("asr-api-key").value.trim(),
+      model: $("asr-online-model").value.trim(),
+      language: $("asr-online-language").value.trim() || null,
+    },
   };
   cfg.features = {
     process_watcher: $("feat-procwatcher").checked,
@@ -596,8 +614,45 @@ $("asr-engine").onchange = () => {
   state.config.asr = { ...state.config.asr, engine: $("asr-engine").value };
   asrVisibility(); markDirty();
 };
+$("asr-provider").onchange = () => {
+  const preset = ASR_PRESETS[$("asr-provider").value];
+  if (!preset) return;  // custom: keep user's values
+  $("asr-api-base").value = preset.api_base;
+  $("asr-online-model").value = preset.model;
+  markDirty();
+};
+$("asr-test").onclick = async () => {
+  const result = $("asr-test-result");
+  result.textContent = "testing…";
+  result.style.color = "var(--dim)";
+  try {
+    const res = await api("/api/asr/test", {
+      method: "POST",
+      body: JSON.stringify({
+        engine: "online",
+        online: {
+          api_base: $("asr-api-base").value.trim(),
+          api_key: $("asr-api-key").value.trim(),
+          model: $("asr-online-model").value.trim(),
+          language: $("asr-online-language").value.trim() || null,
+        },
+      }),
+    });
+    if (res.ok) {
+      result.textContent = `ok (${res.latency_ms}ms, ${res.clip}): ${res.text || "(empty)"}`;
+      result.style.color = "var(--green)";
+    } else {
+      result.textContent = res.error || "failed";
+      result.style.color = "var(--red)";
+    }
+  } catch (err) {
+    result.textContent = "test failed: " + err.message;
+    result.style.color = "var(--red)";
+  }
+};
 $("mic-enabled").onchange = markDirty;
-["asr-language", "asr-command", "feat-procwatcher", "feat-voice"].forEach((id) => {
+["asr-language", "asr-command", "feat-procwatcher", "feat-voice",
+ "asr-api-base", "asr-api-key", "asr-online-model", "asr-online-language"].forEach((id) => {
   $(id).onchange = markDirty;
   $(id).oninput = markDirty;
 });

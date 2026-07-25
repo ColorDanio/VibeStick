@@ -218,12 +218,14 @@ class VoicePipeline:
             return self._transcriber(pcm), {}
         if self.asr.engine == "command":
             return _transcribe_command(self.asr, pcm)
+        if self.asr.engine == "online":
+            return _transcribe_online(self.asr, pcm)
         return _transcribe_faster_whisper(self.asr, pcm)
 
 
-def pcm_to_wav(pcm: bytes, path: str | Path) -> None:
-    """Write 8 kHz 8-bit unsigned mono PCM as a WAV file."""
-    with wave.open(str(path), "wb") as w:
+def pcm_to_wav(pcm: bytes, path) -> None:
+    """Write 8 kHz 8-bit unsigned mono PCM as a WAV file (path or file object)."""
+    with wave.open(path if hasattr(path, "write") else str(path), "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(1)  # 8-bit WAV samples are unsigned, matching our PCM
         w.setframerate(protocol.AUDIO_SAMPLE_RATE)
@@ -354,9 +356,9 @@ def _transcribe_faster_whisper(asr: ASRConfig, pcm: bytes) -> tuple[str, dict]:
 
 # Silero VAD parameters, relaxed for quiet mic input.
 _VAD_PARAMETERS = {
-    "threshold": 0.3,
+    "threshold": 0.25,
     "min_silence_duration_ms": 500,
-    "speech_pad_ms": 200,
+    "speech_pad_ms": 300,
 }
 
 
@@ -381,6 +383,14 @@ def detect_asr_status(asr: ASRConfig) -> dict:
         status["installed"] = bool(asr.command.strip())
         status["note"] = "external command" if status["installed"] else "no command configured"
         return status
+    if asr.engine == "online":
+        from urllib.parse import urlparse
+
+        status["installed"] = bool(asr.online.api_base.strip() and asr.online.api_key.strip())
+        status["model"] = asr.online.model
+        status["provider"] = urlparse(asr.online.api_base).netloc or asr.online.api_base
+        status["note"] = status["provider"] if status["installed"] else "api_base/api_key not configured"
+        return status
     try:
         import importlib.metadata as md
 
@@ -398,3 +408,98 @@ def detect_asr_status(asr: ASRConfig) -> dict:
     if asr.device == "cuda" and not status["cuda_devices"]:
         status["note"] = "device=cuda but no CUDA devices available"
     return status
+
+
+# -- online engine (OpenAI-compatible transcription API) -----------------------
+
+ONLINE_TIMEOUT_SEC = 30
+
+
+def _wav_bytes(pcm: bytes) -> bytes:
+    """The raw recording as a WAV document (8 kHz u8 mono, no re-encode)."""
+    import io
+
+    buf = io.BytesIO()
+    pcm_to_wav(pcm, buf)
+    return buf.getvalue()
+
+
+def _transcribe_online(asr: ASRConfig, pcm: bytes) -> tuple[str, dict]:
+    """Transcribe via an OpenAI-compatible /audio/transcriptions endpoint."""
+    cfg = asr.online
+    if not cfg.api_base.strip():
+        raise RuntimeError("online asr: api_base not configured")
+    if not cfg.api_key.strip():
+        raise RuntimeError("online asr: api_key not configured")
+    return openai_transcribe(cfg, _wav_bytes(pcm))
+
+
+def openai_transcribe(cfg, wav_bytes: bytes) -> tuple[str, dict]:
+    """POST multipart to {api_base}/audio/transcriptions (OpenAI/Groq/
+    SiliconFlow/DeepInfra compatible). Raises RuntimeError with a
+    readable reason on auth/rate-limit/network failures."""
+    import io
+    import urllib.error
+    import urllib.request
+    import uuid
+
+    boundary = "vibestick-" + uuid.uuid4().hex
+
+    def field(name: str, value: str) -> bytes:
+        return (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="{name}"\r\n\r\n'
+            f"{value}\r\n"
+        ).encode()
+
+    body = bytearray()
+    body += field("model", cfg.model)
+    if cfg.language:
+        body += field("language", cfg.language)
+    body += (
+        f"--{boundary}\r\n"
+        'Content-Disposition: form-data; name="file"; filename="clip.wav"\r\n'
+        "Content-Type: audio/wav\r\n\r\n"
+    ).encode()
+    body += wav_bytes
+    body += f"\r\n--{boundary}--\r\n".encode()
+
+    url = cfg.api_base.rstrip("/") + "/audio/transcriptions"
+    req = urllib.request.Request(
+        url,
+        data=bytes(body),
+        headers={
+            "Authorization": f"Bearer {cfg.api_key}",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=ONLINE_TIMEOUT_SEC) as resp:
+            payload = json.loads(resp.read().decode("utf-8", errors="replace"))
+    except urllib.error.HTTPError as exc:
+        snippet = ""
+        try:
+            snippet = exc.read().decode("utf-8", errors="replace")[:200]
+        except Exception:  # noqa: BLE001
+            pass
+        raise RuntimeError(f"online asr HTTP {exc.code}: {snippet or exc.reason}") from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise RuntimeError(f"online asr network error: {exc}") from exc
+    text = str(payload.get("text", "")).strip()
+    return text, {"language": cfg.language}
+
+
+def test_online_transcription(cfg, wav_bytes: bytes) -> dict:
+    """Dashboard 'Test' button: transcribe a clip, report latency/errors."""
+    start = time.monotonic()
+    try:
+        text, meta = openai_transcribe(cfg, wav_bytes)
+    except RuntimeError as exc:
+        return {"ok": False, "error": str(exc), "latency_ms": int((time.monotonic() - start) * 1000)}
+    return {
+        "ok": True,
+        "text": text,
+        "language": meta.get("language"),
+        "latency_ms": int((time.monotonic() - start) * 1000),
+    }

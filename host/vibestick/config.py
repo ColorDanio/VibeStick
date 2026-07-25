@@ -31,8 +31,16 @@ DEFAULT_PROCESSES = {
     "opencode": "opencode",
     "kimi-cli": "kimi",
 }
-ASR_ENGINES = ("faster-whisper", "command")
-WHISPER_MODELS = ("tiny", "base", "small")
+ASR_ENGINES = ("faster-whisper", "command", "online")
+WHISPER_MODELS = ("tiny", "base", "small", "medium")
+
+# Presets for the online (OpenAI-compatible) ASR engine: name ->
+# (api_base, recommended model). Keys are free-form labels for the UI.
+ONLINE_ASR_PRESETS = {
+    "openai": ("https://api.openai.com/v1", "whisper-1"),
+    "groq": ("https://api.groq.com/openai/v1", "whisper-large-v3-turbo"),
+    "siliconflow": ("https://api.siliconflow.cn/v1", "FunAudioLLM/SenseVoiceSmall"),
+}
 
 
 class ConfigError(ValueError):
@@ -139,12 +147,59 @@ class ToolConfig:
 
 
 @dataclass
+class OnlineASRConfig:
+    """OpenAI-compatible online transcription API settings."""
+
+    api_base: str = "https://api.groq.com/openai/v1"
+    api_key: str = ""
+    model: str = "whisper-large-v3-turbo"
+    language: str | None = None
+
+    def masked_key(self) -> str:
+        """Display form: first/last 3 chars, middle hidden."""
+        if not self.api_key:
+            return ""
+        if len(self.api_key) <= 8:
+            return "•••"
+        return self.api_key[:3] + "•••" + self.api_key[-3:]
+
+    def to_dict(self) -> dict:
+        return {
+            "api_base": self.api_base,
+            "api_key": self.api_key,
+            "model": self.model,
+            "language": self.language,
+        }
+
+    def to_public_dict(self) -> dict:
+        """Dashboard-safe form (api_key masked)."""
+        return {**self.to_dict(), "api_key": self.masked_key()}
+
+    @classmethod
+    def from_dict(cls, data: object) -> "OnlineASRConfig":
+        if not isinstance(data, dict):
+            return cls()
+        language = data.get("language")
+        if language is not None:
+            language = str(language).strip() or None
+            if language is not None and language.lower() in ("auto", "none", "null"):
+                language = None
+        return cls(
+            api_base=str(data.get("api_base") or cls.api_base),
+            api_key=str(data.get("api_key") or ""),
+            model=str(data.get("model") or cls.model),
+            language=language,
+        )
+
+
+@dataclass
 class ASRConfig:
     engine: str = "faster-whisper"
     model: str = "small"
     device: str = "cpu"
     language: str | None = None
     command: str = ""  # shell template for the "command" engine; wav path is appended
+    online: OnlineASRConfig = field(default_factory=OnlineASRConfig)
 
     def to_dict(self) -> dict:
         return {
@@ -153,6 +208,7 @@ class ASRConfig:
             "device": self.device,
             "language": self.language,
             "command": self.command,
+            "online": self.online.to_dict(),
         }
 
     @classmethod
@@ -181,6 +237,7 @@ class ASRConfig:
             device=str(data.get("device") or "cpu"),
             language=language,
             command=str(data.get("command") or ""),
+            online=OnlineASRConfig.from_dict(data.get("online")),
         )
 
 
@@ -352,13 +409,15 @@ def load(path: Path | str = DEFAULT_PATH) -> Config:
 
 
 def save(cfg: Config, path: Path | str = DEFAULT_PATH) -> None:
-    """Write the config atomically (temp file + rename)."""
+    """Write the config atomically (temp file + rename, mode 0600 — it
+    may carry API keys)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(prefix=path.name + ".", dir=str(path.parent))
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(cfg.to_json())
+        os.chmod(tmp, 0o600)
         os.replace(tmp, path)
     except OSError:
         try:

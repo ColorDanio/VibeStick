@@ -108,14 +108,36 @@
       <label>Engine</label>
       <select id="asr-engine">
         <option value="faster-whisper">faster-whisper (local Whisper)</option>
+        <option value="online">online (OpenAI-compatible API)</option>
         <option value="command">command (external program)</option>
       </select>
       <div id="asr-fw">
         <label>Model size</label>
         <div class="segmented" id="asr-model"></div>
+        <p class="dim" style="margin:2px 0 0">medium: noticeably more accurate, much slower on CPU</p>
         <label>Device</label>
         <div class="segmented" id="asr-device"></div>
         <label>Language (empty = auto)</label><input id="asr-language" placeholder="en">
+      </div>
+      <div id="asr-online" hidden>
+        <label>Provider preset</label>
+        <select id="asr-provider">
+          <option value="custom">custom</option>
+          <option value="openai">OpenAI</option>
+          <option value="groq">Groq (free tier, fast)</option>
+          <option value="siliconflow">SiliconFlow</option>
+        </select>
+        <label>API base</label>
+        <input id="asr-api-base" placeholder="https://api.groq.com/openai/v1">
+        <label>API key</label>
+        <input id="asr-api-key" type="password" autocomplete="off" placeholder="stored locally (0600), shown masked">
+        <label>Model</label>
+        <input id="asr-online-model" placeholder="whisper-large-v3-turbo">
+        <label>Language (empty = auto)</label><input id="asr-online-language" placeholder="zh">
+        <div class="row">
+          <button class="small" id="asr-test">Test</button>
+          <span id="asr-test-result" class="dim">transcribes your newest clip</span>
+        </div>
       </div>
       <div id="asr-cmd" hidden>
         <label>Command template (wav path appended; transcript from stdout)</label>
