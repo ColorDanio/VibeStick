@@ -74,8 +74,10 @@ void hidKey(uint8_t keycode, bool pressed) {
   if (!bleConnected() || sInput == nullptr) return;
   uint8_t report[8] = {0};
   if (pressed) report[2] = keycode;
+  const size_t subscribers = sInput->getSubscribedCount();
   sInput->setValue(report, sizeof(report));
   sInput->notify();
-  Serial.printf("[HID] %s %s\n", keycode == VIBESTICK_HID_KEY_A ? "F13" : "F14",
-                pressed ? "press" : "release");
+  Serial.printf("[HID] %s %s (subscribers=%u)\n",
+                keycode == VIBESTICK_HID_KEY_A ? "F13" : "F14",
+                pressed ? "press" : "release", (unsigned)subscribers);
 }
