@@ -25,3 +25,8 @@ def test_report_without_id_generates_f14():
     keyboard = CaptureKeyboard()
     keyboard.report(bytes([0, 0, HID_USAGE_F14, 0, 0, 0, 0, 0]))
     assert keyboard.events == [(KEY_F14, 1), ("sync", 0)]
+
+
+def test_start_registers_keyboard_before_first_press():
+    keyboard = CaptureKeyboard()
+    assert keyboard.start() is True

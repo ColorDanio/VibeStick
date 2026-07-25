@@ -372,6 +372,7 @@ async def run_daemon(
         return status, store.sessions_payload(), store.tools_payload()
 
     keyboard = VirtualKeyboard()
+    keyboard.start()
     bridge = Bridge(
         transport, get_payloads, on_input, on_command,
         on_audio=on_audio, on_hid=keyboard.report,

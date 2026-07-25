@@ -67,6 +67,10 @@ class VirtualKeyboard:
             log.warning("VibeStick HID fallback unavailable (%s): %s", self._path, exc)
             return False
 
+    def start(self) -> bool:
+        """Register before the first physical press so it cannot be lost."""
+        return self._open()
+
     def report(self, data: bytes) -> None:
         """Translate a standard keyboard report (with or without ID 1)."""
         if len(data) == 9 and data[0] == 1:
