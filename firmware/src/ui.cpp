@@ -556,21 +556,21 @@ void uiTickWaiting(int animPhase) {
   waitingDrawMsg(animPhase);
 }
 
-// ---- Home: tool picker carousel ----
-// Entries = host tools + one device-local "Microphone" entry appended
-// at the end (index == gTools.count); it exists even with no host tools.
+// ---- Home: major-menu carousel ----
+// Agent CLI appears only when the paired host advertises supported tools;
+// Microphone is always available on-device.
 
 static int homeEntryCount() {
-  return (gTools.valid ? gTools.count : 0) + 1;
+  return (gTools.valid && gTools.count > 0) ? 2 : 1;
 }
 
 static bool isMicEntry(int idx) {
-  return !gTools.valid || idx >= gTools.count;
+  return !gTools.valid || gTools.count == 0 || idx == 1;
 }
 
 static const uint16_t* entryLogo(int idx) {
   if (isMicEntry(idx)) return icon_mic24;
-  return toolLogo(gTools.list[idx].id);
+  return icon_tool;
 }
 
 void uiShowHome(int selTool) {
@@ -587,9 +587,8 @@ void uiShowHome(int selTool) {
     name = "Microphone";
     state = "voice input";
   } else {
-    const ToolEntry& t = gTools.list[selTool];
-    name = t.name;  // global buffer: safe for the marquee to keep
-    state = t.state;
+    name = "Agent CLI";
+    state = "paired host";
   }
 
   int cx = sW / 2;
@@ -668,6 +667,54 @@ void uiShowHome(int selTool) {
   for (int i = 0; i < n; ++i) {
     M5Lcd.fillCircle(dx + i * 10, dotsY, 2,
                       i == selTool ? COL_ACCENT : COL_FAINT);
+  }
+}
+
+// ---- Agent CLI picker ----
+// This second level lists exactly the tools advertised by the paired host.
+// Selecting one retains the existing session browser and conversation flow.
+
+void uiShowToolPicker(int selTool) {
+  M5Lcd.fillScreen(TFT_BLACK);
+  drawStatusBar(nullptr);
+
+  M5Lcd.setTextSize(1);
+  M5Lcd.setTextColor(COL_GREEN, TFT_BLACK);
+  M5Lcd.setCursor(4, 20);
+  M5Lcd.print("agent CLI");
+
+  static const int ROW_H = 22;
+  static const int FIRST_Y = 34;
+  int n = gTools.valid ? gTools.count : 0;
+  if (n == 0) {
+    M5Lcd.setTextColor(COL_FAINT, TFT_BLACK);
+    M5Lcd.setCursor(16, FIRST_Y + 6);
+    M5Lcd.print("(no supported CLI)");
+    return;
+  }
+  if (selTool < 0) selTool = 0;
+  if (selTool >= n) selTool = n - 1;
+  int visible = (sH - FIRST_Y - 4) / ROW_H;
+  int top = selTool - visible + 1;
+  if (top < 0) top = 0;
+
+  for (int row = 0; row < visible && top + row < n; ++row) {
+    int idx = top + row;
+    int y = FIRST_Y + row * ROW_H;
+    const ToolEntry& t = gTools.list[idx];
+    bool hl = idx == selTool;
+    if (hl) {
+      M5Lcd.setTextColor(COL_AMBER, TFT_BLACK);
+      M5Lcd.setCursor(4, y + 6);
+      M5Lcd.print(">");
+    }
+    M5Lcd.pushImage(16, y - 1, 24, 24, toolLogo(t.id), ICON_TRANSPARENT);
+    M5Lcd.fillCircle(46, y + 10, 3, stateColor(t.state));
+    int namePx = sW - 54;
+    if (hl) drawMarquee16(MQ_SESSION_ROW, t.name, 54, y + 2, namePx,
+                           TFT_WHITE, TFT_BLACK);
+    else drawText16N(54, y + 2, t.name, strlen(t.name), COL_DIM, TFT_BLACK,
+                     namePx);
   }
 }
 
@@ -792,21 +839,23 @@ void uiShowSessionPicker(int sel) {
     }
 
     const SessionEntry& e = gSessions.list[idx - 1];
-    // Active dot: green when the session is live in the foreground.
-    M5Lcd.fillCircle(18, y + 8, 3, e.fg ? TFT_GREEN : COL_FAINT);
+    // The light is the complete status indicator; keep headlines uncluttered.
+    uint16_t light = COL_FAINT;
+    if (strcmp(e.state, "running") == 0 || strcmp(e.state, "error") == 0)
+      light = TFT_RED;
+    else if (strcmp(e.state, "waiting") == 0)
+      light = TFT_YELLOW;
+    else if (e.fg || strcmp(e.state, "ready") == 0)
+      light = TFT_GREEN;
+    M5Lcd.fillCircle(18, y + 8, 3, light);
 
     const char* name = e.name[0] ? e.name : e.id;
-    int namePx = sW - 28 - 8 - 66;  // room for state at right
+    int namePx = sW - 36;
     if (hl) {
       drawMarquee16(MQ_SESSION_ROW, name, 28, y, namePx, TFT_WHITE, TFT_BLACK);
     } else {
       drawText16N(28, y, name, strlen(name), COL_DIM, TFT_BLACK, namePx);
     }
-
-    M5Lcd.setTextColor(COL_FAINT, TFT_BLACK);
-    int sw2 = strlen(e.state) * 6;
-    M5Lcd.setCursor(sW - 8 - sw2, y + 5);
-    M5Lcd.print(e.state);
   }
 
   if (!gSessions.valid) {
@@ -1094,17 +1143,25 @@ static void drawFooterHints(const char* mode, int y) {
     hintButton(48, y, 'B'); hintArrow(61, y, true);
     hintDoubleA(sW - 40, y); hintMic(sW - 12, y);
   } else if (strcmp(mode, "record") == 0) {
-    hintMic(14, y, TFT_RED); hintButton(34, y, 'A');
+    int x = landscape() ? sW - 36 : 14;
+    hintMic(x, y, TFT_RED); hintButton(x + 20, y, 'A');
   } else if (strcmp(mode, "send") == 0) {
-    hintButton(12, y, 'A', COL_AMBER); hintSend(27, y);
-    hintDoubleA(sW - 40, y); hintMic(sW - 12, y);
+    if (landscape()) {
+      hintButton(sW - 45, y, 'A', COL_AMBER); hintSend(sW - 30, y);
+      hintMic(sW - 12, y);
+    } else {
+      hintButton(12, y, 'A', COL_AMBER); hintSend(27, y);
+      hintDoubleA(sW - 40, y); hintMic(sW - 12, y);
+    }
   } else if (strcmp(mode, "busy") == 0) {
-    hintButton(12, y, 'A', TFT_RED); hintStop(27, y);
+    int x = landscape() ? sW - 45 : 12;
+    hintButton(x, y, 'A', TFT_RED); hintStop(x + 15, y);
     hintMic(sW - 12, y, COL_AMBER);
   } else {  // queued
-    hintMic(12, y, COL_AMBER);
-    M5Lcd.drawRect(23, y - 5, 9, 9, COL_AMBER);
-    M5Lcd.drawRect(27, y - 9, 9, 9, COL_AMBER);
+    int x = landscape() ? sW - 44 : 12;
+    hintMic(x, y, COL_AMBER);
+    M5Lcd.drawRect(x + 11, y - 5, 9, 9, COL_AMBER);
+    M5Lcd.drawRect(x + 15, y - 9, 9, 9, COL_AMBER);
   }
 }
 

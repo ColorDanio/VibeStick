@@ -37,10 +37,10 @@
 #define AUDIO_CHUNK 180
 #define AUDIO_CHUNKS_PER_LOOP 3
 
-static const char* SCREEN_NAMES[] = {"waiting", "home", "sessions", "convo",
+static const char* SCREEN_NAMES[] = {"waiting", "home", "tools", "sessions", "convo",
                                      "mic"};
 
-enum Screen { SCR_WAITING, SCR_HOME, SCR_SESSIONS, SCR_CONVO, SCR_MIC };
+enum Screen { SCR_WAITING, SCR_HOME, SCR_TOOLS, SCR_SESSIONS, SCR_CONVO, SCR_MIC };
 
 enum Event { EV_NONE, EV_A_SHORT, EV_A_LONG, EV_A_DBL, EV_B_SHORT, EV_B_LONG };
 
@@ -165,6 +165,7 @@ static void redraw() {
   switch (sScreen) {
     case SCR_WAITING: uiShowWaiting(sWaitPhase); break;
     case SCR_HOME: uiShowHome(sSelTool); break;
+    case SCR_TOOLS: uiShowToolPicker(sSelTool); break;
     case SCR_SESSIONS: uiShowSessionPicker(sSelEntry); break;
     case SCR_CONVO:
       if (sRecording) {
@@ -192,6 +193,9 @@ static void back() {  // one level up
       setScreen(SCR_SESSIONS);
       break;
     case SCR_SESSIONS:
+      setScreen(SCR_TOOLS);
+      break;
+    case SCR_TOOLS:
       setScreen(SCR_HOME);
       break;
     case SCR_MIC:
@@ -215,25 +219,39 @@ static void handleEvent(Event e) {
       break;  // no input until host data arrives
 
     case SCR_HOME: {
-      int toolCount = gTools.valid ? gTools.count : 0;
-      int entries = toolCount + 1;  // + device-local Microphone entry
+      // Major menu: Agent CLI only appears when the paired host reported
+      // one or more supported tools; Microphone is always device-local.
+      const bool hasAgentCli = gTools.valid && gTools.count > 0;
+      const int entries = hasAgentCli ? 2 : 1;
       if (e == EV_B_SHORT) {
         int from = sSelTool;
         sSelTool = (sSelTool + 1) % entries;  // optimistic: move instantly
-        sNavUntil = millis() + NAV_SYNC_MS;   // host sync yields while nav
-        // Keep the host's active tool in sync only for real tools; the mic
-        // entry is device-local and has no host counterpart.
-        if (sSelTool < toolCount) bleNotifyCommand("tool.next");
         Serial.printf("[UI] home select -> %d/%d\n", sSelTool, entries - 1);
         uiHomeAnimate(from, sSelTool);
       } else if (e == EV_A_SHORT) {
-        if (sSelTool >= toolCount) {
+        if (!hasAgentCli || sSelTool == 1) {
           setScreen(SCR_MIC);  // device-local voice-input microphone
         } else {
-          bleNotifyCommand("tool.select", "id", gTools.list[sSelTool].id);
-          sSelEntry = gSessions.valid ? gSessions.active + 1 : 0;
-          setScreen(SCR_SESSIONS);
+          sSelTool = gTools.active;
+          if (sSelTool < 0 || sSelTool >= gTools.count) sSelTool = 0;
+          setScreen(SCR_TOOLS);
         }
+      }
+      break;
+    }
+
+    case SCR_TOOLS: {
+      int toolCount = gTools.valid ? gTools.count : 0;
+      if (toolCount == 0) {
+        setScreen(SCR_HOME);
+      } else if (e == EV_B_SHORT) {
+        sSelTool = (sSelTool + 1) % toolCount;
+        sNavUntil = millis() + NAV_SYNC_MS;
+        sNeedRedraw = true;
+      } else if (e == EV_A_SHORT) {
+        bleNotifyCommand("tool.select", "id", gTools.list[sSelTool].id);
+        sSelEntry = gSessions.valid ? gSessions.active + 1 : 0;
+        setScreen(SCR_SESSIONS);
       }
       break;
     }
@@ -499,12 +517,13 @@ static void applyBleDirty() {
       // Follow the host's active tool only while the user is not
       // navigating locally (optimistic UI: B presses win for NAV_SYNC_MS).
       bool userNav = millis() < sNavUntil;
-      if (!userNav) {
+      if (!userNav && sScreen == SCR_TOOLS) {
         sSelTool = gTools.active;
-        if (sSelTool < 0 || sSelTool > gTools.count) sSelTool = 0;
+        if (sSelTool < 0 || sSelTool >= gTools.count) sSelTool = 0;
       }
       if (sScreen == SCR_WAITING) setScreen(SCR_HOME);
-      else if (sScreen == SCR_HOME && !userNav) sNeedRedraw = true;
+      else if ((sScreen == SCR_HOME || sScreen == SCR_TOOLS) && !userNav)
+        sNeedRedraw = true;
     } else if (sScreen == SCR_HOME) {
       sNeedRedraw = true;
     }

@@ -105,6 +105,12 @@
       `idle` 仅表示暂无 session。会话底栏改为 A/B 圆形按键、左右翻页、双击、麦克风、
       发送、停止、队列图标，替代按状态变化的长按键说明文字。已刷入当前 M5StickC Plus，
       host 回归 40 项和双板构建通过。
+- [x] 主菜单层级与会话状态灯：首页只保留 `Agent CLI`（仅在 paired host 上报至少一个
+      支持的 CLI 时显示）和 `Microphone`；进入 `Agent CLI` 后才列出 Claude/Codex/
+      OpenCode/Kimi 等 host 工具，随后沿用原有 session/conversation 流程。session 列表
+      去掉冗余 `idle` 文案，仅以红/黄/绿/灰状态灯标识；横屏 conversation footer 的操作
+      图标移到右侧，避免覆盖 `thinking...` 或错误状态行。M5StickC Plus + StickS3 编译通过，
+      已刷入当前 M5StickC Plus（2026-07-25）。
 - [x] BLE HID/GATT 自动重连：daemon 持久保存首次发现的 VibeStick 地址，后续优先
       直连该地址、失败才扫描，避免 HID 自动连接后停止广播导致 Agent 状态无法同步。
       固件进一步在任一 host 连接后继续 advertising（NimBLE 默认支持多条 peripheral
