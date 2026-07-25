@@ -242,6 +242,10 @@ class Bridge:
                 self._on_audio(data)
             return
         if name == "HID":
+            # Keep this at INFO while validating the BlueZ HoG/UHID fallback:
+            # a physical press must be observable here before uinput can
+            # publish it to applications.
+            log.info("received HID input report: %s", data.hex())
             if self._on_hid is not None:
                 self._on_hid(data)
             return
