@@ -6,6 +6,7 @@
 #include "mic.h"
 #include "ui.h"
 
+
 // VibeStick firmware v2.2: BLE display + input terminal for AI CLI
 // sessions. See docs/protocol.md, "Interaction model (device UX, v2.1)".
 //
@@ -79,6 +80,7 @@ static bool sSwallowGesture = false;  // button press that only wakes the screen
 
 static int sBatteryPct = -1;
 static uint32_t sBatNext = 0;
+
 
 // ---- event queue ----
 

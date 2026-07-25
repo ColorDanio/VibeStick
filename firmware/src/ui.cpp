@@ -177,6 +177,7 @@ static int drawText16(int x, int y, const char* s, uint16_t color,
   return drawText16N(x, y, s, strlen(s), color, bg, TEXT16_MAX_W);
 }
 
+
 // Draw at most maxLines pixel-wrapped lines of s at (x, y), line pitch 18.
 // Returns the number of lines used; appends "..." when truncated.
 static int drawWrapped16(int x, int y, const char* s, int maxW, int maxLines,
@@ -856,14 +857,18 @@ static int sDotPhase = -1;
 static void convoDrawStatusDot(bool bright) {
   bool busy = sHeaderSendMark ||
               (gStatus.valid && strcmp(gStatus.state, "running") == 0);
+  bool ready = gVoice.valid && strcmp(gVoice.state, "ready") == 0 &&
+               gVoice.text[0] != '\0';
   M5Lcd.fillRect(2, 18, 20, 20, TFT_BLACK);  // erase dot region
   uint16_t col;
-  if (busy) {
-    col = bright ? TFT_RED : 0x4800;    // red / dark red
-  } else {
-    col = bright ? TFT_GREEN : 0x02A0;  // green / dark green
+  if (busy) {           // red: agent reasoning / send in flight
+    col = bright ? TFT_RED : 0x4800;
+  } else if (ready) {   // blue: transcript waiting for confirmation
+    col = bright ? TFT_BLUE : 0x0010;
+  } else {              // green: ready for input
+    col = bright ? TFT_GREEN : 0x02A0;
   }
-  M5Lcd.fillCircle(12, 27, 6, col);
+  M5Lcd.fillCircle(12, 27, 4, col);
 }
 
 void uiTickConvo() {

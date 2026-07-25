@@ -58,23 +58,49 @@ def pick_face(path):
 
 
 def rasterize(font, ch, width):
-    """Render one glyph into a width x 16 box, return row bytes (MSB left)."""
+    """Render one glyph into a width x 16 box.
+
+    Returns row bytes (MSB left), nbytes = ceil(width/8) per row:
+    1 byte/row for 8 px ASCII, 2 bytes/row for 16 px hanzi.
+    """
     img = Image.new("L", (width, GLYPH_H), 0)
     d = ImageDraw.Draw(img)
     d.text((0, -2), ch, fill=255, font=font)
-    rows = []
     nbytes = (width + 7) // 8
-    for y in range(GLYPH_H):
-        val = 0
-        for x in range(width):
-            if img.getpixel((x, y)) >= 128:
-                val |= 0x80 >> (x % 8)
-        rows.append(val)
-    # pack into bytes
     out = []
     for y in range(GLYPH_H):
-        out.append(rows[y])
-    return out  # one int per row; caller packs nbytes per row
+        for b in range(nbytes):
+            val = 0
+            for x in range(b * 8, min(b * 8 + 8, width)):
+                if img.getpixel((x, y)) >= 128:
+                    val |= 0x80 >> (x % 8)
+            out.append(val)
+    return out
+
+
+def rasterize_ascii(font, ch):
+    """8x16 ASCII glyph, ink centered horizontally. Rendered at a smaller
+    size (12 px) so wide letters fit the box without cropping."""
+    img = Image.new("L", (32, GLYPH_H), 0)
+    d = ImageDraw.Draw(img)
+    d.text((0, -2), ch, fill=255, font=font)
+    bbox = img.getbbox()
+    if bbox is None:
+        ink = Image.new("L", (1, 1), 0)
+    else:
+        ink = img.crop(bbox)
+    if ink.width > ASCII_W:  # right-crop only: keep the left leg intact
+        ink = ink.crop((0, 0, ASCII_W, ink.height))
+    cell = Image.new("L", (ASCII_W, GLYPH_H), 0)
+    cell.paste(ink, ((ASCII_W - ink.width) // 2, 0))
+    out = []
+    for y in range(GLYPH_H):
+        val = 0
+        for x in range(ASCII_W):
+            if cell.getpixel((x, y)) >= 128:
+                val |= 0x80 >> x
+        out.append(val)
+    return out
 
 
 def main():
@@ -83,7 +109,7 @@ def main():
     font = ImageFont.truetype(TTC, FONT_SIZE, index=face)
 
     ascii_cps = list(range(0x20, 0x7F))
-    ascii_glyphs = [rasterize(font, chr(cp), ASCII_W) for cp in ascii_cps]
+    ascii_glyphs = [rasterize_ascii(font, chr(cp)) for cp in ascii_cps]
     hanzi_glyphs = [rasterize(font, chr(cp), GLYPH_W) for cp in hanzi]
 
     with open(OUT_H, "w") as f:
@@ -106,12 +132,8 @@ def main():
         f.write("};\n\n")
 
         f.write(f"static const uint8_t cjk_hanzi_glyphs[{len(hanzi) * 32}] = {{\n")
-        for rows in hanzi_glyphs:
-            packed = []
-            for b in rows:
-                packed.append((b >> 8) & 0xFF)
-                packed.append(b & 0xFF)
-            f.write("  " + ",".join(f"0x{b:02X}" for b in packed) + ",\n")
+        for rows in hanzi_glyphs:  # 32 bytes per glyph (2 per row)
+            f.write("  " + ",".join(f"0x{b:02X}" for b in rows) + ",\n")
         f.write("};\n")
 
     # Preview sheet: ASCII sample + first/picked hanzi
