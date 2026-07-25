@@ -136,7 +136,11 @@
       均被调用；已确认 Linux descriptor 为 Report ID 1，HOGP 由 host 根据 Report Reference
       注入该 ID，固件发送 8-byte keyboard body；已重新配对并改回 NimBLE 标准加密
       `inputReport(1)` endpoint，新增订阅链路加密状态诊断；针对 BlueZ 5.85 的 UHID
-      Report-ID 注入差异，隔离 daemon 后测试 explicit 9-byte report，待实机 event 回归。
+      Report-ID 注入差异，隔离 daemon 后测试 explicit 9-byte report，`event21` 仍为 0 byte；
+      设备端 GATT 直接订阅能收到正确 F13/F14 press/release，故根因确定为本机 BlueZ 5.85
+      HoG/UHID 注入层。daemon 现订阅同一 HID Input Report，并以 `/dev/uinput` 创建
+      `VibeStick Virtual Keyboard` 投递 F13/F14，保留原生 BLE HID 服务；本机尚需管理员执行
+      `sudo modprobe uinput` 创建该设备节点后完成应用实测（2026-07-26）。
 - [x] BLE HID/GATT 自动重连：daemon 持久保存首次发现的 VibeStick 地址，后续优先
       直连该地址、失败才扫描，避免 HID 自动连接后停止广播导致 Agent 状态无法同步。
       固件进一步在任一 host 连接后继续 advertising（NimBLE 默认支持多条 peripheral

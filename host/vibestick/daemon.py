@@ -17,6 +17,7 @@ from pathlib import Path
 from . import config as config_mod
 from . import delivery, discover, mic as mic_mod, procwatch, protocol, setupui, voice
 from .bridge import BleakTransport, Bridge, Transport
+from .hid import VirtualKeyboard
 from .store import POLL_INTERVAL_SEC, SessionStore
 
 log = logging.getLogger(__name__)
@@ -370,7 +371,11 @@ async def run_daemon(
             status = json.dumps(d, ensure_ascii=False, separators=(",", ":"))
         return status, store.sessions_payload(), store.tools_payload()
 
-    bridge = Bridge(transport, get_payloads, on_input, on_command, on_audio=on_audio)
+    keyboard = VirtualKeyboard()
+    bridge = Bridge(
+        transport, get_payloads, on_input, on_command,
+        on_audio=on_audio, on_hid=keyboard.report,
+    )
     holder["bridge"] = bridge
 
     def get_status() -> dict:

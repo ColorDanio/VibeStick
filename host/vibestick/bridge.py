@@ -103,6 +103,7 @@ class BleakTransport:
             ("INPUT", protocol.INPUT_UUID),
             ("COMMAND", protocol.COMMAND_UUID),
             ("AUDIO", protocol.AUDIO_UUID),
+            ("HID", protocol.HID_INPUT_UUID),
         ):
             await client.start_notify(uuid, self._make_notify_cb(name))
         log.info("connected to %s", self.address)
@@ -163,12 +164,14 @@ class Bridge:
         on_input: Callable[[dict], None],
         on_command: Callable[[dict], None],
         on_audio: AudioCallback | None = None,
+        on_hid: AudioCallback | None = None,
     ) -> None:
         self.transport = transport
         self._get_payloads = get_payloads
         self._on_input = on_input
         self._on_command = on_command
         self._on_audio = on_audio
+        self._on_hid = on_hid
         self._last: dict[str, str | None] = {"status": None, "sessions": None, "tools": None}
         self.connected_since: float | None = None  # epoch of current connection
         self.last_sync: float | None = None  # epoch of last payload write
@@ -237,6 +240,10 @@ class Bridge:
         if name == "AUDIO":
             if self._on_audio is not None:
                 self._on_audio(data)
+            return
+        if name == "HID":
+            if self._on_hid is not None:
+                self._on_hid(data)
             return
         try:
             payload = json.loads(data.decode("utf-8"))

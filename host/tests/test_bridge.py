@@ -9,13 +9,14 @@ from vibestick.bridge import Bridge
 def make_bridge():
     transport = FakeTransport()
     transport.connected = True  # sync() skips writes while disconnected
-    events = {"input": [], "command": [], "audio": []}
+    events = {"input": [], "command": [], "audio": [], "hid": []}
     bridge = Bridge(
         transport,
         lambda: ('{"s":1}', '{"e":1}', '{"t":1}'),
         on_input=events["input"].append,
         on_command=events["command"].append,
         on_audio=events["audio"].append,
+        on_hid=events["hid"].append,
     )
     return bridge, transport, events
 
@@ -41,6 +42,12 @@ def test_audio_notify_goes_to_callback_as_bytes():
     transport.notify("AUDIO", b"\x80\x81\x82")
     assert events["audio"] == [b"\x80\x81\x82"]
     assert events["input"] == [] and events["command"] == []
+
+
+def test_hid_notify_goes_to_binary_callback():
+    bridge, transport, events = make_bridge()
+    transport.notify("HID", b"\x01\x00\x00\x68\x00\x00\x00\x00\x00")
+    assert events["hid"] == [b"\x01\x00\x00\x68\x00\x00\x00\x00\x00"]
 
 
 def test_json_notifies_dispatch():
