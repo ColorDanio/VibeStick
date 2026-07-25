@@ -257,7 +257,11 @@ def test_adapter_files_beat_discovered_no_duplicates(tmp_path):
     store.dir.mkdir()
     store.refresh_presence()
     store.refresh_discovery()
-    assert json.loads(store.sessions_payload())["list"][0]["id"] == sid("codex", "u1")
+    # The live process stays first so it is selectable; the discovered
+    # transcript remains available immediately after it.
+    assert [e["id"] for e in json.loads(store.sessions_payload())["list"]] == [
+        "proc:1", sid("codex", "u1")
+    ]
 
     (tmp_path / "sessions" / "c1.json").write_text(json.dumps({
         "id": "c1", "tool": "codex", "session": "real", "state": "running",
@@ -268,15 +272,15 @@ def test_adapter_files_beat_discovered_no_duplicates(tmp_path):
     assert json.loads(store.status_payload())["session"] == "real"
 
 
-def test_discovered_beats_presence(tmp_path):
+def test_live_presence_is_prepended_to_discovered_sessions(tmp_path):
     stub = StubDiscovery({"codex": [disc_session("u1", "codex", "eastcorp", NOW)]})
     watcher = StubWatcher({"codex": ProcInfo(pid=1, name="codex", cwd="/x")})
     store = make_store(tmp_path, stub, watcher=watcher)
     store.refresh_presence()
     store.refresh_discovery()
     ids = [e["id"] for e in json.loads(store.sessions_payload())["list"]]
-    assert ids == [sid("codex", "u1")]  # no synthesized proc: session
-    assert store.presence("codex") is None
+    assert ids == ["proc:1", sid("codex", "u1")]
+    assert store.presence("codex") is not None
 
 
 def test_discover_disabled_per_tool(tmp_path):

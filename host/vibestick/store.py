@@ -216,6 +216,9 @@ class SessionStore:
                     "state": state,
                     "updated": updated,
                 }
+                directory = str(getattr(s, "directory", "") or "")
+                if directory:
+                    raw["directory"] = directory
                 if live:
                     # Give discovered sessions the presence delivery target.
                     info = self._presence.get(tool_id)
@@ -287,21 +290,38 @@ class SessionStore:
         since = self._presence_since.get(tool_id, time.time())
         label_fn = getattr(info, "session_label", None)
         label = label_fn() if callable(label_fn) else (getattr(info, "cwd_basename", "") or "")
+        # Bind a process to the most-recent persisted session in the exact
+        # same working directory (OpenCode records this), exposing its real
+        # title and transcript instead of an empty process placeholder.
+        cwd = str(getattr(info, "cwd", "") or "")
+        linked = max(
+            (
+                rec for rec in self._discovered.values()
+                if rec.status.tool == tool_id and cwd
+                and str(rec.raw.get("directory") or "") == cwd
+            ),
+            key=lambda rec: rec.status.updated or rec.mtime,
+            default=None,
+        )
+        linked_status = linked.status if linked is not None else None
+        if linked_status is not None:
+            label = linked_status.session or label
         status = protocol.SessionStatus(
             tool=tool_id,
-            state="idle",
+            state=linked_status.state if linked_status is not None else "idle",
             session=label,
             ctx_pct=-1,
-            cost_usd=-1.0,
-            last="",
-            updated=int(since),
+            cost_usd=linked_status.cost_usd if linked_status is not None else -1.0,
+            last=linked_status.last if linked_status is not None else "",
+            updated=linked_status.updated if linked_status is not None else int(since),
+            tail=list(linked_status.tail) if linked_status is not None else [],
         )
         raw = {
             "id": f"{PRESENCE_ID_PREFIX}{info.pid}",
             "tool": tool_id,
             "session": label,
-            "state": "idle",
-            "updated": int(since),
+            "state": status.state,
+            "updated": status.updated,
             "pid": info.pid,
         }
         tty = str(getattr(info, "tty", "") or "")
@@ -310,6 +330,8 @@ class SessionStore:
         if getattr(info, "zellij", ""):
             raw["zellij"] = info.zellij
             raw["zellij_pane"] = getattr(info, "zellij_pane", "")
+        if linked is not None:
+            raw["linked_disc_id"] = linked.id
         return SessionRecord(id=raw["id"], status=status, raw=raw, mtime=since)
 
     def _record_for(self, session_id: str | None) -> SessionRecord | None:

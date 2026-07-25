@@ -83,6 +83,10 @@
       启动 CLI；它会被自动发现、可监控且语音可投递。端到端实测：临时包装 pane 收到
       `VS_PROBE_OK` 后已清理。既有普通终端无法被 Linux 安全地“接管输入”，需从 Stick
       新建该替代会话或以 `vibe_wrap` 在 tmux/zellij 中启动。
+- [x] live OpenCode 会话监控关联：OpenCode 的数据库保存 session `directory`；将它与
+      `/proc` live CLI 的 cwd 精确匹配后，presence 会话显示真实 title、最近 tail、成本和
+      基于更新时间的状态，而非空白 `hermes-agent` 占位。实机 bridge 已同步该会话的 5 条
+      tail 到 M5StickC Plus（2026-07-25）。
 - [x] BLE HID/GATT 自动重连：daemon 持久保存首次发现的 VibeStick 地址，后续优先
       直连该地址、失败才扫描，避免 HID 自动连接后停止广播导致 Agent 状态无法同步。
       固件进一步在任一 host 连接后继续 advertising（NimBLE 默认支持多条 peripheral

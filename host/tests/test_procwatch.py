@@ -2,6 +2,7 @@ import json
 import time
 
 from vibestick.config import Config, FeaturesConfig, ToolConfig
+from vibestick.discover import DiscoveredSession
 from vibestick.procwatch import ProcInfo, ProcessWatcher
 from vibestick.store import SessionStore
 
@@ -315,6 +316,26 @@ def test_presence_synthesizes_selectable_session(tmp_path):
     assert s1 == s2
     status = json.loads(s1)
     assert status["state"] == "idle" and status["session"] == "proj"
+
+
+def test_presence_links_same_directory_discovered_session(tmp_path):
+    class Discovery:
+        def scan(self, _tool_ids):
+            return {"codex": [DiscoveredSession(
+                id="live", tool="codex", name="Real session", updated=int(time.time()),
+                last="Working now", tail=["user: hi", "assistant: Working now"],
+                directory="/home/u/proj",
+            )]}
+
+    watcher = StubWatcher({"codex": ProcInfo(pid=4321, name="codex", cwd="/home/u/proj")})
+    store = SessionStore(tmp_path / "sessions", config=make_config(), watcher=watcher,
+                         discovery=Discovery())
+    store.refresh_presence()
+    store.refresh_discovery()
+    status = json.loads(store.status_payload())
+    assert status["session"] == "Real session"
+    assert status["last"] == "Working now"
+    assert status["tail"] == ["user: hi", "assistant: Working now"]
 
 
 def test_synthesized_session_dropped_on_process_exit(tmp_path):

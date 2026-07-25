@@ -120,6 +120,7 @@ class DiscoveredSession:
     updated: int = 0  # epoch seconds
     cost_usd: float = -1.0
     tail: list[str] = field(default_factory=list)  # recent conversation lines
+    directory: str = ""  # absolute working directory when the CLI stores it
 
 
 class SessionDiscovery:
@@ -455,6 +456,7 @@ def _scan_opencode(disc: SessionDiscovery, root: Path) -> list[DiscoveredSession
                     name=_clip(name) or str(session_id)[:12],
                     updated=int((time_updated or 0) / 1000),
                     cost_usd=cost_usd, last=last, tail=tail,
+                    directory=str(directory or ""),
                 )
             )
     finally:
