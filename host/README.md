@@ -393,6 +393,25 @@ daemon exit. Disable with `"mic": {"enabled": false}` in config.json.
 ASR mode (no `mode` field) is unaffected and never touches the virtual
 mic.
 
+## Troubleshooting
+
+**Stick keeps rebooting / BLE goes dead, `/dev/ttyUSB0` resets it.**
+ModemManager (active by default on Ubuntu) probes every serial port by
+toggling DTR/RTS — on the ESP32 auto-download circuit that resets the
+chip, often straight into download mode (BLE dead until the next
+reset). Install the shipped udev rule once:
+
+```sh
+sudo cp host/tools/99-vibestick-modemmanager.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=tty
+sudo systemctl restart ModemManager   # or replug the stick
+```
+
+The same applies to any serial tool you run against the stick: assert
+safe line levels (`DTR=False, RTS=False`) right after opening the port,
+or the open itself resets the device.
+
 ## Tests
 
 ```sh

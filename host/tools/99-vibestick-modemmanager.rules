@@ -1,0 +1,17 @@
+# VibeStick (M5StickC Plus, FTDI FT232 USB-serial) — keep ModemManager away.
+#
+# ModemManager probes every serial port by toggling DTR/RTS. On the
+# ESP32 auto-download circuit (EN / GPIO0) that resets the chip — often
+# straight into download mode, which kills BLE until the next reset.
+# Symptoms: stick rebooting or going radio-silent every time the port
+# is probed, BLE connect/disconnect churn.
+#
+# Install:
+#   sudo cp host/tools/99-vibestick-modemmanager.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules
+#   sudo udevadm trigger --subsystem-match=tty
+#   sudo systemctl restart ModemManager   # or replug the stick
+
+ACTION=="add|change", SUBSYSTEM=="tty", \
+  ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", \
+  ENV{ID_MM_DEVICE_IGNORE}="1"
