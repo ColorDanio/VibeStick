@@ -29,6 +29,7 @@ def _iow(kind: int, number: int, size: int = 4) -> int:
 
 
 UI_DEV_CREATE = _ioc(0, ord("U"), 1, 0)
+UI_DEV_DESTROY = _ioc(0, ord("U"), 2, 0)
 UI_SET_EVBIT = _iow(ord("U"), 100)
 UI_SET_KEYBIT = _iow(ord("U"), 101)
 
@@ -49,6 +50,7 @@ class VirtualKeyboard:
     def _open(self) -> bool:
         if self._fd is not None:
             return True
+        fd: int | None = None
         try:
             fd = os.open(self._path, os.O_WRONLY | os.O_NONBLOCK)
             fcntl.ioctl(fd, UI_SET_EVBIT, EV_KEY)
@@ -64,12 +66,31 @@ class VirtualKeyboard:
             log.info("VibeStick virtual keyboard created")
             return True
         except OSError as exc:
+            if fd is not None:
+                os.close(fd)
             log.warning("VibeStick HID fallback unavailable (%s): %s", self._path, exc)
             return False
 
     def start(self) -> bool:
         """Register before the first physical press so it cannot be lost."""
         return self._open()
+
+    def close(self) -> None:
+        """Release held keys and destroy the uinput device on daemon exit."""
+        fd, self._fd = self._fd, None
+        if fd is None:
+            return
+        try:
+            for code in self._pressed:
+                os.write(fd, struct.pack("llHHi", 0, 0, EV_KEY, code, 0))
+            if self._pressed:
+                os.write(fd, struct.pack("llHHi", 0, 0, EV_SYN, SYN_REPORT, 0))
+            fcntl.ioctl(fd, UI_DEV_DESTROY)
+        except OSError as exc:
+            log.warning("VibeStick virtual keyboard cleanup failed: %s", exc)
+        finally:
+            self._pressed.clear()
+            os.close(fd)
 
     def report(self, data: bytes) -> None:
         """Translate a standard keyboard report (with or without ID 1)."""

@@ -61,6 +61,11 @@
 
 ## 待办 / 已知遗留
 
+- [x] Host 生命周期结构评审：将 daemon 的 delivery/sync/relay 后台任务收口为统一任务
+      注册表，异常会写入 journal 而非静默丢失；PipeWire 图查询增加超时，避免单个
+      `pw-dump`/`pw-link` 卡住麦克风路径；uinput 键盘在 daemon 退出时显式释放按键并
+      销毁设备，避免异常退出遗留修饰键状态（2026-07-26）。
+
 - [ ] 用户验证：麦克风修复后实测（10cm 说"一二三，测试麦克风"，看 RMS +
       `tail -1 ~/.vibestick/voice-log.jsonl`）；不行则发 clips 做频谱分析
 - [ ] 在线 ASR 实测：Settings → Voice 填 Groq/OpenAI key → Test 按钮验证 → 激活

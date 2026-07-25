@@ -29,6 +29,36 @@ QUEUE_MAX = 8  # per-session send queue cap (oldest dropped beyond this)
 FLUSH_INTERVAL_SEC = 0.3  # spacing between queued deliveries
 
 
+class BackgroundTasks:
+    """Own daemon-owned work and make failures visible in the journal."""
+
+    def __init__(self) -> None:
+        self._tasks: set[asyncio.Task] = set()
+
+    def spawn(self, coro, *, name: str | None = None) -> asyncio.Task:
+        task = asyncio.create_task(coro, name=name)
+        self._tasks.add(task)
+        task.add_done_callback(self._finished)
+        return task
+
+    def _finished(self, task: asyncio.Task) -> None:
+        self._tasks.discard(task)
+        if task.cancelled():
+            return
+        try:
+            error = task.exception()
+        except asyncio.CancelledError:
+            return
+        if error is not None:
+            log.error("background task %s failed", task.get_name(), exc_info=error)
+
+    async def cancel(self) -> None:
+        for task in list(self._tasks):
+            task.cancel()
+        if self._tasks:
+            await asyncio.gather(*self._tasks, return_exceptions=True)
+
+
 async def run_daemon(
     store: SessionStore,
     transport: Transport,
@@ -85,15 +115,10 @@ async def run_daemon(
             # Keys other than mapped commands are handled on-device; log only.
             log.info("key input: %r", payload.get("key"))
 
-    # Tracked background tasks (delivery, flush, sync, relay ops) — all
-    # cancelled on shutdown so nothing fires after the daemon exits.
-    _bg: set[asyncio.Task] = set()
-
-    def spawn(coro) -> asyncio.Task:
-        task = asyncio.ensure_future(coro)
-        _bg.add(task)
-        task.add_done_callback(_bg.discard)
-        return task
+    # Tracked background work (delivery, flush, sync, relay ops) is cancelled
+    # at shutdown and reports unexpected exceptions to the journal.
+    background = BackgroundTasks()
+    spawn = background.spawn
 
     def sync() -> None:
         bridge = holder["bridge"]
@@ -474,10 +499,8 @@ async def run_daemon(
     finally:
         poll_task.cancel()
         await asyncio.gather(poll_task, return_exceptions=True)
-        for task in list(_bg):
-            task.cancel()
-        if _bg:
-            await asyncio.gather(*_bg, return_exceptions=True)
+        await background.cancel()
+        keyboard.close()
         await relay.close()
 
 

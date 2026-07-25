@@ -212,11 +212,15 @@ async def _run(*argv: str) -> tuple[int, str]:
 
 
 async def _run_capture(*argv: str) -> str:
-    proc = await asyncio.create_subprocess_exec(
-        *argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
-    )
-    out, _ = await proc.communicate()
-    return out.decode(errors="replace")
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
+        )
+        out, _ = await asyncio.wait_for(proc.communicate(), timeout=STOP_TIMEOUT_SEC)
+        return out.decode(errors="replace")
+    except (OSError, asyncio.TimeoutError) as exc:
+        log.debug("mic: %s capture failed: %s", argv[0], exc)
+        return ""
 
 
 async def _find_node_id(node_name: str = NODE_NAME) -> int | None:
