@@ -101,6 +101,10 @@
       `sync()` 创建 asyncio task 时会报 “no current event loop”，虽然 selection 已变更却
       返回失败。现统一 `call_soon_threadsafe` 回 daemon loop；dashboard 选择和 Stick 同步
       均可可靠完成。
+- [x] 主菜单语义与会话图标：有可选 session 且未推理的工具在首页显示绿色 `ready`；纯
+      `idle` 仅表示暂无 session。会话底栏改为 A/B 圆形按键、左右翻页、双击、麦克风、
+      发送、停止、队列图标，替代按状态变化的长按键说明文字。已刷入当前 M5StickC Plus，
+      host 回归 40 项和双板构建通过。
 - [x] BLE HID/GATT 自动重连：daemon 持久保存首次发现的 VibeStick 地址，后续优先
       直连该地址、失败才扫描，避免 HID 自动连接后停止广播导致 Agent 状态无法同步。
       固件进一步在任一 host 连接后继续 advertising（NimBLE 默认支持多条 peripheral

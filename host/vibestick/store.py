@@ -635,6 +635,10 @@ class SessionStore:
         tools = []
         for t in visible:
             state = states.get(t.id)
+            has_session = any(
+                rec.status.tool == t.id
+                for rec in list(self._records.values()) + list(self._discovered.values())
+            ) or self._presence.get(t.id) is not None
             if (
                 t.id not in adapter_tools
                 and t.id not in discovered_tools
@@ -646,6 +650,11 @@ class SessionStore:
                 state = "idle"
             elif state is None:
                 state = "idle"
+            # Tool-pick semantics are intentionally richer than a session's
+            # inference state: an idle tool with a selectable session is
+            # *ready* to enter, while idle without any session means empty.
+            if state == "idle" and has_session:
+                state = "ready"
             tools.append(
                 protocol.ToolInfo(id=t.id, name=t.name, state=state, fns=t.fns(voice_enabled))
             )

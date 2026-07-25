@@ -32,6 +32,7 @@ static bool landscape() { return sW > sH; }
 
 static uint16_t stateColor(const char* state) {
   if (strcmp(state, "running") == 0) return TFT_GREEN;
+  if (strcmp(state, "ready") == 0) return TFT_GREEN;
   if (strcmp(state, "waiting") == 0) return TFT_YELLOW;
   if (strcmp(state, "error") == 0) return TFT_RED;
   return COL_DIM;  // idle / unknown
@@ -1052,6 +1053,61 @@ static void drawConvoTranscript() {
   drawWrapped16(4, CONTENT_Y0, gVoice.text, sW - 8, maxLines, COL_GREEN);
 }
 
+// Compact, language-independent footer legend. Button letters stay familiar,
+// while the adjacent geometry explains their current action at a glance.
+static void hintButton(int x, int y, char key, uint16_t color = COL_FAINT) {
+  M5Lcd.drawCircle(x, y, 7, color);
+  M5Lcd.setTextSize(1);
+  M5Lcd.setTextColor(color, TFT_BLACK);
+  M5Lcd.setCursor(x - 3, y - 3);
+  M5Lcd.print(key);
+}
+
+static void hintArrow(int x, int y, bool right, uint16_t color = COL_FAINT) {
+  if (right) M5Lcd.fillTriangle(x + 5, y, x - 3, y - 5, x - 3, y + 5, color);
+  else M5Lcd.fillTriangle(x - 5, y, x + 3, y - 5, x + 3, y + 5, color);
+}
+
+static void hintSend(int x, int y, uint16_t color = COL_AMBER) {
+  M5Lcd.fillTriangle(x + 7, y, x - 5, y - 6, x - 5, y + 6, color);
+}
+
+static void hintStop(int x, int y, uint16_t color = TFT_RED) {
+  M5Lcd.fillRect(x - 5, y - 5, 10, 10, color);
+}
+
+static void hintMic(int x, int y, uint16_t color = COL_FAINT) {
+  M5Lcd.drawRoundRect(x - 3, y - 7, 6, 10, 3, color);
+  M5Lcd.drawFastVLine(x, y + 3, 4, color);
+  M5Lcd.drawFastHLine(x - 4, y + 7, 9, color);
+}
+
+static void hintDoubleA(int x, int y) {
+  hintButton(x - 4, y, 'A');
+  hintButton(x + 5, y, 'A');
+}
+
+static void drawFooterHints(const char* mode, int y) {
+  // mode: page | record | send | busy | queued
+  if (strcmp(mode, "page") == 0) {
+    hintButton(12, y, 'A'); hintArrow(25, y, false);
+    hintButton(48, y, 'B'); hintArrow(61, y, true);
+    hintDoubleA(sW - 40, y); hintMic(sW - 12, y);
+  } else if (strcmp(mode, "record") == 0) {
+    hintMic(14, y, TFT_RED); hintButton(34, y, 'A');
+  } else if (strcmp(mode, "send") == 0) {
+    hintButton(12, y, 'A', COL_AMBER); hintSend(27, y);
+    hintDoubleA(sW - 40, y); hintMic(sW - 12, y);
+  } else if (strcmp(mode, "busy") == 0) {
+    hintButton(12, y, 'A', TFT_RED); hintStop(27, y);
+    hintMic(sW - 12, y, COL_AMBER);
+  } else {  // queued
+    hintMic(12, y, COL_AMBER);
+    M5Lcd.drawRect(23, y - 5, 9, 9, COL_AMBER);
+    M5Lcd.drawRect(27, y - 9, 9, 9, COL_AMBER);
+  }
+}
+
 // Footer status line(s): icons + short text + context hints.
 static void drawConvoFooter(const char* errorText, bool sendMarked,
                             bool sentBusy, const char* st) {
@@ -1068,31 +1124,19 @@ static void drawConvoFooter(const char* errorText, bool sendMarked,
     M5Lcd.print("! ");
     drawMarquee(MQ_TRANSCRIPT, errorText, 16, y1, charsFit(sW - 24, 1), 1,
                 TFT_RED, TFT_BLACK);
-    if (!land) {
-      M5Lcd.setTextColor(COL_FAINT, TFT_BLACK);
-      M5Lcd.setCursor(4, footL2Y());
-      M5Lcd.print("hold A: record");
-    }
+    drawFooterHints("record", land ? y1 : footL2Y());
   } else if (strcmp(vst, "transcribing") == 0) {
     M5Lcd.setTextColor(COL_AMBER, TFT_BLACK);
     M5Lcd.setCursor(4, y1);
     M5Lcd.print("transcribing");  // dots animated by uiTickConvo
   } else if (ready && gVoice.text[0]) {
-    M5Lcd.setTextColor(COL_AMBER, TFT_BLACK);
-    M5Lcd.setCursor(4, y1);
-    M5Lcd.print(land ? "A: send  dbl-A: drop  hold A: redo"
-                      : "A: send  dbl-A: drop");
-    if (!land) {
-      M5Lcd.setCursor(4, footL2Y());
-      M5Lcd.print("hold A: redo");
-    }
+    drawFooterHints("send", y1);
   } else if (sendMarked) {
     // Just sent: idle session -> immediate thinking indicator; busy
     // session -> queued until the next STATUS update resolves it.
     M5Lcd.setTextColor(COL_AMBER, TFT_BLACK);
     if (sentBusy) {
-      M5Lcd.setCursor(4, y1);
-      M5Lcd.print(">> queue");
+      drawFooterHints("queued", y1);
     } else {
       M5Lcd.fillTriangle(5, y1 + 7, 11, y1 + 7, 8, y1 + 1, COL_AMBER);
       M5Lcd.setCursor(16, y1);
@@ -1103,19 +1147,9 @@ static void drawConvoFooter(const char* errorText, bool sendMarked,
     M5Lcd.setTextColor(COL_AMBER, TFT_BLACK);
     M5Lcd.setCursor(16, y1);
     M5Lcd.print("thinking...");
-    M5Lcd.setTextColor(COL_FAINT, TFT_BLACK);
-    M5Lcd.setCursor(land ? sW - 8 - 25 * 6 : 4, land ? y1 : footL2Y());
-    M5Lcd.print(land ? "A: cancel  hold A: queue" : "A:cancel holdA:queue");
+    drawFooterHints("busy", land ? y1 : footL2Y());
   } else {
-    M5Lcd.setTextColor(COL_FAINT, TFT_BLACK);
-    M5Lcd.setCursor(4, y1);
-    if (land) {
-      M5Lcd.print("A/B: page  dbl-A: latest  hold A: rec");
-    } else {
-      M5Lcd.print("A/B: page  dbl-A: latest");
-      M5Lcd.setCursor(4, footL2Y());
-      M5Lcd.print("hold A: record");
-    }
+    drawFooterHints("page", y1);
   }
 }
 

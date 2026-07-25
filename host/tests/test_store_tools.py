@@ -90,7 +90,7 @@ def test_tools_payload_aggregate_state(store):
     assert claude["id"] == "claude-code"
     assert claude["state"] == "running"  # a1 running wins over a2 waiting
     assert claude["fns"] == ["status", "sessions", "voice", "enter", "escape"]
-    assert codex["state"] == "idle"
+    assert codex["state"] == "ready"
     assert codex["fns"] == ["status", "sessions", "voice", "ctrl-c"]
 
     store.apply_command({"cmd": "tool.next"})

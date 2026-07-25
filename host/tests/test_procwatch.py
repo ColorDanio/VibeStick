@@ -102,7 +102,7 @@ def test_presence_makes_tool_selectable_but_idle(tmp_path):
     assert watcher.scanned_with[-1] == {"codex"}
 
     tools = json.loads(store.tools_payload())
-    assert tools["list"][0]["state"] == "idle"
+    assert tools["list"][0]["state"] == "ready"
 
     status = json.loads(store.status_payload())
     assert status["tool"] == "codex"
@@ -117,7 +117,7 @@ def test_presence_reverts_to_idle_on_exit(tmp_path):
     watcher = StubWatcher({"codex": ProcInfo(pid=4321, name="codex", cwd="/x")})
     store = SessionStore(tmp_path / "sessions", config=make_config(), watcher=watcher)
     store.refresh_presence()
-    assert json.loads(store.tools_payload())["list"][0]["state"] == "idle"
+    assert json.loads(store.tools_payload())["list"][0]["state"] == "ready"
 
     watcher.found = {}
     assert store.refresh_presence() is True
@@ -152,7 +152,7 @@ def test_presence_feature_toggle_off(tmp_path):
     # Toggling off clears previously-seen presence.
     cfg.features.process_watcher = True
     store.refresh_presence()
-    assert json.loads(store.tools_payload())["list"][0]["state"] == "idle"
+    assert json.loads(store.tools_payload())["list"][0]["state"] == "ready"
     cfg.features.process_watcher = False
     assert store.refresh_presence() is True  # cleared
     assert json.loads(store.tools_payload())["list"][0]["state"] == "idle"

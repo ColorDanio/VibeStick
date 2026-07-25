@@ -22,7 +22,9 @@ AUDIO_UUID = "4b1e0008-5a3f-4c8d-9b6e-7f2a1c0d3e5f"
 DEVICE_NAME = "VibeStick"
 MAX_PAYLOAD = 512
 
-STATES = ("idle", "running", "waiting", "error")
+# `ready` is used only by TOOLS: it means an idle, selectable session exists.
+# STATUS / SESSIONS retain idle for a non-generating CLI.
+STATES = ("idle", "ready", "running", "waiting", "error")
 
 # Input (device -> daemon) types and commands
 INPUT_MESSAGE = "message"
