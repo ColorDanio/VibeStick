@@ -134,7 +134,8 @@
       导致未升级加密 HID 链路静默丢弃通知的问题；并改为单一无 Report-ID 键盘报告以避免
       BlueZ HOGP 的 report-id 兼容性问题。设备端已实测 A/F13、B/F14 的 press/release
       均被调用；已确认 Linux descriptor 为 Report ID 1，HOGP 由 host 根据 Report Reference
-      注入该 ID，固件发送 8-byte keyboard body，待实机 event 回归。
+      注入该 ID，固件发送 8-byte keyboard body；已重新配对并改回 NimBLE 标准加密
+      `inputReport(1)` endpoint，待实机 event 回归。
 - [x] BLE HID/GATT 自动重连：daemon 持久保存首次发现的 VibeStick 地址，后续优先
       直连该地址、失败才扫描，避免 HID 自动连接后停止广播导致 Agent 状态无法同步。
       固件进一步在任一 host 连接后继续 advertising（NimBLE 默认支持多条 peripheral

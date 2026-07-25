@@ -52,17 +52,9 @@ void hidInit(NimBLEServer* pServer) {
   hid->pnp(0x01, 0x02AC, 0x0001, PNPVersionField(2, 2, 0));
   hid->reportMap((uint8_t*)sReportMap, sizeof(sReportMap));
   // All report characteristics must be part of the service before it is
-  // started.  Do not use NimBLEHIDDevice::inputReport here: that helper marks
-  // every report READ_ENC and NimBLE then silently drops notifications until
-  // the host happens to upgrade the HID link. BlueZ HOGP can subscribe before
-  // that upgrade, leaving a visible keyboard which never emits a key. The
-  // report-reference descriptor keeps this a normal Report ID 1 input report.
-  sInput = hid->hidService()->createCharacteristic(
-      (uint16_t)0x2A4D, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY);
-  NimBLEDescriptor* reportRef = sInput->createDescriptor(
-      (uint16_t)0x2908, NIMBLE_PROPERTY::READ);
-  const uint8_t reportRefValue[] = {0x01, 0x01};  // report ID 1, input report
-  reportRef->setValue(reportRefValue, sizeof(reportRefValue));
+  // started. With the host now bonded, use NimBLE's standard encrypted HOGP
+  // report endpoint and Report Reference descriptor.
+  sInput = hid->inputReport(1);
   // HID Information characteristic (0x2a4a) is created empty by the
   // library; BlueZ's hog-lib refuses to set up the profile without it.
   // v1.11, country 0, flags: remote-wake + normally-connectable.
