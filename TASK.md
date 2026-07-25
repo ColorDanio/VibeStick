@@ -78,6 +78,11 @@
       CLI，设备显式 `inference.cancel` 在键盘注入失败后会发送 SIGINT；语音文本仍须
       在 tmux/zellij 运行才可可靠输入。实机 `hermes-agent` 已确认没有有效 zellij
       session，仅为 `/dev/pts/3`，这正是此前“取消看似未发送”的根因。
+- [x] 普通终端会话的可迁移投递：设备 `session.new` 过去只能复用已有 tmux/zellij，
+      现会在没有 anchor 时创建独立的 `vibestick-<tool>-*` tmux 会话，并以 wrapper
+      启动 CLI；它会被自动发现、可监控且语音可投递。端到端实测：临时包装 pane 收到
+      `VS_PROBE_OK` 后已清理。既有普通终端无法被 Linux 安全地“接管输入”，需从 Stick
+      新建该替代会话或以 `vibe_wrap` 在 tmux/zellij 中启动。
 - [x] BLE HID/GATT 自动重连：daemon 持久保存首次发现的 VibeStick 地址，后续优先
       直连该地址、失败才扫描，避免 HID 自动连接后停止广播导致 Agent 状态无法同步。
       固件进一步在任一 host 连接后继续 advertising（NimBLE 默认支持多条 peripheral

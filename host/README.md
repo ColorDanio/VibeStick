@@ -158,14 +158,15 @@ Matching is deliberately strict:
 
 Precedence per tool: **adapter files > discovered sessions > presence**.
 Presence only kicks in when a tool has neither adapter files nor
-discovered sessions; then a matching process makes the tool show
-`running`, and the daemon synthesizes one session (`id` = `proc:<pid>`,
+discovered sessions; then a matching process makes the tool show as
+foreground but `idle` (process existence does not prove inference), and the
+daemon synthesizes one session (`id` = `proc:<pid>`,
 name = process cwd basename — or `<name> (pid <pid>)` when the cwd is
 generic like an install dir), so the device's sessions screen lists it
 and it is selectable like any adapter session. STATUS shows
-`ctx_pct`/`cost_usd` = -1 and an empty `last`. Presence sessions carry
-no `tmux`/`tty` delivery info, so messages sent to them are logged and
-dropped. When the process exits, the synthesized session disappears and
+`ctx_pct`/`cost_usd` = -1 and an empty `last`. Presence sessions carry a
+zellij or tty target when it is discoverable from `/proc`; a plain tty is
+still blocked on current Linux kernels. When the process exits, the synthesized session disappears and
 the tool reverts to `idle`. Disable the watcher via the dashboard's
 Features section (`features.process_watcher`).
 
@@ -199,10 +200,12 @@ delivery.
   STATUS `state: "error"` with an explanation in `last`.
 - **`session.new`**: opens a new tmux window (anchored at the selected
   tool's existing tmux pane) running the tool's CLI launch command
-  (`command` config field, default: the `process` name), then
+  (`command` config field, default: the `process` name). When there is no
+  existing tmux/zellij target, it creates a standalone VibeStick-wrapped
+  tmux session instead, so the replacement CLI is voice-deliverable. It then
   auto-selects the new session once it surfaces via an adapter file or
-  discovery (30 s timeout). Without tmux delivery or a launch command it
-  replies STATUS `state: "error"`, `last: "new session unsupported"`.
+  discovery (30 s timeout). Without a launch command it replies STATUS
+  `state: "error"`, `last: "new session unsupported"`.
 - **Queue semantics**: messages for a busy (`running`) session are
   queued host-side (per-session FIFO, cap 8) and flushed in order once
   the session goes idle/waiting — see "Voice / ASR → Send queue".

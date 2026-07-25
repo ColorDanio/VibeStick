@@ -170,9 +170,16 @@ def test_inference_cancel_without_delivery_target_reports_error(tmp_path):
     assert "delivery" in status["last"]
 
 
-def test_session_new_unsupported_without_tmux(tmp_path):
+def test_session_new_starts_standalone_tmux_without_anchor(tmp_path, monkeypatch):
     store = make_store(tmp_path)  # no sessions, no tmux anchor
     store.poll()
+    calls = []
+
+    async def fake_launch(name, command):
+        calls.append((name, command))
+        return True
+
+    monkeypatch.setattr(delivery, "launch_tmux_session", fake_launch)
     transport = FakeTransport()
 
     async def body():
@@ -180,9 +187,7 @@ def test_session_new_unsupported_without_tmux(tmp_path):
         await asyncio.sleep(0.2)
 
     run_daemon_briefly(store, transport, body)
-    status = json.loads(transport.last("STATUS"))
-    assert status["state"] == "error"
-    assert status["last"] == "new session unsupported"
+    assert calls == [("codex", "codex")]
 
 
 def test_session_new_launches_window_and_selects_session(tmp_path, monkeypatch):

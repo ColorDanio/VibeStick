@@ -1,9 +1,9 @@
 import asyncio
+from pathlib import Path
 import json
 import os
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 
@@ -11,6 +11,7 @@ from vibestick import delivery
 from vibestick.delivery import (
     _binding_to_zellij_bytes,
     launch_zellij_pane,
+    launch_tmux_session,
     resolve_target,
 )
 
@@ -106,6 +107,19 @@ def test_launch_zellij_pane_argv(spawned):
     assert spawned == [("zellij", "--session", "work", "action", "new-pane",
                         "--", "kimi", "chat", "--fast")]
     assert asyncio.run(launch_zellij_pane("", "x", "kimi")) is False
+
+
+def test_launch_standalone_tmux_session_uses_wrapper(spawned, monkeypatch):
+    monkeypatch.setattr(delivery.time, "time", lambda: 1234)
+    assert asyncio.run(launch_tmux_session("opencode", "opencode --model fast")) is True
+    argv = spawned[0]
+    assert argv[:8] == (
+        "tmux", "new-session", "-d", "-s", "vibestick-opencode-1234", "-n", "opencode", "--"
+    )
+    assert argv[8:10] == ("bash", "-lc")
+    assert "generic_wrapper.sh" in argv[10]
+    assert argv[10].endswith("vibe_wrap opencode --model fast")
+    assert asyncio.run(launch_tmux_session("", "opencode")) is False
 
 
 def test_zellij_failure_returns_false(monkeypatch):

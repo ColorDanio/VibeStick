@@ -226,15 +226,21 @@ async def run_daemon(
         tmux_target = store.tmux_target_for_selected()
         rec = store.active()
         zellij_session = str((rec.raw if rec else {}).get("zellij") or "")
-        if tool is None or not command or (not tmux_target and not zellij_session):
+        if tool is None or not command:
             push_status_error("new session unsupported")
             return
 
         async def do_launch() -> None:
             if tmux_target:
                 ok = await delivery.launch_tmux_window(tmux_target, tool.id, command)
-            else:
+            elif zellij_session:
                 ok = await delivery.launch_zellij_pane(zellij_session, tool.id, command)
+            else:
+                # A plain-terminal CLI has no writable input channel on
+                # current Linux kernels.  Start the replacement in its own
+                # wrapper-backed tmux session so it is immediately usable
+                # from the Stick instead of reporting "unsupported".
+                ok = await delivery.launch_tmux_session(tool.id, command)
             if ok:
                 store.request_new_session()
             else:

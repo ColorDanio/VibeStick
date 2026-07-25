@@ -14,6 +14,8 @@ import asyncio
 import logging
 import os
 import signal
+import shlex
+import time
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -468,6 +470,41 @@ async def launch_tmux_window(target_pane: str, name: str, command: str) -> bool:
         return True
     except (OSError, asyncio.TimeoutError) as exc:
         log.warning("tmux new-window failed: %s", exc)
+        return False
+
+
+async def launch_tmux_session(name: str, command: str) -> bool:
+    """Launch a standalone, VibeStick-wrapped tmux session.
+
+    This is the reliable escape hatch for a CLI that was originally started
+    in a plain terminal.  The wrapper writes its state record inside the new
+    tmux pane, so it is discoverable, monitorable and accepts device voice
+    input even on kernels where TIOCSTI is unavailable.
+    """
+    if not name or not command:
+        return False
+    safe_name = "".join(c if c.isalnum() or c in "-_" else "-" for c in name)
+    session = f"vibestick-{safe_name}-{int(time.time())}"
+    wrapper = Path(__file__).resolve().parents[1] / "adapters" / "generic_wrapper.sh"
+    script = f". {shlex.quote(str(wrapper))}; vibe_wrap {command}"
+    argv = [
+        "tmux", "new-session", "-d", "-s", session, "-n", safe_name,
+        "--", "bash", "-lc", script,
+    ]
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *argv,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=TMUX_TIMEOUT_SEC)
+        if proc.returncode != 0:
+            log.warning("tmux new-session failed: %s", stderr.decode(errors="replace").strip())
+            return False
+        log.info("launched standalone tmux session %r running %r", session, command)
+        return True
+    except (OSError, asyncio.TimeoutError) as exc:
+        log.warning("tmux new-session failed: %s", exc)
         return False
 
 
