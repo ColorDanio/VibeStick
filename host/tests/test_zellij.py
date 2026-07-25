@@ -111,15 +111,15 @@ def test_launch_zellij_pane_argv(spawned):
 
 def test_launch_standalone_tmux_session_uses_wrapper(spawned, monkeypatch):
     monkeypatch.setattr(delivery.time, "time", lambda: 1234)
-    assert asyncio.run(launch_tmux_session("opencode", "opencode --model fast")) is True
+    assert asyncio.run(launch_tmux_session("opencode", "opencode", "opencode --model fast")) is True
     argv = spawned[0]
     assert argv[:8] == (
         "tmux", "new-session", "-d", "-s", "vibestick-opencode-1234", "-n", "opencode", "--"
     )
     assert argv[8:10] == ("bash", "-lc")
     assert "generic_wrapper.sh" in argv[10]
-    assert argv[10].endswith("vibe_wrap opencode --model fast")
-    assert asyncio.run(launch_tmux_session("", "opencode")) is False
+    assert argv[10].endswith("VIBESTICK_TOOL_ID=opencode vibe_wrap opencode --model fast")
+    assert asyncio.run(launch_tmux_session("", "opencode", "opencode")) is False
 
 
 def test_zellij_failure_returns_false(monkeypatch):
@@ -196,6 +196,19 @@ def test_generic_wrapper_zellij(tmp_path):
     rec = json.loads(sessions[0].read_text())
     assert rec["zellij"] == "work"
     assert rec["zellij_pane"] == "3"
+
+
+def test_generic_wrapper_can_record_configured_tool_id(tmp_path):
+    env = dict(os.environ)
+    env["VIBESTICK_STATE_DIR"] = str(tmp_path / ".vibestick/sessions")
+    env["VIBESTICK_TOOL_ID"] = "claude-code"
+    script = Path(__file__).parent.parent / "adapters" / "generic_wrapper.sh"
+    subprocess.run(
+        ["bash", "-c", f'. "{os.path.realpath(script)}" && vibe_wrap true'],
+        env=env, check=True, capture_output=True, timeout=15,
+    )
+    rec = json.loads(next((tmp_path / ".vibestick/sessions").glob("*.json")).read_text())
+    assert rec["tool"] == "claude-code"
 
 
 def test_statusline_adapter_zellij(tmp_path):

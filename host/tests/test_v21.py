@@ -175,8 +175,8 @@ def test_session_new_starts_standalone_tmux_without_anchor(tmp_path, monkeypatch
     store.poll()
     calls = []
 
-    async def fake_launch(name, command):
-        calls.append((name, command))
+    async def fake_launch(tool_id, name, command):
+        calls.append((tool_id, name, command))
         return True
 
     monkeypatch.setattr(delivery, "launch_tmux_session", fake_launch)
@@ -187,7 +187,7 @@ def test_session_new_starts_standalone_tmux_without_anchor(tmp_path, monkeypatch
         await asyncio.sleep(0.2)
 
     run_daemon_briefly(store, transport, body)
-    assert calls == [("codex", "codex")]
+    assert calls == [("codex", "codex", "codex")]
 
 
 def test_session_new_launches_window_and_selects_session(tmp_path, monkeypatch):
@@ -225,8 +225,8 @@ def test_plain_tty_message_handoffs_to_wrapped_tmux_session(tmp_path, monkeypatc
     store.refresh_presence()
     calls = []
 
-    async def fake_launch(name, command):
-        calls.append(("launch", name, command))
+    async def fake_launch(tool_id, name, command):
+        calls.append(("launch", tool_id, name, command))
         return True
 
     async def fake_deliver(record, text, mode="auto"):
@@ -246,7 +246,7 @@ def test_plain_tty_message_handoffs_to_wrapped_tmux_session(tmp_path, monkeypatc
 
     run_daemon_briefly(store, transport, body)
     assert calls == [
-        ("launch", "codex", "codex"),
+        ("launch", "codex", "codex", "codex"),
         ("deliver", "wrapped", "voice text", "auto"),
     ]
     assert store.active_id == "wrapped"

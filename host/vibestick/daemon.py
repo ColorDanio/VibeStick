@@ -108,7 +108,7 @@ async def run_daemon(
             push_status_error("delivery failed: no launch command")
             return False
         known = {item.id for item in store.sessions_for_tool(tool.id)}
-        if not await delivery.launch_tmux_session(tool.id, command):
+        if not await delivery.launch_tmux_session(tool.id, tool.id, command):
             push_status_error("delivery failed: new tmux session")
             return False
         deadline = time.monotonic() + 10.0
@@ -280,7 +280,7 @@ async def run_daemon(
                 # current Linux kernels.  Start the replacement in its own
                 # wrapper-backed tmux session so it is immediately usable
                 # from the Stick instead of reporting "unsupported".
-                ok = await delivery.launch_tmux_session(tool.id, command)
+                ok = await delivery.launch_tmux_session(tool.id, tool.id, command)
             if ok:
                 store.request_new_session()
             else:

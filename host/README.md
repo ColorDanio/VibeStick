@@ -70,6 +70,10 @@ and kimi-cli via the wrapper adapter). Schema — see `../docs/protocol.md`:
 - `delivery_hint` is an optional free-text note shown in the setup UI.
 - `asr` configures voice transcription (see "Voice / ASR").
 
+The standalone tmux launcher supplies that configured id to the generic
+wrapper even when it differs from the executable name (for example,
+`claude-code` launches `claude`, and `kimi-cli` launches `kimi`).
+
 The easiest way to edit the config is the **dashboard** (served by default):
 
 ```sh

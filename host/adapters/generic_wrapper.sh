@@ -9,11 +9,14 @@
 # Example:
 #   . /path/to/host/adapters/generic_wrapper.sh
 #   vibe_wrap codex
+#
+# Set VIBESTICK_TOOL_ID when a configured id differs from the executable
+# (for example claude-code -> claude, kimi-cli -> kimi).
 
 VIBESTICK_STATE_DIR="${VIBESTICK_STATE_DIR:-$HOME/.vibestick/sessions}"
 
 vibe_wrap() {
-    _vw_tool="$1"; shift
+    _vw_tool="${VIBESTICK_TOOL_ID:-$1}"
     mkdir -p "$VIBESTICK_STATE_DIR" || return 1
     _vw_id="$_vw_tool-$$"
     _vw_file="$VIBESTICK_STATE_DIR/$_vw_id.json"
@@ -41,7 +44,7 @@ vibe_wrap() {
     }
 
     _vw_write running ""
-    "$_vw_tool" "$@"
+    "$@"
     _vw_rc=$?
     _vw_write idle "exited ($_vw_rc)"
     return $_vw_rc

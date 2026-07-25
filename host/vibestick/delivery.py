@@ -473,7 +473,7 @@ async def launch_tmux_window(target_pane: str, name: str, command: str) -> bool:
         return False
 
 
-async def launch_tmux_session(name: str, command: str) -> bool:
+async def launch_tmux_session(tool_id: str, name: str, command: str) -> bool:
     """Launch a standalone, VibeStick-wrapped tmux session.
 
     This is the reliable escape hatch for a CLI that was originally started
@@ -481,12 +481,15 @@ async def launch_tmux_session(name: str, command: str) -> bool:
     tmux pane, so it is discoverable, monitorable and accepts device voice
     input even on kernels where TIOCSTI is unavailable.
     """
-    if not name or not command:
+    if not tool_id or not name or not command:
         return False
     safe_name = "".join(c if c.isalnum() or c in "-_" else "-" for c in name)
     session = f"vibestick-{safe_name}-{int(time.time())}"
     wrapper = Path(__file__).resolve().parents[1] / "adapters" / "generic_wrapper.sh"
-    script = f". {shlex.quote(str(wrapper))}; vibe_wrap {command}"
+    script = (
+        f". {shlex.quote(str(wrapper))}; "
+        f"VIBESTICK_TOOL_ID={shlex.quote(tool_id)} vibe_wrap {command}"
+    )
     argv = [
         "tmux", "new-session", "-d", "-s", session, "-n", safe_name,
         "--", "bash", "-lc", script,

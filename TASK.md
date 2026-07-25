@@ -91,6 +91,9 @@
       不再报错/丢弃；daemon 自动为同工具启动 wrapper-backed tmux，等待 adapter 记录后
       投递文本并切换 Stick 到新 session。单测覆盖启动、发现、投递、选择的完整流程；旧进程
       不会被注入或中断。
+- [x] 默认四 CLI 的 id/命令映射：独立 wrapper 启动会显式传递配置工具 id，修复
+      `claude-code → claude` 与 `kimi-cli → kimi` 的名称不一致；Codex、opencode 保持
+      同名。四类工具均可通过同一发现、监控、tmux 新建与 plain-tty 自动语音接力路径工作。
 - [x] BLE HID/GATT 自动重连：daemon 持久保存首次发现的 VibeStick 地址，后续优先
       直连该地址、失败才扫描，避免 HID 自动连接后停止广播导致 Agent 状态无法同步。
       固件进一步在任一 host 连接后继续 advertising（NimBLE 默认支持多条 peripheral
