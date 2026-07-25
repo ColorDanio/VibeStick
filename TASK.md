@@ -129,7 +129,7 @@
 - [x] Vibe Mic 命名与输入源清理：首页、模式页与 PipeWire source 统一为 `Vibe Mic`；daemon
       启动时移除遗留的 `VibeStick Mic` 虚拟源，当前 PipeWire 中只保留 `Vibe Mic`。M5StickC
       Plus 已重刷（2026-07-25）。
-- [ ] Vibe Mic HID 实机回归：A/F13、B/F14 的真实 Linux input 事件与目标应用快捷键响应待确认。
+- [ ] Vibe Mic HID 实机回归：A/F13、B/F14 的目标应用快捷键响应待用户最终确认。
       已定位并修复 HID input-report 特征在 service 启动后才创建、以及 NimBLE `READ_ENC`
       导致未升级加密 HID 链路静默丢弃通知的问题；并改为单一无 Report-ID 键盘报告以避免
       BlueZ HOGP 的 report-id 兼容性问题。设备端已实测 A/F13、B/F14 的 press/release
@@ -139,8 +139,11 @@
       Report-ID 注入差异，隔离 daemon 后测试 explicit 9-byte report，`event21` 仍为 0 byte；
       设备端 GATT 直接订阅能收到正确 F13/F14 press/release，故根因确定为本机 BlueZ 5.85
       HoG/UHID 注入层。daemon 现订阅同一 HID Input Report，并以 `/dev/uinput` 创建
-      `VibeStick Virtual Keyboard` 投递 F13/F14，保留原生 BLE HID 服务；本机尚需管理员执行
-      `sudo modprobe uinput` 创建该设备节点后完成应用实测（2026-07-26）。
+      `VibeStick Virtual Keyboard` 投递 F13/F14，保留原生 BLE HID 服务；已加载 `uinput`，
+      实机 A/B 收到 `0x68/0x69` usage 的完整 press/release，daemon 已创建虚拟键盘
+      `/dev/input/event24` 并成功写入 Linux F13(183)/F14(184) 事件。该 event node 仅
+      `root:input` 可读，非特权 capture 为 0 byte；uinput 写入无异常。待用户在目标应用
+      实际绑定确认（2026-07-26）。
 - [x] BLE HID/GATT 自动重连：daemon 持久保存首次发现的 VibeStick 地址，后续优先
       直连该地址、失败才扫描，避免 HID 自动连接后停止广播导致 Agent 状态无法同步。
       固件进一步在任一 host 连接后继续 advertising（NimBLE 默认支持多条 peripheral
