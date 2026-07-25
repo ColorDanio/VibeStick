@@ -6,10 +6,9 @@
 #include "ble.h"
 
 // Standard boot-keyboard report, extended to usage max 0x73 (F13-F24) so
-// F13/F14 are available as application-bindable special keys. HOGP identifies
-// this report as Report ID 1 via its Report Reference descriptor; BlueZ adds
-// that ID while injecting into Linux, so the GATT notification is the normal
-// 8-byte keyboard body: modifiers, reserved, 6 key slots.
+// F13/F14 are available as application-bindable special keys. Report ID 1 is
+// carried in the GATT payload as well as the Report Reference. This is the
+// compatible form for BlueZ 5.85's UHID path on the paired host.
 static const uint8_t sReportMap[] = {
     0x05, 0x01,  // Usage Page (Generic Desktop)
     0x09, 0x06,  // Usage (Keyboard)
@@ -75,8 +74,9 @@ void hidInit(NimBLEServer* pServer) {
 
 void hidKey(uint8_t keycode, bool pressed) {
   if (!bleConnected() || sInput == nullptr) return;
-  uint8_t report[8] = {0};
-  if (pressed) report[2] = keycode;
+  uint8_t report[9] = {0};
+  report[0] = 0x01;
+  if (pressed) report[3] = keycode;
   const size_t subscribers = sInput->getSubscribedCount();
   sInput->setValue(report, sizeof(report));
   sInput->notify();
