@@ -1096,7 +1096,7 @@ static void drawFooterHints(const char* mode, int y) {
     hintButton(48, y, 'B'); hintArrow(61, y, true);
     hintDoubleA(sW - 40, y); hintMic(sW - 12, y);
   } else if (strcmp(mode, "record") == 0) {
-    int x = landscape() ? sW - 36 : 14;
+    int x = sW - 36;
     hintMic(x, y, TFT_RED); hintButton(x + 20, y, 'A');
   } else if (strcmp(mode, "send") == 0) {
     if (landscape()) {
@@ -1107,7 +1107,10 @@ static void drawFooterHints(const char* mode, int y) {
       hintDoubleA(sW - 40, y); hintMic(sW - 12, y);
     }
   } else if (strcmp(mode, "busy") == 0) {
-    int x = landscape() ? sW - 45 : 12;
+    // Keep the busy actions at the right on both orientations. In portrait
+    // the former second-row placement let the icon circles overlap the
+    // bottom of the "thinking..." status text.
+    int x = sW - 45;
     hintButton(x, y, 'A', TFT_RED); hintStop(x + 15, y);
     hintMic(sW - 12, y, COL_AMBER);
   } else {  // queued
@@ -1132,9 +1135,10 @@ static void drawConvoFooter(const char* errorText, bool sendMarked,
     M5Lcd.setTextColor(TFT_RED, TFT_BLACK);
     M5Lcd.setCursor(4, y1);
     M5Lcd.print("! ");
-    drawMarquee(MQ_TRANSCRIPT, errorText, 16, y1, charsFit(sW - 24, 1), 1,
+    int errorWidth = land ? sW - 24 : sW - 72;
+    drawMarquee(MQ_TRANSCRIPT, errorText, 16, y1, charsFit(errorWidth, 1), 1,
                 TFT_RED, TFT_BLACK);
-    drawFooterHints("record", land ? y1 : footL2Y());
+    drawFooterHints("record", y1);
   } else if (strcmp(vst, "transcribing") == 0) {
     M5Lcd.setTextColor(COL_AMBER, TFT_BLACK);
     M5Lcd.setCursor(4, y1);
@@ -1157,7 +1161,7 @@ static void drawConvoFooter(const char* errorText, bool sendMarked,
     M5Lcd.setTextColor(COL_AMBER, TFT_BLACK);
     M5Lcd.setCursor(16, y1);
     M5Lcd.print("thinking...");
-    drawFooterHints("busy", land ? y1 : footL2Y());
+    drawFooterHints("busy", y1);
   } else {
     drawFooterHints("page", y1);
   }

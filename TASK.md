@@ -109,6 +109,13 @@
       标识；横屏 conversation footer 的操作图标移到右侧，避免覆盖 `thinking...` 或错误状态行。
       首页保持原有 CLI + `Microphone` 的工具轮播设计。M5StickC Plus + StickS3 编译通过，
       已刷入当前 M5StickC Plus（2026-07-25）。
+- [x] session 界面预览与新会话目录：`render_preview.py` 现按固件当前状态灯、footer 图标
+      与横竖屏布局生成 session PNG；目检发现并修正竖屏 `thinking...` 被 busy/record 图标压到
+      下沿的问题。每个 CLI 配置新增 `cwd`（Dashboard: Working directory），全局新增
+      `session_launcher`（Auto/tmux/zellij）；tmux 新窗口/独立会话使用 `-c`，zellij 新 pane
+      使用 `--cwd`。空 cwd 继承已有 multiplexer pane，独立 tmux 使用用户 home；强制 zellij
+      没有现存 zellij target 时明确报错。相关 host 回归通过，双板构建通过并刷入 M5StickC Plus
+      （2026-07-25）。
 - [x] BLE HID/GATT 自动重连：daemon 持久保存首次发现的 VibeStick 地址，后续优先
       直连该地址、失败才扫描，避免 HID 自动连接后停止广播导致 Agent 状态无法同步。
       固件进一步在任一 host 连接后继续 advertising（NimBLE 默认支持多条 peripheral

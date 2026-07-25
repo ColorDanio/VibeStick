@@ -58,6 +58,7 @@ class ToolConfig:
     hidden: bool = False  # hidden tools are omitted from TOOLS and the carousel
     discover: bool = True  # discover sessions from the tool's on-disk store
     command: str = ""  # CLI launch command for session.new (default: process name)
+    cwd: str = ""  # optional working directory for session.new
     delivery: str = "auto"  # delivery target preference: auto | tmux | tty
     aliases: list[str] = field(default_factory=list)  # extra process names to match
 
@@ -91,6 +92,8 @@ class ToolConfig:
             d["discover"] = False
         if self.command:
             d["command"] = self.command
+        if self.cwd:
+            d["cwd"] = self.cwd
         if self.delivery != "auto":
             d["delivery"] = self.delivery
         if self.aliases:
@@ -137,6 +140,7 @@ class ToolConfig:
             hidden=bool(data.get("hidden", False)),
             discover=bool(data.get("discover", True)),
             command=str(data.get("command") or "").strip(),
+            cwd=str(data.get("cwd") or "").strip(),
             delivery=delivery,
             aliases=[str(a) for a in data.get("aliases", []) if str(a).strip()],
         )
@@ -286,6 +290,7 @@ class Config:
     asr: ASRConfig = field(default_factory=ASRConfig)
     features: FeaturesConfig = field(default_factory=FeaturesConfig)
     mic: MicConfig = field(default_factory=MicConfig)
+    session_launcher: str = "auto"  # auto | tmux | zellij, for session.new
 
     def to_dict(self) -> dict:
         return {
@@ -293,6 +298,7 @@ class Config:
             "asr": self.asr.to_dict(),
             "features": self.features.to_dict(),
             "mic": self.mic.to_dict(),
+            "session_launcher": self.session_launcher,
         }
 
     def to_json(self) -> str:
@@ -318,11 +324,16 @@ class Config:
                 continue
             seen.add(tool.id)
             tools.append(tool)
+        launcher = str(data.get("session_launcher") or "auto")
+        if launcher not in ("auto", "tmux", "zellij"):
+            log.warning("unknown session_launcher %r, using 'auto'", launcher)
+            launcher = "auto"
         return cls(
             tools=tools,
             asr=ASRConfig.from_dict(data.get("asr")),
             features=FeaturesConfig.from_dict(data.get("features")),
             mic=MicConfig.from_dict(data.get("mic")),
+            session_launcher=launcher,
         )
 
     @classmethod

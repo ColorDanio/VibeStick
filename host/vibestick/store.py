@@ -447,6 +447,25 @@ class SessionStore:
                 return pane
         return None
 
+    def zellij_target_for_selected(self) -> tuple[str, str] | None:
+        """A zellij session/pane anchor for the selected tool.
+
+        Mirrors tmux_target_for_selected so session.new can open a pane even
+        when a different session of the same CLI is currently selected.
+        """
+        if self.config is None:
+            return None
+        candidates = []
+        active = self.active()
+        if active is not None:
+            candidates.append(active)
+        candidates.extend(self._records[i] for i in self._selected_ids())
+        for rec in candidates:
+            session = str(rec.raw.get("zellij") or "")
+            if session:
+                return session, str(rec.raw.get("zellij_pane") or "")
+        return None
+
     def request_new_session(self) -> None:
         """Arm pending selection: the next new session of the selected tool
         (appearing via adapter files or discovery) becomes active."""

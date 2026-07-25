@@ -202,14 +202,17 @@ delivery.
   host-side only and never listed as a device function) to the active
   session's delivery target. Without a delivery target the daemon pushes
   STATUS `state: "error"` with an explanation in `last`.
-- **`session.new`**: opens a new tmux window (anchored at the selected
-  tool's existing tmux pane) running the tool's CLI launch command
-  (`command` config field, default: the `process` name). When there is no
-  existing tmux/zellij target, it creates a standalone VibeStick-wrapped
-  tmux session instead, so the replacement CLI is voice-deliverable. It then
-  auto-selects the new session once it surfaces via an adapter file or
-  discovery (30 s timeout). Without a launch command it replies STATUS
-  `state: "error"`, `last: "new session unsupported"`.
+- **`session.new`**: runs every selected CLI's launch command (`command`,
+  default: `process`) in a new tmux window or zellij pane, then auto-selects
+  it when its adapter/discovery record appears (30 s timeout). Set the global
+  `session_launcher` to `auto` (default), `tmux`, or `zellij`; `auto` reuses
+  a discovered tmux/zellij anchor and otherwise makes a standalone,
+  VibeStick-wrapped tmux session. A forced zellij launch deliberately reports
+  `new session: no zellij target` when no zellij session exists, because a
+  daemon cannot safely create an interactive zellij session detached from a
+  terminal. Per-tool `cwd` selects the working directory; when empty an
+  anchored pane inherits its directory and a standalone tmux session uses
+  the daemon user's home. Invalid directories return a clear STATUS error.
 - **Voice handoff for a plain tty**: on kernels where TIOCSTI is blocked, a
   confirmed voice message for a live process that has no tmux/zellij target
   automatically starts a standalone VibeStick-wrapped tmux session for that

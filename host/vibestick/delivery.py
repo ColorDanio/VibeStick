@@ -462,7 +462,8 @@ async def _deliver_tty(tty: str, text: str, pid: int = 0) -> bool:
         return False
 
 
-async def launch_tmux_window(target_pane: str, name: str, command: str) -> bool:
+async def launch_tmux_window(target_pane: str, name: str, command: str,
+                             cwd: str = "") -> bool:
     """Open a new tmux window running `command` (session.new).
 
     `target_pane` anchors the tmux session (an existing session's pane).
@@ -470,7 +471,10 @@ async def launch_tmux_window(target_pane: str, name: str, command: str) -> bool:
     """
     if not target_pane or not command:
         return False
-    argv = ["tmux", "new-window", "-t", target_pane, "-n", name, "--", command]
+    argv = ["tmux", "new-window", "-t", target_pane, "-n", name]
+    if cwd:
+        argv += ["-c", cwd]
+    argv += ["--", command]
     try:
         proc = await asyncio.create_subprocess_exec(
             *argv,
@@ -488,7 +492,8 @@ async def launch_tmux_window(target_pane: str, name: str, command: str) -> bool:
         return False
 
 
-async def launch_tmux_session(tool_id: str, name: str, command: str) -> bool:
+async def launch_tmux_session(tool_id: str, name: str, command: str,
+                              cwd: str = "") -> bool:
     """Launch a standalone, VibeStick-wrapped tmux session.
 
     This is the reliable escape hatch for a CLI that was originally started
@@ -505,10 +510,10 @@ async def launch_tmux_session(tool_id: str, name: str, command: str) -> bool:
         f". {shlex.quote(str(wrapper))}; "
         f"VIBESTICK_TOOL_ID={shlex.quote(tool_id)} vibe_wrap {command}"
     )
-    argv = [
-        "tmux", "new-session", "-d", "-s", session, "-n", safe_name,
-        "--", "bash", "-lc", script,
-    ]
+    argv = ["tmux", "new-session", "-d", "-s", session, "-n", safe_name]
+    if cwd:
+        argv += ["-c", cwd]
+    argv += ["--", "bash", "-lc", script]
     try:
         proc = await asyncio.create_subprocess_exec(
             *argv,
@@ -526,7 +531,8 @@ async def launch_tmux_session(tool_id: str, name: str, command: str) -> bool:
         return False
 
 
-async def launch_zellij_pane(session: str, name: str, command: str) -> bool:
+async def launch_zellij_pane(session: str, name: str, command: str,
+                             cwd: str = "") -> bool:
     """Open a new zellij pane running `command` (session.new).
 
     `name` is currently informational (kept for API symmetry with
@@ -536,8 +542,11 @@ async def launch_zellij_pane(session: str, name: str, command: str) -> bool:
         return False
     import shlex
 
-    argv = ["zellij", "--session", session, "action", "new-pane", "--",
-            *shlex.split(command)]
+    argv = [_zellij_binary(), "--session", session, "action", "new-pane",
+            "--name", name]
+    if cwd:
+        argv += ["--cwd", cwd]
+    argv += ["--", *shlex.split(command)]
     try:
         proc = await asyncio.create_subprocess_exec(
             *argv,

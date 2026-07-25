@@ -363,6 +363,7 @@ function renderConfigForms() {
   $("mic-enabled").checked = cfg.mic?.enabled !== false;
   $("feat-procwatcher").checked = cfg.features?.process_watcher !== false;
   $("feat-voice").checked = cfg.features?.voice_enabled !== false;
+  $("session-launcher").value = cfg.session_launcher || "auto";
   $("asr-engine").value = cfg.asr?.engine || "faster-whisper";
   $("asr-language").value = cfg.asr?.language || "";
   $("asr-command").value = cfg.asr?.command || "";
@@ -455,6 +456,7 @@ function toolCard(tool, i) {
           </select></div>
         <div><label>Process name</label><input data-f="process" value="${esc(tool.process || "")}"></div>
         <div><label>Launch command</label><input data-f="command" value="${esc(tool.command || "")}"></div>
+        <div><label>Working directory</label><input data-f="cwd" value="${esc(tool.cwd || "")}" placeholder="inherit target / home"></div>
       </div>
       <div class="toggle-row"><span>Show on device</span>
         <label class="toggle"><input type="checkbox" data-f-hidden ${tool.hidden ? "" : "checked"}><span class="slider"></span></label></div>
@@ -581,6 +583,7 @@ function collect() {
     voice_enabled: $("feat-voice").checked,
   };
   cfg.mic = { enabled: $("mic-enabled").checked };
+  cfg.session_launcher = $("session-launcher").value;
   return cfg;
 }
 
@@ -601,7 +604,7 @@ async function saveConfig(quiet) {
 $("add-tool").onclick = () => {
   collect();
   const tool = { id: "", name: "", adapter: "wrapper", delivery: "auto",
-    bindings: {}, process: "", command: "", hidden: false, discover: true };
+    bindings: {}, process: "", command: "", cwd: "", hidden: false, discover: true };
   state.config.tools.push(tool);
   state.expandedTools.add(`new-${state.config.tools.length - 1}`);
   writeHash();
@@ -651,7 +654,7 @@ $("asr-test").onclick = async () => {
   }
 };
 $("mic-enabled").onchange = markDirty;
-["asr-language", "asr-command", "feat-procwatcher", "feat-voice",
+["asr-language", "asr-command", "feat-procwatcher", "feat-voice", "session-launcher",
  "asr-api-base", "asr-api-key", "asr-online-model", "asr-online-language"].forEach((id) => {
   $(id).onchange = markDirty;
   $(id).oninput = markDirty;

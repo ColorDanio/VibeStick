@@ -114,24 +114,24 @@ def test_send_binding_zellij_no_session(spawned):
 
 
 def test_launch_zellij_pane_argv(spawned):
-    ok = asyncio.run(launch_zellij_pane("work", "kimi-cli", "kimi chat --fast"))
+    ok = asyncio.run(launch_zellij_pane("work", "kimi-cli", "kimi chat --fast", "/work/kimi"))
     assert ok is True
     assert [argv[1:] for argv in spawned] == [
-        ("--session", "work", "action", "new-pane", "--", "kimi", "chat", "--fast")
+        ("--session", "work", "action", "new-pane", "--name", "kimi-cli", "--cwd", "/work/kimi", "--", "kimi", "chat", "--fast")
     ]
     assert asyncio.run(launch_zellij_pane("", "x", "kimi")) is False
 
 
 def test_launch_standalone_tmux_session_uses_wrapper(spawned, monkeypatch):
     monkeypatch.setattr(delivery.time, "time", lambda: 1234)
-    assert asyncio.run(launch_tmux_session("opencode", "opencode", "opencode --model fast")) is True
+    assert asyncio.run(launch_tmux_session("opencode", "opencode", "opencode --model fast", "/work/open")) is True
     argv = spawned[0]
-    assert argv[:8] == (
-        "tmux", "new-session", "-d", "-s", "vibestick-opencode-1234", "-n", "opencode", "--"
+    assert argv[:10] == (
+        "tmux", "new-session", "-d", "-s", "vibestick-opencode-1234", "-n", "opencode", "-c", "/work/open", "--"
     )
-    assert argv[8:10] == ("bash", "-lc")
-    assert "generic_wrapper.sh" in argv[10]
-    assert argv[10].endswith("VIBESTICK_TOOL_ID=opencode vibe_wrap opencode --model fast")
+    assert argv[10:12] == ("bash", "-lc")
+    assert "generic_wrapper.sh" in argv[12]
+    assert argv[12].endswith("VIBESTICK_TOOL_ID=opencode vibe_wrap opencode --model fast")
     assert asyncio.run(launch_tmux_session("", "opencode", "opencode")) is False
 
 

@@ -62,6 +62,21 @@ async def run_daemon(
         tool = store.selected_tool_config()
         return tool.delivery if tool is not None else "auto"
 
+    def _launch_cwd(tool: config_mod.ToolConfig, standalone: bool) -> str | None:
+        """Resolve an optional per-tool directory for session.new.
+
+        Empty keeps an existing tmux/zellij pane's directory; an independent
+        daemon-created session gets the user's home rather than the service
+        process's arbitrary working directory.
+        """
+        if not tool.cwd:
+            return str(Path.home()) if standalone else ""
+        path = Path(tool.cwd).expanduser()
+        if not path.is_dir():
+            push_status_error("new session: bad working directory")
+            return None
+        return str(path.resolve())
+
     def on_input(payload: dict) -> None:
         if payload.get("type") == protocol.INPUT_MESSAGE:
             deliver_message(str(payload.get("text", "")))
@@ -111,7 +126,10 @@ async def run_daemon(
             push_status_error("delivery failed: no launch command")
             return False
         known = {item.id for item in store.sessions_for_tool(tool.id)}
-        if not await delivery.launch_tmux_session(tool.id, tool.id, command):
+        cwd = _launch_cwd(tool, standalone=True)
+        if cwd is None:
+            return False
+        if not await delivery.launch_tmux_session(tool.id, tool.id, command, cwd):
             push_status_error("delivery failed: new tmux session")
             return False
         deadline = time.monotonic() + 10.0
@@ -263,27 +281,42 @@ async def run_daemon(
         spawn(do_cancel())
 
     def on_session_new() -> None:
-        """Start a fresh session of the selected tool (tmux window or zellij pane)."""
+        """Start a fresh selected-tool session in the configured launcher."""
         tool = store.selected_tool_config()
         command = tool.launch_command() if tool is not None else ""
         tmux_target = store.tmux_target_for_selected()
-        rec = store.active()
-        zellij_session = str((rec.raw if rec else {}).get("zellij") or "")
+        zellij_target = store.zellij_target_for_selected()
         if tool is None or not command:
             push_status_error("new session unsupported")
             return
 
         async def do_launch() -> None:
-            if tmux_target:
-                ok = await delivery.launch_tmux_window(tmux_target, tool.id, command)
-            elif zellij_session:
-                ok = await delivery.launch_zellij_pane(zellij_session, tool.id, command)
+            launcher = holder["config"].session_launcher
+            if launcher == "tmux":
+                cwd = _launch_cwd(tool, standalone=not bool(tmux_target))
+                ok = (cwd is not None and
+                      (await delivery.launch_tmux_window(tmux_target, tool.id, command, cwd)
+                       if tmux_target else
+                       await delivery.launch_tmux_session(tool.id, tool.id, command, cwd)))
+            elif launcher == "zellij":
+                if not zellij_target:
+                    push_status_error("new session: no zellij target")
+                    return
+                cwd = _launch_cwd(tool, standalone=False)
+                ok = cwd is not None and await delivery.launch_zellij_pane(
+                    zellij_target[0], tool.id, command, cwd)
+            elif tmux_target:
+                cwd = _launch_cwd(tool, standalone=False)
+                ok = cwd is not None and await delivery.launch_tmux_window(
+                    tmux_target, tool.id, command, cwd)
+            elif zellij_target:
+                cwd = _launch_cwd(tool, standalone=False)
+                ok = cwd is not None and await delivery.launch_zellij_pane(
+                    zellij_target[0], tool.id, command, cwd)
             else:
-                # A plain-terminal CLI has no writable input channel on
-                # current Linux kernels.  Start the replacement in its own
-                # wrapper-backed tmux session so it is immediately usable
-                # from the Stick instead of reporting "unsupported".
-                ok = await delivery.launch_tmux_session(tool.id, tool.id, command)
+                cwd = _launch_cwd(tool, standalone=True)
+                ok = cwd is not None and await delivery.launch_tmux_session(
+                    tool.id, tool.id, command, cwd)
             if ok:
                 store.request_new_session()
             else:

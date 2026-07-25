@@ -216,11 +216,11 @@ delivery), then resumes STATUS pushes (back to monitoring).
   selected session, best-effort: the daemon sends the configured
   `cancel` key binding (default `Escape`) to the session's delivery
   target (tmux `send-keys` or tty write).
-- `session.new` (v2.1) asks the daemon to start a fresh session of the
-  selected tool: with tmux delivery configured it opens a new tmux
-  window running the tool's CLI command and selects it; otherwise it
-  replies with STATUS `state: "error"`, `last: "new session
-  unsupported"`.
+- `session.new` asks the daemon to start a fresh session of the selected tool
+  using the configured session launcher. It supplies the tool's `command`
+  and optional `cwd`; `auto` reuses a tmux/zellij target and otherwise creates
+  a standalone wrapped tmux session. Forced zellij requires an existing
+  zellij target.
 - Messages sent to a busy (`running`) session are still delivered —
   terminal input buffers naturally — so they act as a queue.
 
@@ -236,7 +236,9 @@ UI, see `host/README.md`):
       "id": "claude-code",
       "name": "Claude Code",
       "adapter": "statusline",
-      "bindings": {"enter": "Enter", "escape": "Escape"}
+      "bindings": {"enter": "Enter", "escape": "Escape"},
+      "command": "claude",
+      "cwd": "~/code/project"
     },
     {
       "id": "codex",
@@ -245,6 +247,7 @@ UI, see `host/README.md`):
       "bindings": {"ctrl-c": "C-c"}
     }
   ],
+  "session_launcher": "auto",
   "asr": {
     "engine": "faster-whisper",
     "model": "base",

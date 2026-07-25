@@ -93,11 +93,17 @@
         <label class="toggle"><input type="checkbox" id="feat-procwatcher"><span class="slider"></span></label></div>
       <div class="toggle-row"><span>Voice (device voice function + ASR)</span>
         <label class="toggle"><input type="checkbox" id="feat-voice"><span class="slider"></span></label></div>
+      <label>New-session launcher</label>
+      <select id="session-launcher">
+        <option value="auto">Auto (reuse tmux/zellij; tmux if standalone)</option>
+        <option value="tmux">tmux</option>
+        <option value="zellij">zellij (requires an existing zellij session)</option>
+      </select>
     </div>
     <div class="card">
       <div class="card-head"><h2>Tools</h2></div>
       <p class="card-desc">CLIs shown on the stick. Expand a card to edit bindings,
-        launch command and delivery.</p>
+        launch command, working directory and delivery.</p>
       <div id="tools"></div>
       <button class="add-card" id="add-tool">+ Add tool</button>
     </div>

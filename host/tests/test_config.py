@@ -35,14 +35,20 @@ def test_default_bindings_and_fns(tmp_path):
 def test_save_is_atomic_and_round_trips(tmp_path):
     path = tmp_path / "config.json"
     cfg = Config(
-        tools=[ToolConfig(id="codex", name="Codex", bindings={"ctrl-c": "C-c"}, process="codex")],
+        tools=[ToolConfig(id="codex", name="Codex", bindings={"ctrl-c": "C-c"}, process="codex", cwd="~/code")],
         asr=ASRConfig(engine="command", command="my-asr --fast", language="en"),
+        session_launcher="zellij",
     )
     config_mod.save(cfg, path)
     loaded = config_mod.load(path)
     assert loaded.to_dict() == cfg.to_dict()
     # No temp files left behind.
     assert [p.name for p in tmp_path.iterdir()] == ["config.json"]
+
+
+def test_session_launcher_invalid_value_is_coerced():
+    cfg = Config.from_dict({"tools": [], "session_launcher": "screen"})
+    assert cfg.session_launcher == "auto"
 
 
 def test_missing_process_falls_back_to_well_known_name(tmp_path):

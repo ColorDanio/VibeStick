@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import time
+from pathlib import Path
 
 from fakes import FakeTransport
 
@@ -175,8 +176,8 @@ def test_session_new_starts_standalone_tmux_without_anchor(tmp_path, monkeypatch
     store.poll()
     calls = []
 
-    async def fake_launch(tool_id, name, command):
-        calls.append((tool_id, name, command))
+    async def fake_launch(tool_id, name, command, cwd):
+        calls.append((tool_id, name, command, cwd))
         return True
 
     monkeypatch.setattr(delivery, "launch_tmux_session", fake_launch)
@@ -187,7 +188,7 @@ def test_session_new_starts_standalone_tmux_without_anchor(tmp_path, monkeypatch
         await asyncio.sleep(0.2)
 
     run_daemon_briefly(store, transport, body)
-    assert calls == [("codex", "codex", "codex")]
+    assert calls == [("codex", "codex", "codex", str(Path.home()))]
 
 
 def test_session_new_launches_window_and_selects_session(tmp_path, monkeypatch):
@@ -196,8 +197,8 @@ def test_session_new_launches_window_and_selects_session(tmp_path, monkeypatch):
     store.poll()
     calls = []
 
-    async def fake_launch(target, name, command):
-        calls.append((target, name, command))
+    async def fake_launch(target, name, command, cwd):
+        calls.append((target, name, command, cwd))
         return True
 
     monkeypatch.setattr(delivery, "launch_tmux_window", fake_launch)
@@ -206,7 +207,7 @@ def test_session_new_launches_window_and_selects_session(tmp_path, monkeypatch):
     async def body():
         transport.notify("COMMAND", b'{"cmd":"session.new"}')
         await asyncio.sleep(0.15)
-        assert calls == [("%1", "codex", "codex")]
+        assert calls == [("%1", "codex", "codex", "")]
         # The CLI (via its adapter) drops a state file for the new session.
         write_session(tmp_path / "sessions", "c2", tmux="%2")
         await asyncio.sleep(0.3)
@@ -225,8 +226,8 @@ def test_plain_tty_message_handoffs_to_wrapped_tmux_session(tmp_path, monkeypatc
     store.refresh_presence()
     calls = []
 
-    async def fake_launch(tool_id, name, command):
-        calls.append(("launch", tool_id, name, command))
+    async def fake_launch(tool_id, name, command, cwd):
+        calls.append(("launch", tool_id, name, command, cwd))
         return True
 
     async def fake_deliver(record, text, mode="auto"):
@@ -246,7 +247,7 @@ def test_plain_tty_message_handoffs_to_wrapped_tmux_session(tmp_path, monkeypatc
 
     run_daemon_briefly(store, transport, body)
     assert calls == [
-        ("launch", "codex", "codex", "codex"),
+        ("launch", "codex", "codex", "codex", str(Path.home())),
         ("deliver", "wrapped", "voice text", "auto"),
     ]
     assert store.active_id == "wrapped"
