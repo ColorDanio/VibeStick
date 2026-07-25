@@ -130,12 +130,18 @@ static int drawText16N(int x, int y, const char* s, int nBytes, uint16_t color,
                        uint16_t bg, int maxW) {
   int w = 0;
   {
+    // Pre-pass: how many bytes' worth of whole glyphs fit into maxW px.
+    // Decode into a TEMP pointer first -- advancing before the fit check
+    // would include a glyph whose pixels exceed the line stride (the
+    // CJK-round regression: wrapped/overlapping text).
     const char* p = s;
     const char* end = s + nBytes;
     while (p < end && *p) {
-      int cw = cpWidth16(utf8Next(&p));
+      const char* t = p;
+      int cw = cpWidth16(utf8Next(&t));
       if (w + cw > maxW) break;
       w += cw;
+      p = t;
     }
     nBytes = (int)(p - s);
   }
@@ -153,6 +159,7 @@ static int drawText16N(int x, int y, const char* s, int nBytes, uint16_t color,
     const uint8_t* g = wide ? cjk_hanzi_glyphs + idx * 32
                             : cjk_ascii_glyphs + idx * 16;
     int gw = wide ? 16 : 8;
+    if (cx + gw > w) break;  // never write past the line stride
     for (int row = 0; row < 16; ++row) {
       for (int col = 0; col < gw; ++col) {
         if (g[row * (wide ? 2 : 1) + col / 8] & (0x80 >> (col % 8)))
@@ -827,7 +834,48 @@ static int sTailIdx = 0;
 
 void uiConvoPageReset() { sTailIdx = TAIL_MAX; }  // -> newest on next draw
 
+// Sync the reading position after a tail content update: keep following
+// the live edge only when the user is already at/near the newest page
+// (tails usually append one message at a time, so bottom-followers sit at
+// count-2 after the push); a user paging through history keeps their page.
+void uiConvoTailSync() {
+  if (gStatus.tailCount == 0) {
+    sTailIdx = 0;
+    return;
+  }
+  if (sTailIdx >= gStatus.tailCount - 2) sTailIdx = gStatus.tailCount - 1;
+  if (sTailIdx < 0) sTailIdx = 0;
+  if (sTailIdx >= gStatus.tailCount) sTailIdx = gStatus.tailCount - 1;
+}
+
+// Header status dot: red = busy (agent reasoning), green = ready for
+// input. Breathing pulse via uiTickConvo; full-intensity on full redraws.
+static bool sHeaderSendMark = false;  // set by uiShowConvo from the app
+static int sDotPhase = -1;
+
+static void convoDrawStatusDot(bool bright) {
+  bool busy = sHeaderSendMark ||
+              (gStatus.valid && strcmp(gStatus.state, "running") == 0);
+  M5Lcd.fillRect(2, 18, 20, 20, TFT_BLACK);  // erase dot region
+  uint16_t col;
+  if (busy) {
+    col = bright ? TFT_RED : 0x4800;    // red / dark red
+  } else {
+    col = bright ? TFT_GREEN : 0x02A0;  // green / dark green
+  }
+  M5Lcd.fillCircle(12, 27, 6, col);
+}
+
 void uiTickConvo() {
+  // Status dot breathing (partial redraw of the dot area only).
+  {
+    int phase = (millis() / 500) % 2;
+    if (phase != sDotPhase) {
+      sDotPhase = phase;
+      convoDrawStatusDot(phase == 0);
+    }
+  }
+
   // Transcribing: animated dots on footer line 1, redrawn only on phase
   // changes (partial redraw, no flicker).
   const char* vst = gVoice.valid ? gVoice.state : "idle";
@@ -1034,16 +1082,25 @@ static void drawConvoFooter(const char* errorText, bool sendMarked,
       M5Lcd.print("hold A: redo");
     }
   } else if (sendMarked) {
+    // Just sent: idle session -> immediate thinking indicator; busy
+    // session -> queued until the next STATUS update resolves it.
     M5Lcd.setTextColor(COL_AMBER, TFT_BLACK);
-    M5Lcd.setCursor(4, y1);
-    M5Lcd.print(sentBusy ? ">> queue" : ">> sent");
+    if (sentBusy) {
+      M5Lcd.setCursor(4, y1);
+      M5Lcd.print(">> queue");
+    } else {
+      M5Lcd.fillTriangle(5, y1 + 7, 11, y1 + 7, 8, y1 + 1, COL_AMBER);
+      M5Lcd.setCursor(16, y1);
+      M5Lcd.print("thinking...");
+    }
   } else if (strcmp(st, "running") == 0) {
     M5Lcd.fillTriangle(5, y1 + 7, 11, y1 + 7, 8, y1 + 1, COL_AMBER);
     M5Lcd.setTextColor(COL_AMBER, TFT_BLACK);
     M5Lcd.setCursor(16, y1);
     M5Lcd.print("thinking...");
-    M5Lcd.setCursor(land ? sW - 8 - 9 * 6 : 4, land ? y1 : footL2Y());
-    M5Lcd.print("A: cancel");
+    M5Lcd.setTextColor(COL_FAINT, TFT_BLACK);
+    M5Lcd.setCursor(land ? sW - 8 - 25 * 6 : 4, land ? y1 : footL2Y());
+    M5Lcd.print(land ? "A: cancel  hold A: queue" : "A:cancel holdA:queue");
   } else {
     M5Lcd.setTextColor(COL_FAINT, TFT_BLACK);
     M5Lcd.setCursor(4, y1);
@@ -1066,8 +1123,10 @@ void uiShowConvo(bool sendMarked, bool sentBusy, const char* errorText) {
                                                          : "(no session)";
   const char* st = gStatus.valid ? gStatus.state : "idle";
 
-  // Header: tool icon + session name + state badge.
-  M5Lcd.pushImage(4, 20, 16, 16, toolLogo(tool), ICON_TRANSPARENT);
+  // Header: status dot + session name + state badge.
+  // Dot: red = busy (state running, or a send is in flight), green = ready.
+  sHeaderSendMark = sendMarked;
+  convoDrawStatusDot(true);
   int badgeW = strlen(st) * 6 + 8;
   drawMarquee16(MQ_CONVO_HDR, sess, 24, 20, sW - 24 - 10 - badgeW, COL_GREEN,
                 TFT_BLACK);

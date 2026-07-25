@@ -57,6 +57,9 @@ void uiRedrawConvoTail();
 // Page the conversation content by whole tail messages; delta < 0 = older,
 // > 0 = newer. Partial redraw; no-op at the ends or with no tail.
 void uiConvoPage(int delta);
-// Reset the reading position to the newest message (call on screen entry,
-// after sending, and on tail content changes).
+// Reset the reading position to the newest message (call on screen entry
+// and after sending).
 void uiConvoPageReset();
+// Sync after a tail content update: live-follow only if the user is at the
+// newest page; a user paging through history keeps their page.
+void uiConvoTailSync();

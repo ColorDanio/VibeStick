@@ -508,8 +508,9 @@ static void applyBleDirty() {
       sSendMark = false;
       gStatusTailOnly = false;  // footer changes need the full redraw
     }
-    // New tail content: snap the reading position to the newest message.
-    if (gTailChanged) uiConvoPageReset();
+    // New tail content: live-follow only when already at the newest page;
+    // a user paging through history keeps their position (refresh-safe).
+    if (gTailChanged) uiConvoTailSync();
     gTailChanged = false;
     if (sScreen == SCR_CONVO) {
       if (gStatusTailOnly) {
@@ -699,6 +700,17 @@ void loop() {
   // Home slide animation: per-frame partial redraws; on completion do the
   // full home redraw (name/state/dots/neighbors catch up).
   if (!sDimmed && uiHomeAnimTick()) sNeedRedraw = true;
+
+  // Periodic fallback refresh while on the conversation screen (~10 s).
+  // Data-only: never touches the page position or interaction state.
+  {
+    static uint32_t sRefreshNext = 0;
+    if (sScreen == SCR_CONVO && bleConnected() && !sRecording &&
+        millis() >= sRefreshNext) {
+      sRefreshNext = millis() + 10000;
+      bleNotifyCommand("refresh");
+    }
+  }
 
   // Send-mark timeout: if no STATUS ever resolves it, drop the footer mark.
   if (sSendMark && millis() - sSendMarkAt > SEND_MARK_MS) {
