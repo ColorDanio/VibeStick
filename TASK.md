@@ -122,6 +122,10 @@
 - [x] session 阅读 footer 可视化：将控制图标下移，使 7px 圆形完全位于分界线下方；
       翻页改为 `A 圈 + 左箭头`、`B 圈 + 右箭头`，并以白底黑 `A` 表示长按 A 录音，
       去除容易误解的 `AA` 提示。横竖屏预览均已目检。
+- [x] Microphone 模式 PTT/HID 语义：A 按下即发送 HID F19 down 并启动 `mode=mic`
+      的 BLE raw-audio 流，松开即停止流并发送 F19 up；B 为纯 HID F20 down/up，长按 B
+      不再离开该模式（侧边电源键返回）。Host 将流送入 PipeWire `VibeStick Mic`，供任意
+      选择该系统输入的程序使用。
 - [x] BLE HID/GATT 自动重连：daemon 持久保存首次发现的 VibeStick 地址，后续优先
       直连该地址、失败才扫描，避免 HID 自动连接后停止广播导致 Agent 状态无法同步。
       固件进一步在任一 host 连接后继续 advertising（NimBLE 默认支持多条 peripheral

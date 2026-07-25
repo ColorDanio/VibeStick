@@ -19,6 +19,8 @@
 //   home:            B = next tool (slide animation), A = select tool
 //   session picker:  B = next entry,         A = enter (new session / select)
 //   conversation:    hold A >=500 ms = record (voice.start), release = stop
+//   microphone:      A press = F19 + PTT start, A release = PTT stop + F19 up;
+//                    B is F20 only (power key exits Microphone mode)
 //                    (voice.stop); transcript ready: A = send, B = discard;
 //                    thinking/running: A = inference.cancel;
 //                    otherwise A/B = scroll content down/up
@@ -204,8 +206,9 @@ static void back() {  // one level up
 }
 
 static void handleEvent(Event e) {
-  // Long B anywhere: back one level.
-  if (e == EV_B_LONG) {
+  // Long B is back except in Microphone mode, where B belongs exclusively
+  // to the host HID mapping (F20).
+  if (e == EV_B_LONG && sScreen != SCR_MIC) {
     back();
     return;
   }
@@ -310,16 +313,22 @@ static uint32_t sFirstClickAt = 0;
 
 static void pollButtons() {
   bool convo = (sScreen == SCR_CONVO);
-  bool holdTalk = convo || (sScreen == SCR_MIC);  // hold-to-record screens
+  bool holdTalk = convo;  // conversation retains the 500 ms hold gesture
   // HID is deliberately scoped to the device-local microphone mode.  On the
   // home/session/conversation screens A/B remain exclusive CLI controls.
   bool hidMicMode = (sScreen == SCR_MIC);
 
   if (boardBtnA_wasPressed()) {
-    if (sDimmed) sSwallowGesture = true;  // wake-only gesture
+    bool wakeOnly = sDimmed;
+    if (wakeOnly) sSwallowGesture = true;  // wake-only gesture
     activity();
     sADownAt = millis();
-    if (hidMicMode) hidKey(VIBESTICK_HID_KEY_A, true);
+    if (hidMicMode) {
+      hidKey(VIBESTICK_HID_KEY_A, true);
+      // Microphone mode is PTT, not the conversation's delayed hold-to-talk:
+      // physical A down simultaneously starts the raw BLE audio stream.
+      if (!wakeOnly && !sRecording) startRecording(true);
+    }
   }
   if (boardBtnB_wasPressed()) {
     if (sDimmed) sSwallowGesture = true;
@@ -708,8 +717,9 @@ void loop() {
   pollSerialDebug();
 
 
-  // Hold-to-record: A held >=500 ms in a hold-to-record screen starts recording.
-  if ((sScreen == SCR_CONVO || sScreen == SCR_MIC) && !sRecording &&
+  // Conversation uses a 500 ms hold to avoid turning its paging A click into
+  // voice input. Microphone mode starts immediately on physical A down.
+  if (sScreen == SCR_CONVO && !sRecording &&
       sADownAt != 0 && boardBtnA_isPressed() &&
       millis() - sADownAt >= REC_HOLD_MS) {
     startRecording(sScreen == SCR_MIC);

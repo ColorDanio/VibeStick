@@ -66,7 +66,7 @@ A deeper dive lives in [docs/architecture.md](docs/architecture.md).
 - **Inference cancel** — single-click A while a session is thinking
   sends the tool's cancel key (Escape by default).
 - **Microphone mode** — the stick registers as a system input device
-  ("VibeStick Mic", PipeWire virtual source); hold A to talk into any
+  ("VibeStick Mic", PipeWire virtual source); press A to talk into any
   desktop app that binds a microphone.
 - **Dashboard** — local web app: Overview cards, master-detail Agents
   monitor, modern Settings center, Voice & Mic diagnostics with recent
@@ -83,7 +83,7 @@ A deeper dive lives in [docs/architecture.md](docs/architecture.md).
 | Conversation| older message · thinking: **cancel** · transcript ready: **send** | newer message | back |
 | Recording   | **hold to record**, release to transcribe | discard draft   | back (cancels)        |
 | Transcript  | 2×A: discard · A: send                    | discard         | back                  |
-| Microphone  | **hold to talk**, release to mute         | —               | back                  |
+| Microphone  | **PTT + F19** (press/release)             | **F20**          | back                  |
 | Anywhere    | —                                         | long-press: back| short: back · **2×: home** |
 
 Double-shake the stick to force a status refresh.
