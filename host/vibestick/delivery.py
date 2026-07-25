@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import signal
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -216,6 +217,25 @@ async def send_binding(record: dict | None, binding: str, mode: str = "auto") ->
         session, pane = value
         return await _send_binding_zellij(session, pane, binding)
     return await _send_binding_tty(value, binding, pid=int(record.get("pid") or 0))
+
+
+def interrupt_process(record: dict | None) -> bool:
+    """Request cancellation for a live process when terminal injection is unavailable.
+
+    This is deliberately limited to the explicit device ``inference.cancel``
+    command.  It is not a substitute for text delivery: SIGINT has the usual
+    terminal meaning (interrupt the current foreground operation) without
+    relying on the kernel-gated TIOCSTI ioctl.
+    """
+    pid = int((record or {}).get("pid") or 0)
+    if pid <= 1:
+        return False
+    try:
+        os.kill(pid, signal.SIGINT)
+        return True
+    except OSError as exc:
+        log.warning("SIGINT delivery to pid %s failed: %s", pid, exc)
+        return False
 
 
 async def _send_binding_tmux(pane: str, binding: str) -> bool:

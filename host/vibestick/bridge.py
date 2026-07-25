@@ -105,7 +105,7 @@ class BleakTransport:
             ("AUDIO", protocol.AUDIO_UUID),
         ):
             await client.start_notify(uuid, self._make_notify_cb(name))
-        log.info("connected to %s", device.address)
+        log.info("connected to %s", self.address)
 
     async def disconnect(self) -> None:
         if self._client is not None:

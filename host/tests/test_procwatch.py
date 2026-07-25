@@ -92,7 +92,7 @@ def write_session(dir_path, session_id, *, tool="codex", **fields):
     (dir_path / f"{session_id}.json").write_text(json.dumps(data))
 
 
-def test_presence_makes_tool_running(tmp_path):
+def test_presence_makes_tool_selectable_but_idle(tmp_path):
     watcher = StubWatcher({"codex": ProcInfo(pid=4321, name="codex", cwd="/home/u/myproj")})
     store = SessionStore(tmp_path / "sessions", config=make_config(), watcher=watcher)
     store.poll()
@@ -101,11 +101,11 @@ def test_presence_makes_tool_running(tmp_path):
     assert watcher.scanned_with[-1] == {"codex"}
 
     tools = json.loads(store.tools_payload())
-    assert tools["list"][0]["state"] == "running"
+    assert tools["list"][0]["state"] == "idle"
 
     status = json.loads(store.status_payload())
     assert status["tool"] == "codex"
-    assert status["state"] == "running"
+    assert status["state"] == "idle"
     assert status["session"] == "myproj"  # basename of /proc/PID/cwd
     assert status["ctx_pct"] == -1
     assert status["cost_usd"] == -1
@@ -116,7 +116,7 @@ def test_presence_reverts_to_idle_on_exit(tmp_path):
     watcher = StubWatcher({"codex": ProcInfo(pid=4321, name="codex", cwd="/x")})
     store = SessionStore(tmp_path / "sessions", config=make_config(), watcher=watcher)
     store.refresh_presence()
-    assert json.loads(store.tools_payload())["list"][0]["state"] == "running"
+    assert json.loads(store.tools_payload())["list"][0]["state"] == "idle"
 
     watcher.found = {}
     assert store.refresh_presence() is True
@@ -151,7 +151,7 @@ def test_presence_feature_toggle_off(tmp_path):
     # Toggling off clears previously-seen presence.
     cfg.features.process_watcher = True
     store.refresh_presence()
-    assert json.loads(store.tools_payload())["list"][0]["state"] == "running"
+    assert json.loads(store.tools_payload())["list"][0]["state"] == "idle"
     cfg.features.process_watcher = False
     assert store.refresh_presence() is True  # cleared
     assert json.loads(store.tools_payload())["list"][0]["state"] == "idle"
@@ -276,7 +276,7 @@ def test_presence_is_strictly_per_tool(tmp_path):
         status = json.loads(store.status_payload())
         sessions = json.loads(store.sessions_payload())
         if tid == "codex":
-            assert status["state"] == "running"
+            assert status["state"] == "idle"
             assert status["session"] == "proj"
             assert [e["id"] for e in sessions["list"]] == ["proc:4321"]
         else:
@@ -298,7 +298,7 @@ def test_presence_synthesizes_selectable_session(tmp_path):
     sessions = json.loads(store.sessions_payload())
     assert len(sessions["list"]) == 1
     entry = sessions["list"][0]
-    assert entry == {"id": "proc:4321", "tool": "codex", "name": "proj", "state": "running", "fg": True}
+    assert entry == {"id": "proc:4321", "tool": "codex", "name": "proj", "state": "idle", "fg": True}
     assert sessions["active"] == 0
     assert store.active_id == "proc:4321"
 
@@ -314,7 +314,7 @@ def test_presence_synthesizes_selectable_session(tmp_path):
     s2 = store.status_payload()
     assert s1 == s2
     status = json.loads(s1)
-    assert status["state"] == "running" and status["session"] == "proj"
+    assert status["state"] == "idle" and status["session"] == "proj"
 
 
 def test_synthesized_session_dropped_on_process_exit(tmp_path):

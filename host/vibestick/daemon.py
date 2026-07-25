@@ -208,6 +208,12 @@ async def run_daemon(
             ok = await delivery.send_binding(
                 rec.raw if rec else None, binding, mode=_delivery_mode()
             )
+            # A live /proc-only session can have a known pid but no usable
+            # terminal transport: current Linux kernels reject TIOCSTI from a
+            # background daemon.  An explicit Cancel may safely fall back to
+            # SIGINT; text/voice delivery never uses this fallback.
+            if not ok:
+                ok = delivery.interrupt_process(rec.raw if rec else None)
             if not ok:
                 push_status_error("cancel failed: " + _delivery_hint(rec))
 

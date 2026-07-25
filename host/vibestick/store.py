@@ -276,9 +276,10 @@ class SessionStore:
     def _presence_record(self, tool_id: str | None) -> SessionRecord | None:
         """Synthesize one session record for a presence-only tool.
 
-        Id "proc:<pid>", name from the process cwd label, state running;
-        no delivery fields (tmux/tty cannot be determined reliably), so
-        messages to it are dropped like sessions without delivery info.
+        Id "proc:<pid>", name from the process cwd label, state idle.
+        Process existence alone does not establish that an AI CLI is
+        generating: adapters provide the authoritative running/waiting state.
+        The process environment may provide a zellij or tty delivery target.
         """
         info = self.presence(tool_id)
         if info is None or tool_id is None:
@@ -288,7 +289,7 @@ class SessionStore:
         label = label_fn() if callable(label_fn) else (getattr(info, "cwd_basename", "") or "")
         status = protocol.SessionStatus(
             tool=tool_id,
-            state="running",
+            state="idle",
             session=label,
             ctx_pct=-1,
             cost_usd=-1.0,
@@ -299,7 +300,7 @@ class SessionStore:
             "id": f"{PRESENCE_ID_PREFIX}{info.pid}",
             "tool": tool_id,
             "session": label,
-            "state": "running",
+            "state": "idle",
             "updated": int(since),
             "pid": info.pid,
         }
@@ -617,9 +618,10 @@ class SessionStore:
                 and t.id not in discovered_tools
                 and self._presence.get(t.id) is not None
             ):
-                # A live CLI process means running — but adapter records
-                # and discovered sessions (richer state) always win.
-                state = "running"
+                # A live CLI process is selectable and foreground, but it is
+                # not evidence that the CLI is currently generating.  Only an
+                # adapter/discovered transcript may report running/waiting.
+                state = "idle"
             elif state is None:
                 state = "idle"
             tools.append(

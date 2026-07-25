@@ -71,9 +71,17 @@
       Microphone 中的 `m`、`w` 等变形；ASCII 改用 DejaVu Sans Mono 13px，中文仍用
       文泉驿微黑，预览验证后已刷入当前 M5StickC Plus（2026-07-25）
 - [x] opencode 实时状态同步：旧 `opencode.db` 历史会话曾错误压过正在运行的
-      zellij 进程；保留 adapter 优先，同时将 live presence 会话置顶。实测
-      `hermes-agent` 已显示为 `running` / foreground。
+      CLI 进程；保留 adapter 优先，同时将 live presence 会话置顶。仅凭进程存在
+      不再误报 `thinking/running`，改显示为 `idle` + foreground（真正的推理状态仅由
+      adapter / transcript 提供），避免 Button A 被错误变成“取消”。
+- [x] 无 multiplexor 的取消兜底：对于仅有 PID/tty、但内核禁止 TIOCSTI 的 live
+      CLI，设备显式 `inference.cancel` 在键盘注入失败后会发送 SIGINT；语音文本仍须
+      在 tmux/zellij 运行才可可靠输入。实机 `hermes-agent` 已确认没有有效 zellij
+      session，仅为 `/dev/pts/3`，这正是此前“取消看似未发送”的根因。
 - [x] BLE HID/GATT 自动重连：daemon 持久保存首次发现的 VibeStick 地址，后续优先
       直连该地址、失败才扫描，避免 HID 自动连接后停止广播导致 Agent 状态无法同步。
+      固件进一步在任一 host 连接后继续 advertising（NimBLE 默认支持多条 peripheral
+      链路）；2026-07-25 实测 HID 仍为 Connected，同时 bridge 已连接并下发
+      `hermes-agent idle + foreground`。当前固件已刷入 M5StickC Plus。
 - [ ] GitHub Actions 配额恢复后重跑 CI 验证 release 流水线
 - [ ] 中文在 stick 上更精细的排版（间距、抗锯齿）按实机观感决定

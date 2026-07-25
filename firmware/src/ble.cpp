@@ -120,6 +120,10 @@ class ServerCB : public NimBLEServerCallbacks {
     // Robust link parameters: 30-50 ms interval, no latency, 3 s
     // supervision timeout (default 5-6 s is slow to detect a lost link).
     pServer->updateConnParams(desc->conn_handle, 24, 40, 0, 300);
+    // Keep advertising after the HID host connects.  NimBLE supports three
+    // peripheral links by default; without this the keyboard's automatic
+    // BlueZ connection prevents the GATT bridge from discovering/attaching.
+    pServer->startAdvertising();
   }
   void onConnect(NimBLEServer* pServer) override {
     sConnected = true;
@@ -127,10 +131,10 @@ class ServerCB : public NimBLEServerCallbacks {
     Serial.println("[BLE] host connected");
   }
   void onDisconnect(NimBLEServer* pServer) override {
-    sConnected = false;
+    sConnected = pServer->getConnectedCount() > 0;
     gConnDirty = true;
     Serial.println("[BLE] host disconnected, advertising");
-    NimBLEDevice::startAdvertising();
+    pServer->startAdvertising();
   }
 };
 

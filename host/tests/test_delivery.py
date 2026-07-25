@@ -78,6 +78,19 @@ def test_send_binding_no_delivery_method():
     assert run(send_binding({"tmux": "%1"}, "")) is False
 
 
+def test_interrupt_process_sends_sigint(monkeypatch):
+    calls = []
+    monkeypatch.setattr(delivery.os, "kill", lambda pid, sig: calls.append((pid, sig)))
+    assert delivery.interrupt_process({"pid": 4321}) is True
+    assert calls == [(4321, delivery.signal.SIGINT)]
+
+
+def test_interrupt_process_rejects_missing_or_failed_pid(monkeypatch):
+    assert delivery.interrupt_process({}) is False
+    monkeypatch.setattr(delivery.os, "kill", lambda *_: (_ for _ in ()).throw(ProcessLookupError()))
+    assert delivery.interrupt_process({"pid": 4321}) is False
+
+
 def test_send_binding_tmux_failure(monkeypatch):
     async def fake_exec(*argv, **kwargs):
         return FakeProc(returncode=1, stderr=b"no pane")
