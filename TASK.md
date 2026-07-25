@@ -94,6 +94,9 @@
 - [x] 默认四 CLI 的 id/命令映射：独立 wrapper 启动会显式传递配置工具 id，修复
       `claude-code → claude` 与 `kimi-cli → kimi` 的名称不一致；Codex、opencode 保持
       同名。四类工具均可通过同一发现、监控、tmux 新建与 plain-tty 自动语音接力路径工作。
+- [x] systemd zellij 投递路径：user service 的 PATH 不含 `~/.cargo/bin`，曾使活跃
+      Kimi/zellij session 报 `No such file or directory: zellij`。delivery 现优先 PATH，
+      再回退到 `~/.cargo/bin/zellij`（或显式 `VIBESTICK_ZELLIJ_BIN`），已覆盖测试。
 - [x] BLE HID/GATT 自动重连：daemon 持久保存首次发现的 VibeStick 地址，后续优先
       直连该地址、失败才扫描，避免 HID 自动连接后停止广播导致 Agent 状态无法同步。
       固件进一步在任一 host 连接后继续 advertising（NimBLE 默认支持多条 peripheral

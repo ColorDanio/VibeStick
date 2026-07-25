@@ -78,22 +78,34 @@ def test_deliver_zellij_write_chars_then_enter(spawned):
     ok = asyncio.run(delivery.deliver_text(
         {"zellij": "work", "zellij_pane": "terminal_3"}, "hello"))
     assert ok is True
-    assert spawned == [
-        ("zellij", "--session", "work", "action", "write-chars", "hello", "-p", "terminal_3"),
-        ("zellij", "--session", "work", "action", "write", "13", "-p", "terminal_3"),
+    assert [argv[1:] for argv in spawned] == [
+        ("--session", "work", "action", "write-chars", "hello", "-p", "terminal_3"),
+        ("--session", "work", "action", "write", "13", "-p", "terminal_3"),
     ]
 
 
 def test_send_binding_zellij_bytes(spawned):
     ok = asyncio.run(delivery.send_binding({"zellij": "work"}, "escape"))
     assert ok is True
-    assert spawned == [("zellij", "--session", "work", "action", "write", "27")]
+    assert [argv[1:] for argv in spawned] == [("--session", "work", "action", "write", "27")]
 
 
 def test_send_binding_zellij_literal_uses_write_chars(spawned):
     ok = asyncio.run(delivery.send_binding({"zellij": "work"}, ":q"))
     assert ok is True
-    assert spawned == [("zellij", "--session", "work", "action", "write-chars", ":q")]
+    assert [argv[1:] for argv in spawned] == [("--session", "work", "action", "write-chars", ":q")]
+
+
+def test_zellij_binary_uses_cargo_fallback(monkeypatch, tmp_path):
+    cargo = tmp_path / ".cargo/bin"
+    cargo.mkdir(parents=True)
+    binary = cargo / "zellij"
+    binary.write_text("")
+    binary.chmod(0o755)
+    monkeypatch.delenv("VIBESTICK_ZELLIJ_BIN", raising=False)
+    monkeypatch.setattr(delivery.shutil, "which", lambda _: None)
+    monkeypatch.setattr(delivery.Path, "home", lambda: tmp_path)
+    assert delivery._zellij_binary() == str(binary)
 
 
 def test_send_binding_zellij_no_session(spawned):
@@ -104,8 +116,9 @@ def test_send_binding_zellij_no_session(spawned):
 def test_launch_zellij_pane_argv(spawned):
     ok = asyncio.run(launch_zellij_pane("work", "kimi-cli", "kimi chat --fast"))
     assert ok is True
-    assert spawned == [("zellij", "--session", "work", "action", "new-pane",
-                        "--", "kimi", "chat", "--fast")]
+    assert [argv[1:] for argv in spawned] == [
+        ("--session", "work", "action", "new-pane", "--", "kimi", "chat", "--fast")
+    ]
     assert asyncio.run(launch_zellij_pane("", "x", "kimi")) is False
 
 

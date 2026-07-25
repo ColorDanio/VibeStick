@@ -15,6 +15,7 @@ import logging
 import os
 import signal
 import shlex
+import shutil
 import time
 from pathlib import Path
 
@@ -290,13 +291,27 @@ _ZJ_KEY_BYTES: dict[str, list[int]] = {
 
 
 def _zellij_argv(session: str, pane: str, *args: str) -> list[str]:
-    argv = ["zellij"]
+    argv = [_zellij_binary()]
     if session:
         argv += ["--session", session]
     argv += ["action", *args]
     if pane:
         argv += ["-p", pane]
     return argv
+
+
+def _zellij_binary() -> str:
+    """Locate zellij when the daemon is started by systemd with a minimal PATH."""
+    configured = os.environ.get("VIBESTICK_ZELLIJ_BIN", "")
+    if configured:
+        return configured
+    found = shutil.which("zellij")
+    if found:
+        return found
+    cargo = Path.home() / ".cargo" / "bin" / "zellij"
+    if cargo.is_file() and os.access(cargo, os.X_OK):
+        return str(cargo)
+    return "zellij"  # keep the useful OS error when it is genuinely absent
 
 
 async def _run_zellij(argv: list[str]) -> bool:
