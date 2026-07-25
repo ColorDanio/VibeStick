@@ -39,8 +39,14 @@
 
 ## 进行中
 
-- [ ] **BLE HID 键盘**（agent-2 开发中）：按键 A/B → F19/F20，可绑定 ChatGPT app /
-      openwhispr 快捷键；麦克风模式界面极简化（大图标 + RMS + 最少文字）
+- [ ] **BLE HID 键盘**（agent-2 开发中，进行中快照 16:52）：
+      - 已完成：`firmware/src/hid.cpp/hid.h` 新建（标准 boot keyboard report map，
+        扩展 usage 到 F24 以容纳 F19/F20）；ble.cpp 广播加 HID service(0x1812)+
+        keyboard appearance(0x03C1)，与现有 GATT 服务同设备共存；
+      - 进行中：main.cpp 按键事件挂 HID 发送（+10 行）、mic 模式界面精简（ui.cpp
+        +47/-11）；
+      - 未验证：Ubuntu 配对、F19/F20 键事件实测（evdev）、HID 与 daemon GATT 共存、
+        双 env 构建刷机。
 - [ ] **屏幕可视化调试**（排队，HID 完成后）：串口帧缓冲导出（看到真实屏幕）+
       按键事件注入遍历全部界面，横竖屏各出图，产物统一放
       /tmp/vibestick-previews/；重点修字母左右居中、中文上下裁剪
