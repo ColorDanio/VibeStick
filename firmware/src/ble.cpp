@@ -33,6 +33,19 @@ static bool sConnected = false;
 
 bool bleConnected() { return sConnected; }
 
+// Belt-and-suspenders for the "stops advertising forever" field symptom:
+// if the link is down but advertising somehow didn't restart (NimBLE
+// restart failure during disconnect storms), kick it again. Cheap enough
+// to call every loop pass.
+void bleEnsureAdvertising() {
+  if (sConnected) return;
+  NimBLEAdvertising* pAdv = NimBLEDevice::getAdvertising();
+  if (pAdv != nullptr && !pAdv->isAdvertising()) {
+    Serial.println("[BLE] advertising lost, restarting");
+    NimBLEDevice::startAdvertising();
+  }
+}
+
 static void notifyJson(NimBLECharacteristic* ch, const char* json) {
   if (!sConnected || ch == nullptr) return;
   Serial.printf("[BLE] tx: %s\n", json);
@@ -59,13 +72,53 @@ void bleNotifyCommand(const char* cmd, const char* key, const char* val) {
 
 void bleNotifyAudio(const uint8_t* data, size_t len) {
   if (!sConnected || pAudioChar == nullptr || len == 0) return;
+  if (pAudioChar->getSubscribedCount() == 0) return;  // nobody listening
   pAudioChar->setValue(data, len);
   pAudioChar->notify();
 }
 
 // ---- Callbacks ----
 
+// Human-readable disconnect reason codes. 0x00-0xFF are HCI errors;
+// 0x2xx are NimBLE host stack codes (BLE_HS_E*, base 0x200).
+static const char* gapReason(int rc) {
+  switch (rc) {
+    case 0x08: return "supervision timeout (link lost)";
+    case 0x13: return "remote user terminated";
+    case 0x16: return "local host terminated";
+    case 0x22: return "LMP/LL response timeout";
+    case 0x28: return "MIC failure";
+    case 0x3D: return "instant passed";
+    case 0x3E: return "connection failed to establish";
+    case 0x20B: return "nimble: OS failure";
+    case 0x20C: return "nimble: controller failure";
+    case 0x20D: return "nimble: stack timeout";
+    case 0x213: return "nimble: HCI response timeout (local stack)";
+    case 0x214: return "nimble: host not synced";
+    default: return "?";
+  }
+}
+
+// Device-level GAP listener: gives us the disconnect REASON code, which the
+// server-callback desc does not carry.
+static int gapEventHandler(ble_gap_event* event, void* arg) {
+  if (event->type == BLE_GAP_EVENT_DISCONNECT) {
+    Serial.printf("[BLE] disconnect reason: 0x%02X (%s)\n",
+                  event->disconnect.reason,
+                  gapReason(event->disconnect.reason));
+  }
+  return 0;
+}
+
 class ServerCB : public NimBLEServerCallbacks {
+  void onConnect(NimBLEServer* pServer, ble_gap_conn_desc* desc) override {
+    sConnected = true;
+    gConnDirty = true;
+    Serial.printf("[BLE] host connected (handle %d)\n", desc->conn_handle);
+    // Robust link parameters: 30-50 ms interval, no latency, 3 s
+    // supervision timeout (default 5-6 s is slow to detect a lost link).
+    pServer->updateConnParams(desc->conn_handle, 24, 40, 0, 300);
+  }
   void onConnect(NimBLEServer* pServer) override {
     sConnected = true;
     gConnDirty = true;
@@ -241,6 +294,7 @@ void bleInit() {
   NimBLEDevice::init("VibeStick");
   NimBLEDevice::setMTU(247);
   NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+  NimBLEDevice::setCustomGapHandler(gapEventHandler);  // disconnect reasons
 
   NimBLEServer* pServer = NimBLEDevice::createServer();
   pServer->setCallbacks(new ServerCB());

@@ -8,6 +8,7 @@ from vibestick.bridge import Bridge
 
 def make_bridge():
     transport = FakeTransport()
+    transport.connected = True  # sync() skips writes while disconnected
     events = {"input": [], "command": [], "audio": []}
     bridge = Bridge(
         transport,
@@ -68,17 +69,15 @@ def test_push_voice_skipped_when_disconnected():
 
 def test_bridge_state_accessor():
     bridge, transport, _ = make_bridge()
+    transport.connected = False  # override make_bridge's default for this test
     st = bridge.state()
     assert st["connected"] is False
     assert st["connected_since"] is None
     assert st["last_sync"] is None
 
+    transport.connected = True  # sync() only writes while connected
     asyncio.run(bridge.sync())
     st = bridge.state()
     assert st["last_sync"] is not None
-    assert st["connected"] is False  # sync alone does not connect
-
-    transport.connected = True
-    st = bridge.state()
     assert st["connected"] is True
     assert st["device_address"] == "AA:BB:CC:DD:EE:FF"

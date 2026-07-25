@@ -97,3 +97,6 @@ void bleNotifyCommand(const char* cmd, const char* key = nullptr,
 
 // AUDIO characteristic: binary PCM chunk (8 kHz, 8-bit unsigned, mono).
 void bleNotifyAudio(const uint8_t* data, size_t len);
+
+// Restart advertising if it ever stops while disconnected (call each loop).
+void bleEnsureAdvertising();

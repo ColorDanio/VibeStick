@@ -1,5 +1,7 @@
 #include "board.h"
 
+#include <esp_task_wdt.h>
+
 #include "ble.h"
 #include "mic.h"
 #include "ui.h"
@@ -651,10 +653,19 @@ void setup() {
 
   sLastActivity = millis();
   pollBattery(true);
+
+  // Freeze insurance: the loop task is not covered by any watchdog in
+  // stock Arduino. An 8 s TWDT turns any unknown hang (observed in the
+  // field as "screen frozen + no advertising + silent serial forever")
+  // into a self-healing panic reset with [BOOT] reset reason evidence.
+  esp_task_wdt_init(8, true);  // no-op if the core already initialized it
+  esp_task_wdt_add(xTaskGetCurrentTaskHandle());
+  Serial.println("[BOOT] loopTask TWDT armed (8 s)");
 }
 
 void loop() {
   boardUpdate();
+  esp_task_wdt_reset();  // feed the loop watchdog every pass
 
   pollButtons();
 
@@ -681,6 +692,7 @@ void loop() {
   pollPowerButton();
   pollBattery(false);
   pollLed();
+  bleEnsureAdvertising();
   pumpAudio();
   if (!sDimmed) uiMarqueeTick();  // redraws only moved text bands
 

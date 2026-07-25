@@ -164,12 +164,13 @@ def test_poll_loop_survives_sync_failure(tmp_path):
     class FlakyTransport(FakeTransport):
         def __init__(self):
             super().__init__()
-            self.fail_status = 1  # first STATUS write raises
+            self.fail_status = 2  # connect sync OK, next STATUS write raises
 
         async def write_status(self, payload):
             if self.fail_status:
                 self.fail_status -= 1
-                raise OSError("BLE disconnected mid-sync")
+                if not self.fail_status:
+                    raise OSError("BLE disconnected mid-sync")
             await super().write_status(payload)
 
     transport = FlakyTransport()

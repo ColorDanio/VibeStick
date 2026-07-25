@@ -90,21 +90,23 @@ class BleakTransport:
     # Writes use response=True so BlueZ falls back to the long-write
     # procedure when a payload exceeds MTU-3 (244 B) — TOOLS/SESSIONS
     # legitimately grow past that with several tools/sessions.
+    async def _write(self, uuid: str, payload: bytes) -> None:
+        client = self._client
+        if client is None:
+            raise ConnectionError("BLE client disconnected")
+        await client.write_gatt_char(uuid, payload, response=True)
+
     async def write_status(self, payload: bytes) -> None:
-        assert self._client is not None
-        await self._client.write_gatt_char(protocol.STATUS_UUID, payload, response=True)
+        await self._write(protocol.STATUS_UUID, payload)
 
     async def write_sessions(self, payload: bytes) -> None:
-        assert self._client is not None
-        await self._client.write_gatt_char(protocol.SESSIONS_UUID, payload, response=True)
+        await self._write(protocol.SESSIONS_UUID, payload)
 
     async def write_tools(self, payload: bytes) -> None:
-        assert self._client is not None
-        await self._client.write_gatt_char(protocol.TOOLS_UUID, payload, response=True)
+        await self._write(protocol.TOOLS_UUID, payload)
 
     async def write_voice(self, payload: bytes) -> None:
-        assert self._client is not None
-        await self._client.write_gatt_char(protocol.VOICE_UUID, payload, response=True)
+        await self._write(protocol.VOICE_UUID, payload)
 
     def _make_notify_cb(self, name: str):
         def cb(_sender, data: bytearray) -> None:
@@ -180,6 +182,8 @@ class Bridge:
 
     async def sync(self, force: bool = False) -> None:
         """Write STATUS/SESSIONS/TOOLS if changed (or forced, e.g. on connect)."""
+        if not self.transport.is_connected():
+            return  # nothing to write to; callers poll sync() unconditionally
         status, sessions, tools = self._get_payloads()
         for name, payload, writer in (
             ("status", status, self.transport.write_status),
