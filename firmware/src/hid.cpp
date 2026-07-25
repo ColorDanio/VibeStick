@@ -39,6 +39,15 @@ static const uint8_t sReportMap[] = {
 
 static NimBLECharacteristic* sInput = nullptr;
 
+class HidReportCallbacks : public NimBLECharacteristicCallbacks {
+  void onSubscribe(NimBLECharacteristic* /*characteristic*/,
+                   ble_gap_conn_desc* desc, uint16_t value) override {
+    Serial.printf("[HID] report subscription handle=%u value=0x%04X encrypted=%d\n",
+                  desc ? desc->conn_handle : 0, value,
+                  desc ? (int)desc->sec_state.encrypted : 0);
+  }
+};
+
 void hidInit(NimBLEServer* pServer) {
   NimBLEDevice::setSecurityAuth(true, false, false);  // bonding, legacy pairing
   NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);  // just works
@@ -55,6 +64,7 @@ void hidInit(NimBLEServer* pServer) {
   // started. With the host now bonded, use NimBLE's standard encrypted HOGP
   // report endpoint and Report Reference descriptor.
   sInput = hid->inputReport(1);
+  sInput->setCallbacks(new HidReportCallbacks());
   // HID Information characteristic (0x2a4a) is created empty by the
   // library; BlueZ's hog-lib refuses to set up the profile without it.
   // v1.11, country 0, flags: remote-wake + normally-connectable.
