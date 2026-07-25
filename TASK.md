@@ -43,13 +43,21 @@
       - 已完成：`firmware/src/hid.cpp/hid.h` 新建（标准 boot keyboard report map，
         扩展 usage 到 F24 容纳 F19/F20）；ble.cpp 广播加 HID service(0x1812)+
         keyboard appearance(0x03C1)；platformio.ini 相关调整；
-      - 进行中：main.cpp 按键事件挂 HID 发送（+15 行）、mic 模式界面精简（ui.cpp
-        +47/-11）；
-      - 未验证：双 env 构建、Ubuntu 配对、F19/F20 键事件实测、HID 与 daemon GATT
-        共存、刷机。
+      - 已完成：main.cpp 按键事件挂 HID 发送（按下/释放），mic 模式界面精简（ui.cpp
+        +47/-11）；移除临时自动 F19 演示事件；`m5stick-c` / `m5stick-s3` 双 env
+        构建通过；当前固件已刷入 M5StickC Plus（`/dev/ttyUSB0`，2026-07-25）。
+      - 已验证：Ubuntu 已配对/绑定/信任并连接；同时暴露 HID (0x1812) 与
+        VibeStick GATT 服务；内核已注册键盘输入 `event21`；host daemon 已实际
+        连接并同步 Agent CLI 首页工具（Claude Code / Codex / opencode / Kimi CLI）。
+      - 修正：HID 报告严格仅在 Microphone 模式下由 A/B 发出；Home、Sessions、
+        Conversation 保留原有 Agent CLI 控制，Microphone 仍只是工具轮转中的一项。
+      - 未验证：物理 A/B 的 F19/F20 键事件实测。
 - [ ] **屏幕可视化调试**（排队，HID 完成后）：串口帧缓冲导出（看到真实屏幕）+
       按键事件注入遍历全部界面，横竖屏各出图，产物统一放
-      /tmp/vibestick-previews/；重点修字母左右居中、中文上下裁剪
+      /tmp/vibestick-previews/；重点修字母左右居中、中文上下裁剪；已探测实机
+      ST7789 `readRect` 回读始终为全黑（该板 LCD 无可用 readback/MISO），因此
+      后续截图须改为软件 framebuffer 镜像或外部相机；离线同字库预览已复现
+      CJK 在右边界被硬截断。
 
 ## 待办 / 已知遗留
 
@@ -59,5 +67,13 @@
       （代码就绪，未做真实外网调用）
 - [ ] StickS3 实机验证：按键极性、IMU 轴向、ES8311 电平（当前仅编译通过）
 - [ ] 中文 GB2312 二级字库未覆盖（显示 `?`）；2bpp 抗锯齿未做（体积×2）
+- [x] 主菜单 ASCII 字形修复：原文泉驿比例字体被硬裁进 8px 单元，导致 Kimi /
+      Microphone 中的 `m`、`w` 等变形；ASCII 改用 DejaVu Sans Mono 13px，中文仍用
+      文泉驿微黑，预览验证后已刷入当前 M5StickC Plus（2026-07-25）
+- [x] opencode 实时状态同步：旧 `opencode.db` 历史会话曾错误压过正在运行的
+      zellij 进程；保留 adapter 优先，同时将 live presence 会话置顶。实测
+      `hermes-agent` 已显示为 `running` / foreground。
+- [x] BLE HID/GATT 自动重连：daemon 持久保存首次发现的 VibeStick 地址，后续优先
+      直连该地址、失败才扫描，避免 HID 自动连接后停止广播导致 Agent 状态无法同步。
 - [ ] GitHub Actions 配额恢复后重跑 CI 验证 release 流水线
 - [ ] 中文在 stick 上更精细的排版（间距、抗锯齿）按实机观感决定

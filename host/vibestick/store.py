@@ -156,13 +156,15 @@ class SessionStore:
         return True
 
     def presence(self, tool_id: str | None):
-        """Live ProcInfo for a tool, or None (adapter/discovered data wins)."""
+        """Live ProcInfo for a tool, or None when an adapter owns it.
+
+        Discovered on-disk sessions are history, not a live-process source;
+        they must not suppress the current process record.
+        """
         if tool_id is None:
             return None
         if any(r.status.tool == tool_id for r in self._records.values()):
             return None  # adapter data wins
-        if self._discovered_ids_for(tool_id):
-            return None  # discovered sessions beat bare presence
         return self._presence.get(tool_id)
 
     # -- session discovery (CLI on-disk stores) -------------------------------
@@ -332,10 +334,11 @@ class SessionStore:
         ids = [i for i in ids if self._records[i].status.tool == self.selected_tool]
         if not ids:
             ids = self._discovered_ids_for(self.selected_tool)
-        if not ids:
-            rec = self._presence_record(self.selected_tool)
-            if rec is not None:
-                return [rec.id]
+        # A live CLI is the user's current session.  Keep discovered history,
+        # but never let stale on-disk sessions hide it (notably opencode.db).
+        rec = self._presence_record(self.selected_tool)
+        if rec is not None:
+            return [rec.id] + ids
         return ids
 
     def _ensure_active(self) -> bool:
@@ -378,10 +381,9 @@ class SessionStore:
         if not ids:
             ids = self._discovered_ids_for(tool_id)
         records = [r for r in (self._record_for(i) for i in ids) if r is not None]
-        if not records:
-            rec = self._presence_record(tool_id)
-            if rec is not None:
-                records = [rec]
+        rec = self._presence_record(tool_id)
+        if rec is not None:
+            records = [rec] + records
         return records
 
     def adapter_online(self, tool_id: str, fresh_sec: float = 600.0) -> bool:

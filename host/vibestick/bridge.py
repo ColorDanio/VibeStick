@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import time
+from pathlib import Path
 from typing import Callable, Protocol
 
 from . import protocol
@@ -18,6 +19,7 @@ log = logging.getLogger(__name__)
 
 BACKOFF_INITIAL_SEC = 1.0
 BACKOFF_MAX_SEC = 30.0
+DEVICE_CACHE_PATH = Path.home() / ".vibestick" / "device-address"
 
 NotifyCallback = Callable[[str, bytes], None]  # (characteristic name, payload)
 AudioCallback = Callable[[bytes], None]
@@ -48,10 +50,25 @@ class Transport(Protocol):
 class BleakTransport:
     """Real transport backed by bleak."""
 
-    def __init__(self) -> None:
+    def __init__(self, address_cache: Path = DEVICE_CACHE_PATH) -> None:
         self._client = None  # bleak.BleakClient, imported lazily
         self._handler: NotifyCallback | None = None
         self.address: str | None = None  # device address while connected
+        self._address_cache = address_cache
+
+    def _cached_address(self) -> str | None:
+        try:
+            address = self._address_cache.read_text().strip()
+        except OSError:
+            return None
+        return address or None
+
+    def _cache_address(self, address: str) -> None:
+        try:
+            self._address_cache.parent.mkdir(parents=True, exist_ok=True)
+            self._address_cache.write_text(address + "\n")
+        except OSError as exc:
+            log.warning("cannot cache VibeStick address: %s", exc)
 
     def is_connected(self) -> bool:
         return self._client is not None and self._client.is_connected
@@ -62,14 +79,26 @@ class BleakTransport:
     async def connect(self) -> None:
         from bleak import BleakClient, BleakScanner
 
-        log.info("scanning for %r ...", protocol.DEVICE_NAME)
-        device = await BleakScanner.find_device_by_name(protocol.DEVICE_NAME, timeout=15.0)
-        if device is None:
-            raise ConnectionError(f"device {protocol.DEVICE_NAME!r} not found")
-        client = BleakClient(device, disconnected_callback=self._on_disconnect)
-        await client.connect()
+        cached = self._cached_address()
+        client = None
+        if cached:
+            log.info("connecting to cached VibeStick address %s ...", cached)
+            try:
+                client = BleakClient(cached, disconnected_callback=self._on_disconnect)
+                await client.connect()
+            except Exception as exc:  # stale cache: fall back to discovery
+                log.info("cached VibeStick address unavailable: %s", exc)
+                client = None
+        if client is None:
+            log.info("scanning for %r ...", protocol.DEVICE_NAME)
+            device = await BleakScanner.find_device_by_name(protocol.DEVICE_NAME, timeout=15.0)
+            if device is None:
+                raise ConnectionError(f"device {protocol.DEVICE_NAME!r} not found")
+            client = BleakClient(device, disconnected_callback=self._on_disconnect)
+            await client.connect()
         self._client = client
-        self.address = str(device.address)
+        self.address = str(client.address)
+        self._cache_address(self.address)
         for name, uuid in (
             ("INPUT", protocol.INPUT_UUID),
             ("COMMAND", protocol.COMMAND_UUID),

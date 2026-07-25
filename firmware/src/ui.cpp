@@ -1191,23 +1191,48 @@ void uiShowConvo(bool sendMarked, bool sentBusy, const char* errorText) {
 // (uiShowRecording) takes over. No transcript/confirm states.
 
 void uiShowMic(const char* errorText) {
+  // Minimal microphone screen: big mic glyph in a ring, one status line,
+  // one hint line. Recording switches to the full-screen RMS view.
   M5Lcd.fillScreen(TFT_BLACK);
-  drawStatusBar("mic");
-
-  M5Lcd.setTextSize(1);
-  M5Lcd.setTextColor(COL_GREEN, TFT_BLACK);
-  M5Lcd.setCursor(4, 20);
-  M5Lcd.print("mic@vibestick ~ %");
+  drawStatusBar(nullptr);
 
   int cx = sW / 2;
-  int cy = sH / 2 - 10;
-  M5Lcd.pushImage(cx - 12, cy - 12, 24, 24, icon_mic24, ICON_TRANSPARENT);
-  centerText("long press A to record", cy + 20, 1, COL_DIM);
+  bool land = landscape();
+  int ringR = land ? 26 : 30;
+  int cy = land ? 52 : (sH * 36) / 100;
 
-  // Footer: recent error, if any.
+  M5Lcd.drawCircle(cx, cy, ringR, COL_FAINT);
+  // Mic glyph at 2x (per-pixel) inside the ring.
+  for (int gy = 0; gy < 24; ++gy) {
+    for (int gx = 0; gx < 24; ++gx) {
+      uint16_t px = pgm_read_word(icon_mic24 + gy * 24 + gx);
+      if (px != ICON_TRANSPARENT) {
+        M5Lcd.fillRect(cx - 24 + gx * 2, cy - 24 + gy * 2, 2, 2, TFT_WHITE);
+      }
+    }
+  }
+
+  // "VibeStick Mic" (16 px rich text) + connection state below it.
+  const char* title = "VibeStick Mic";
+  drawText16((sW - textWidth16(title)) / 2, cy + ringR + 10, title, TFT_WHITE,
+             TFT_BLACK);
+  const char* st = bleConnected() ? "connected" : "advertising";
+  uint16_t stCol = bleConnected() ? TFT_GREEN : COL_AMBER;
+  centerText(st, cy + ringR + 30, 1, stCol);
+
+  // Bottom hint line(s).
   M5Lcd.drawFastHLine(0, footDivY(), sW, COL_FAINT);
+  M5Lcd.setTextSize(1);
+  M5Lcd.setTextColor(COL_FAINT, TFT_BLACK);
+  if (land) {
+    centerText("hold A: talk  B: F20  pwr: back", footL1Y(), 1, COL_FAINT);
+  } else {
+    centerText("hold A: talk  B: F20", footL1Y(), 1, COL_FAINT);
+    centerText("pwr: back", footL2Y(), 1, COL_FAINT);
+  }
+
+  // Recent voice error, if any (replaces the hint line).
   if (errorText != nullptr) {
-    M5Lcd.setTextSize(1);
     M5Lcd.setTextColor(TFT_RED, TFT_BLACK);
     M5Lcd.setCursor(4, footL1Y());
     M5Lcd.print("! ");

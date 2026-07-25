@@ -3,6 +3,8 @@
 #include <NimBLEDevice.h>
 #include <ArduinoJson.h>
 
+#include "hid.h"
+
 // UUIDs from docs/protocol.md (v2)
 static const char* SERVICE_UUID  = "4b1e0001-5a3f-4c8d-9b6e-7f2a1c0d3e5f";
 static const char* STATUS_UUID   = "4b1e0002-5a3f-4c8d-9b6e-7f2a1c0d3e5f";
@@ -323,8 +325,12 @@ void bleInit() {
 
   pService->start();
 
+  hidInit(pServer);  // BLE HID keyboard on the same device/link
+
   NimBLEAdvertising* pAdv = NimBLEDevice::getAdvertising();
   pAdv->addServiceUUID(SERVICE_UUID);
+  pAdv->addServiceUUID(NimBLEUUID((uint16_t)0x1812));  // HID service
+  pAdv->setAppearance(0x03C1);                         // keyboard
   pAdv->setScanResponse(true);  // device name goes in the scan response
   pAdv->start();
 

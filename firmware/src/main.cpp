@@ -4,6 +4,7 @@
 #include <esp_task_wdt.h>
 
 #include "ble.h"
+#include "hid.h"
 #include "mic.h"
 #include "ui.h"
 
@@ -310,21 +311,27 @@ static uint32_t sFirstClickAt = 0;
 static void pollButtons() {
   bool convo = (sScreen == SCR_CONVO);
   bool holdTalk = convo || (sScreen == SCR_MIC);  // hold-to-record screens
+  // HID is deliberately scoped to the device-local microphone mode.  On the
+  // home/session/conversation screens A/B remain exclusive CLI controls.
+  bool hidMicMode = (sScreen == SCR_MIC);
 
   if (boardBtnA_wasPressed()) {
     if (sDimmed) sSwallowGesture = true;  // wake-only gesture
     activity();
     sADownAt = millis();
+    if (hidMicMode) hidKey(VIBESTICK_HID_KEY_A, true);
   }
   if (boardBtnB_wasPressed()) {
     if (sDimmed) sSwallowGesture = true;
     activity();
     sBDownAt = millis();
+    if (hidMicMode) hidKey(VIBESTICK_HID_KEY_B, true);
   }
 
   if (boardBtnA_wasReleased() && sADownAt != 0) {
     uint32_t dur = millis() - sADownAt;
     sADownAt = 0;
+    if (hidMicMode) hidKey(VIBESTICK_HID_KEY_A, false);
     if (sSwallowGesture && !boardBtnA_isPressed() && !boardBtnB_isPressed()) {
       sSwallowGesture = false;
     } else if (!sSwallowGesture) {
@@ -364,6 +371,7 @@ static void pollButtons() {
   if (boardBtnB_wasReleased() && sBDownAt != 0) {
     uint32_t dur = millis() - sBDownAt;
     sBDownAt = 0;
+    if (hidMicMode) hidKey(VIBESTICK_HID_KEY_B, false);
     if (sSwallowGesture && !boardBtnA_isPressed() && !boardBtnB_isPressed()) {
       sSwallowGesture = false;
     } else if (!sSwallowGesture) {
@@ -624,6 +632,31 @@ static void pumpAudio() {
   }
 }
 
+// Debug-only host command over USB serial.  `screenshot\n` returns one
+// header followed by native RGB565 rows, so firmware/tools/capture_screen.py
+// can preserve exactly what the LCD controller reports without affecting BLE.
+static void pollSerialDebug() {
+  static char cmd[16] = {};
+  static uint8_t len = 0;
+  while (Serial.available()) {
+    char c = (char)Serial.read();
+    if (c == '\r') continue;
+    if (c != '\n' && len + 1 < sizeof(cmd)) { cmd[len++] = c; continue; }
+    cmd[len] = '\0';
+    len = 0;
+    if (strcmp(cmd, "screenshot") != 0) continue;
+    const int w = M5Lcd.width(), h = M5Lcd.height();
+    uint16_t row[240];
+    Serial.printf("VIBESCREEN %d %d RGB565LE\n", w, h);
+    for (int y = 0; y < h; ++y) {
+      M5Lcd.readRect(0, y, w, 1, row);
+      Serial.write((const uint8_t*)row, w * sizeof(uint16_t));
+      esp_task_wdt_reset();
+    }
+    Serial.println("\nVIBESCREEN END");
+  }
+}
+
 // ---- Arduino ----
 
 
@@ -672,6 +705,7 @@ void loop() {
   esp_task_wdt_reset();  // feed the loop watchdog every pass
 
   pollButtons();
+  pollSerialDebug();
 
 
   // Hold-to-record: A held >=500 ms in a hold-to-record screen starts recording.
