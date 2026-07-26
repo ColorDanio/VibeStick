@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{
-    env,
-    fs,
+    env, fs,
     io::{Read, Write},
     net::{TcpStream, ToSocketAddrs},
     path::{Path, PathBuf},
@@ -38,10 +37,18 @@ fn python_from_installed_vibeconn() -> Option<String> {
     for directory in env::split_paths(&path) {
         for command in ["vibeconn", "vibeconnd"] {
             let launcher = directory.join(command);
-            let Ok(content) = fs::read_to_string(&launcher) else { continue };
-            let Some(first_line) = content.lines().next() else { continue };
+            let Ok(content) = fs::read_to_string(&launcher) else {
+                continue;
+            };
+            let Some(first_line) = content.lines().next() else {
+                continue;
+            };
             if let Some(interpreter) = first_line.strip_prefix("#!") {
-                let binary = interpreter.trim().split_whitespace().next().unwrap_or_default();
+                let binary = interpreter
+                    .trim()
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or_default();
                 if binary.contains("python") && Path::new(binary).exists() {
                     return Some(binary.to_string());
                 }
@@ -55,25 +62,41 @@ fn development_path(relative: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(relative)
 }
 
-fn resource_path(app: &AppHandle, development_relative: &str, packaged_relative: &str) -> Result<PathBuf, String> {
+fn resource_path(
+    app: &AppHandle,
+    development_relative: &str,
+    packaged_relative: &str,
+) -> Result<PathBuf, String> {
     if cfg!(debug_assertions) {
         Ok(development_path(development_relative))
     } else {
-        app.path().resource_dir().map_err(|error| error.to_string()).map(|path| path.join(packaged_relative))
+        app.path()
+            .resource_dir()
+            .map_err(|error| error.to_string())
+            .map(|path| path.join(packaged_relative))
     }
 }
 
 fn node_runtime(app: &AppHandle) -> Result<PathBuf, String> {
     if cfg!(debug_assertions) {
-        Ok(PathBuf::from(env::var("VIBECONN_NODE").unwrap_or_else(|_| "node".to_string())))
+        Ok(PathBuf::from(
+            env::var("VIBECONN_NODE").unwrap_or_else(|_| "node".to_string()),
+        ))
     } else {
-        let runtime = if cfg!(target_os = "windows") { "runtime/vibeconn-node.exe" } else { "runtime/vibeconn-node" };
+        let runtime = if cfg!(target_os = "windows") {
+            "runtime/vibeconn-node.exe"
+        } else {
+            "runtime/vibeconn-node"
+        };
         resource_path(app, "", runtime)
     }
 }
 
 fn start_host(app: &AppHandle, state: &HostProcess) -> Result<(), String> {
-    let mut current = state.0.lock().map_err(|_| "Host process state is unavailable")?;
+    let mut current = state
+        .0
+        .lock()
+        .map_err(|_| "Host process state is unavailable")?;
     if current.as_ref().is_some_and(|child| child.id() > 0) {
         return Ok(());
     }
@@ -95,26 +118,52 @@ fn start_host(app: &AppHandle, state: &HostProcess) -> Result<(), String> {
     let compatibility = if cfg!(debug_assertions) {
         development_path("../../host/tools")
     } else {
-        app.path().resource_dir().map_err(|error| error.to_string())?.join("host/tools")
+        app.path()
+            .resource_dir()
+            .map_err(|error| error.to_string())?
+            .join("host/tools")
     };
     command
-        .env("VIBECONN_LINUX_HELPER_SCRIPT", compatibility.join("ble_gatt_helper.py"))
-        .env("VIBECONN_LOCAL_ASR_HELPER", compatibility.join("asr_helper.py"))
-        .env("VIBECONN_SESSION_DISCOVERY_HELPER", compatibility.join("session_discovery_helper.py"));
-    let child = command.spawn().map_err(|error| format!("Could not start HostCore: {error}"))?;
+        .env(
+            "VIBECONN_LINUX_HELPER_SCRIPT",
+            compatibility.join("ble_gatt_helper.py"),
+        )
+        .env(
+            "VIBECONN_LOCAL_ASR_HELPER",
+            compatibility.join("asr_helper.py"),
+        )
+        .env(
+            "VIBECONN_SESSION_DISCOVERY_HELPER",
+            compatibility.join("session_discovery_helper.py"),
+        );
+    let child = command
+        .spawn()
+        .map_err(|error| format!("Could not start HostCore: {error}"))?;
     *current = Some(child);
     Ok(())
 }
 
 fn post_owner_release() -> Result<CommandResult, String> {
-    let address = "127.0.0.1:7860".to_socket_addrs().map_err(|error| error.to_string())?.next().ok_or("Python 1.x endpoint is unavailable")?;
-    let mut stream = TcpStream::connect_timeout(&address, Duration::from_millis(1500)).map_err(|error| error.to_string())?;
-    stream.set_read_timeout(Some(Duration::from_millis(1500))).map_err(|error| error.to_string())?;
+    let address = "127.0.0.1:7860"
+        .to_socket_addrs()
+        .map_err(|error| error.to_string())?
+        .next()
+        .ok_or("Python 1.x endpoint is unavailable")?;
+    let mut stream = TcpStream::connect_timeout(&address, Duration::from_millis(1500))
+        .map_err(|error| error.to_string())?;
+    stream
+        .set_read_timeout(Some(Duration::from_millis(1500)))
+        .map_err(|error| error.to_string())?;
     stream.write_all(b"POST /api/command HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: 23\r\nConnection: close\r\n\r\n{\"cmd\":\"owner.release\"}").map_err(|error| error.to_string())?;
     let mut response = String::new();
-    stream.read_to_string(&mut response).map_err(|error| error.to_string())?;
+    stream
+        .read_to_string(&mut response)
+        .map_err(|error| error.to_string())?;
     if response.starts_with("HTTP/1.0 200") || response.starts_with("HTTP/1.1 200") {
-        Ok(CommandResult { ok: true, detail: "Python 1.x released BLE. VibeConn 2.0 will retry shortly.".to_string() })
+        Ok(CommandResult {
+            ok: true,
+            detail: "Python 1.x released BLE. VibeConn 2.0 will retry shortly.".to_string(),
+        })
     } else {
         Err("Python 1.x refused owner release.".to_string())
     }
@@ -130,7 +179,11 @@ fn login_startup(app: AppHandle, action: String) -> Result<StartupResult, String
     if !["install", "uninstall", "status"].contains(&action.as_str()) {
         return Err("Unsupported startup action.".to_string());
     }
-    let lifecycle = resource_path(&app, "../../dist/desktop-lifecycle-cli.js", "host-core/desktop-lifecycle-cli.js")?;
+    let lifecycle = resource_path(
+        &app,
+        "../../dist/desktop-lifecycle-cli.js",
+        "host-core/desktop-lifecycle-cli.js",
+    )?;
     let executable = env::current_exe().map_err(|error| error.to_string())?;
     let output = Command::new(node_runtime(&app)?)
         .arg(lifecycle)
@@ -143,16 +196,28 @@ fn login_startup(app: AppHandle, action: String) -> Result<StartupResult, String
     let stdout = String::from_utf8_lossy(&output.stdout);
     let parsed = serde_json::from_str::<StartupResult>(stdout.trim())
         .map_err(|error| format!("Startup registration returned invalid data: {error}"))?;
-    if output.status.success() { Ok(parsed) } else { Err(parsed.detail) }
+    if output.status.success() {
+        Ok(parsed)
+    } else {
+        Err(parsed.detail)
+    }
 }
 
 #[tauri::command]
 fn restart_host(app: AppHandle, state: State<'_, HostProcess>) -> Result<CommandResult, String> {
-    if let Some(mut child) = state.0.lock().map_err(|_| "Host process state is unavailable")?.take() {
+    if let Some(mut child) = state
+        .0
+        .lock()
+        .map_err(|_| "Host process state is unavailable")?
+        .take()
+    {
         let _ = child.kill();
     }
     start_host(&app, &state)?;
-    Ok(CommandResult { ok: true, detail: "VibeConn 2.0 restarted.".to_string() })
+    Ok(CommandResult {
+        ok: true,
+        detail: "VibeConn 2.0 restarted.".to_string(),
+    })
 }
 
 fn main() {
@@ -163,7 +228,11 @@ fn main() {
             start_host(&app.handle(), app.state::<HostProcess>()).map_err(std::io::Error::other)?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![release_python_owner, restart_host, login_startup])
+        .invoke_handler(tauri::generate_handler![
+            release_python_owner,
+            restart_host,
+            login_startup
+        ])
         .run(tauri::generate_context!())
         .expect("error while running VibeConn");
 }
