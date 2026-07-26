@@ -144,6 +144,16 @@ test("BLE bridge subscribes, syncs and keeps Vibe Mic audio separate from ASR", 
   assert.deepEqual(audio, ["mic", "asr"]);
 });
 
+test("BLE bridge forwards the original HID report for the Linux uinput helper", async () => {
+  const core = new HostCore(normalizeConfig({ tools: [] }));
+  const transport = new MemoryGattTransport();
+  let raw = "";
+  const bridge = new VibeBridge(transport, core, { onHid: (keys, report) => { assert.deepEqual(keys, [185]); raw = Buffer.from(report).toString("hex"); } });
+  await bridge.connect();
+  transport.notify("HID_INPUT", Buffer.from("00006a0000000000", "hex"));
+  assert.equal(raw, "00006a0000000000");
+});
+
 test("runtime reports a missing Vibe Mic capability as degraded instead of ready", async () => {
   const core = new HostCore(normalizeConfig({ tools: [] }));
   const bridge = new VibeBridge(new MemoryGattTransport(), core);

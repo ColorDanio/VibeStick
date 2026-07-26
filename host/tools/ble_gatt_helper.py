@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from vibestick import protocol
+from vibestick.hid import VirtualKeyboard
 from vibestick.mic import MicRelay
 
 CACHE = Path.home() / ".vibestick" / "device-address"
@@ -43,6 +44,7 @@ class Helper:
         self.client = None
         self.lock_fd: int | None = None
         self.mic = MicRelay()
+        self.keyboard = VirtualKeyboard()
 
     async def connect(self, address: str = "") -> str:
         from bleak import BleakClient, BleakScanner
@@ -80,6 +82,7 @@ class Helper:
         finally:
             self.client = None
             await self.mic.stop()
+            self.keyboard.close()
             self._release_owner()
 
     def _acquire_owner(self) -> None:
@@ -142,6 +145,8 @@ async def main() -> None:
                 helper.mic.feed(base64.b64decode(str(request["data"]))); result = {}
             elif command == "mic.stop":
                 await helper.mic.stop(); result = {}
+            elif command == "hid.report":
+                helper.keyboard.report(base64.b64decode(str(request["data"]))); result = {}
             else:
                 raise ValueError("unknown command")
             emit({"id": ident, "ok": True, "result": result})

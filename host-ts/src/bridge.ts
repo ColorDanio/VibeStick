@@ -6,7 +6,7 @@ import type { Characteristic, GattTransport } from "./transport.js";
 export interface BridgeHooks {
   onInput?(text: string): void;
   onAudio?(destination: "asr" | "mic", pcm: Uint8Array): void;
-  onHid?(keycodes: number[]): void;
+  onHid?(keycodes: number[], report: Uint8Array): void;
   onActions?(actions: RoutingAction[]): void;
 }
 
@@ -40,7 +40,7 @@ export class VibeBridge {
     }
     if (characteristic === "HID_INPUT") {
       const keycodes = keycodesFromReport(data);
-      if (keycodes) this.hooks.onHid?.(keycodes);
+      if (keycodes) this.hooks.onHid?.(keycodes, data);
       return;
     }
     const payload = parse(data);
