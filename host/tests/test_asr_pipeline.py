@@ -109,6 +109,20 @@ def test_decode_parameters_hardened(monkeypatch):
     assert kw["vad_parameters"]["threshold"] == 0.25
 
 
+@pytest.mark.parametrize("raw", [
+    "我在这里试一下游漏模式。",
+    "我在这里试一下优劳模式。",
+    "我在这里试一下优努模式。",
+    "我在这里试一下优龙模式。",
+])
+def test_normalize_yolo_homophones_in_product_context(raw):
+    assert voice.normalize_product_terms(raw) == "我在这里试一下YOLO模式。"
+
+
+def test_does_not_normalize_homophone_outside_product_context():
+    assert voice.normalize_product_terms("优劳是一个名字。") == "优劳是一个名字。"
+
+
 def test_voice_log_carries_clip_and_language(tmp_path):
     pytest.importorskip("numpy")
     monkeypatch = pytest.MonkeyPatch()

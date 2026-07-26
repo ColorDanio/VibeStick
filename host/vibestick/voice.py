@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import shlex
 import subprocess
 import tempfile
@@ -260,7 +261,22 @@ def _transcribe_command(asr: ASRConfig, pcm: bytes) -> tuple[str, dict]:
 
 # Bilingual bias for the auto-detect path: keeps Mandarin output in
 # simplified Chinese and prevents traditional-character gibberish.
-INITIAL_PROMPT = "Hello. 你好。以下是简体中文和英文混合的语音转写。"
+INITIAL_PROMPT = (
+    "Hello. 你好。以下是简体中文和英文混合的语音转写。"
+    "产品词包括 VibeStick、YOLO、Vibe Mic、Agent CLI、Codex、OpenCode、Kimi CLI。"
+)
+
+# Whisper small commonly phoneticizes the spoken acronym "YOLO" as a Chinese
+# word. Only normalize the variants in product-command contexts, so ordinary
+# Chinese sentences containing a similar sounding word remain unchanged.
+_YOLO_HOMOPHONE = re.compile(
+    r"(?:游漏|优劳|优努|优龙|游罗|优罗)(?=(?:模式|输入|功能)(?:[。！？，, ]|$))"
+)
+
+
+def normalize_product_terms(text: str) -> str:
+    """Normalize unambiguous VibeStick product terms after ASR decoding."""
+    return _YOLO_HOMOPHONE.sub("YOLO", text)
 
 
 def _highpass(audio):
@@ -349,7 +365,7 @@ def _transcribe_faster_whisper(asr: ASRConfig, pcm: bytes) -> tuple[str, dict]:
         vad_parameters=dict(_VAD_PARAMETERS),
         **dict(_DECODE_PARAMETERS),
     )
-    text = " ".join(seg.text for seg in segments).strip()
+    text = normalize_product_terms(" ".join(seg.text for seg in segments).strip())
     meta = {"language": getattr(info, "language", None)}
     return text, meta
 
