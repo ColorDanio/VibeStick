@@ -39,7 +39,13 @@ export function App(): ReactElement {
   useEffect(() => {
     let active = true;
     const refresh = async (): Promise<void> => {
-      try { const snapshot = await api("/api/desktop"); if (active) { setData(snapshot); setConnected(true); setNotice(""); } }
+      try {
+        const snapshot = await api("/api/desktop");
+        if (active) {
+          setData(snapshot); setConnected(true);
+          setNotice(snapshot.environment.error ? `Host 2.0 needs attention: ${snapshot.environment.error}` : "");
+        }
+      }
       catch {
         if (!active) return;
         setConnected(false);

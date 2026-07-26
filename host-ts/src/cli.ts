@@ -9,6 +9,7 @@ import { startDashboardServer } from "./server.js";
 import type { VibeBridge } from "./bridge.js";
 import type { DashboardEnvironment } from "./dashboard.js";
 import { VoicePipeline, onlineTranscriber } from "./asr.js";
+import { NodeProcessInspector, discoverProcessSessions, mergeSessions } from "./process-discovery.js";
 
 type Args = { config: string; sessions: string; port: number; helper?: string; address?: string };
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
@@ -17,7 +18,13 @@ async function main(): Promise<void> {
   const args = parse(process.argv.slice(2));
   const config = await loadConfigFile(args.config);
   const core = new HostCore(config);
-  core.replaceSessions(await loadSessionDirectory(args.sessions));
+  const processes = new NodeProcessInspector();
+  const loadSessions = async (): Promise<void> => {
+    const files = await loadSessionDirectory(args.sessions);
+    const live = await processes.list().then((items) => discoverProcessSessions(config, items)).catch(() => []);
+    core.replaceSessions(mergeSessions(files, live));
+  };
+  await loadSessions();
   let runtime: HostRuntime | undefined;
   const environment = (): DashboardEnvironment => {
     const diagnostics = runtime?.diagnostics();
@@ -120,7 +127,7 @@ async function main(): Promise<void> {
     console.log("VibeStick TS runtime: degraded (no Linux BLE helper; Python traditional daemon remains available)");
   }
   const refresh = async (): Promise<void> => {
-    core.replaceSessions(await loadSessionDirectory(args.sessions));
+    await loadSessions();
     await bridge?.sync();
   };
   const refreshTimer = setInterval(() => { void refresh().catch((error) => console.error(`session refresh failed: ${String(error)}`)); }, 1000);

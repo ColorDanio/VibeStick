@@ -22,6 +22,7 @@ import { LinuxCommandAdapter } from "../linux-bridge.js";
 import { LinuxVibeMicSink } from "../mic-sink.js";
 import { startDashboardServer } from "../server.js";
 import { VoicePipeline, wav, type AsrTranscriber } from "../asr.js";
+import { discoverProcessSessions, mergeSessions } from "../process-discovery.js";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
   const path = new URL(`../../../contracts/v1/${name}`, import.meta.url);
@@ -104,6 +105,14 @@ test("session store selects the next discovered session after a successful sessi
   store.replace([status("old", 1)]); store.requestNewSession();
   store.replace([status("new", 2), status("old", 1)]);
   assert.equal(store.activeId, "new");
+});
+
+test("process discovery supplements adapter sessions without duplicating their pids", () => {
+  const config = normalizeConfig({ tools: [{ id: "codex", name: "Codex", process: "codex", aliases: ["codex-cli"] }, { id: "hidden", name: "Hidden", hidden: true, process: "hidden" }] });
+  const live = discoverProcessSessions(config, [{ pid: 12, name: "/usr/bin/codex", tty: "pts/4" }, { pid: 13, name: "codex-cli" }, { pid: 14, name: "hidden" }], 100);
+  assert.deepEqual(live.map((record) => [record.id, record.raw?.tty]), [["process-codex-12", "/dev/pts/4"], ["process-codex-13", undefined]]);
+  const files = [{ id: "adapter", raw: { pid: 12 }, status: { tool: "codex", model: "", session: "Adapter", state: "idle", ctx_pct: -1, cost_usd: -1, last: "", updated: 1 } }];
+  assert.deepEqual(mergeSessions(files, live).map((record) => record.id), ["adapter", "process-codex-13"]);
 });
 
 test("dashboard contract returns snapshots and routes commands through one core", () => {
