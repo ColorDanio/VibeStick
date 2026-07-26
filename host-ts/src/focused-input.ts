@@ -9,6 +9,14 @@ export class PlatformFocusedInput {
   constructor(private readonly platform: FocusedPlatform = process.platform as FocusedPlatform, private readonly run: ProcessRunner = runProcess) {}
   get available(): boolean { return this.platform === "darwin" || this.platform === "win32"; }
 
+  /** Explicit no-input readiness check for the current foreground target. */
+  async probe(): Promise<boolean> {
+    if (!this.available) return false;
+    if (this.platform === "darwin") return this.run({ command: "osascript", args: ["-e", 'tell application "System Events" to get name of first application process whose frontmost is true'] });
+    const encoded = Buffer.from(windowsProbeProgram, "utf16le").toString("base64");
+    return this.run({ command: "powershell.exe", args: ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded] });
+  }
+
   async text(value: string): Promise<boolean> {
     if (!this.available || !value) return false;
     if (this.platform === "darwin") return this.run({ command: "osascript", args: ["-e", `tell application "System Events" to keystroke ${appleString(value)}`] });
@@ -73,4 +81,18 @@ if ($action -eq 'text') { [VibeStickInput]::Text([Text.Encoding]::UTF8.GetString
 elseif ($action -eq 'enter') { [VibeStickInput]::Key(13) }
 elseif ($action -eq 'escape') { [VibeStickInput]::Key(27); [VibeStickInput]::Key(27) }
 else { exit 2 }
+`;
+
+// This checks only that Windows exposes a foreground target. It does not send
+// a key, alter the clipboard, or inspect the target process.
+const windowsProbeProgram = String.raw`
+$source = @'
+using System;
+using System.Runtime.InteropServices;
+public static class VibeStickProbe {
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+}
+'@
+Add-Type -TypeDefinition $source
+if ([VibeStickProbe]::GetForegroundWindow() -eq [IntPtr]::Zero) { exit 1 }
 `;

@@ -203,11 +203,20 @@ test("cross-platform YOLO focused input uses safe argv/environment boundaries", 
   assert.match(calls[0]?.args[1] ?? "", /keystroke "hi \\"quoted\\" next"/);
   assert.equal(calls.filter((item) => item.command === "osascript").length, 4);
   calls.length = 0;
+  assert.equal(await mac.probe(), true);
+  assert.match(calls[0]?.args[1] ?? "", /frontmost/);
+  assert.equal(calls[0]?.env, undefined);
+  calls.length = 0;
   const windows = new PlatformFocusedInput("win32", runner);
   await windows.text("你好 & not shell"); await windows.enter(); await windows.escapeTwice();
   assert.equal(calls.every((item) => item.command === "powershell.exe" && item.args.includes("-EncodedCommand")), true);
   assert.equal(calls.some((item) => item.args.join(" ").includes("你好")), false);
-  assert.equal(Buffer.from(calls[0]?.env?.VIBESTICK_INPUT_TEXT_B64 ?? "", "base64").toString("utf8"), "你好 & not shell");
+  const textCall = calls[0] as ProcessInvocation | undefined;
+  assert.equal(Buffer.from(textCall?.env?.VIBESTICK_INPUT_TEXT_B64 ?? "", "base64").toString("utf8"), "你好 & not shell");
+  calls.length = 0;
+  assert.equal(await windows.probe(), true);
+  assert.equal(calls[0]?.command, "powershell.exe");
+  assert.equal(calls[0]?.env, undefined);
   const linux = new PlatformFocusedInput("linux", runner);
   assert.equal(await linux.text("no"), false);
 });
@@ -248,11 +257,14 @@ test("dashboard exposes an explicit online ASR provider test without returning s
   const server = await startDashboardServer(core, 0, undefined, {
     async updateOnlineAsr() { return { engine: "online", api_base: "https://example.test", model: "whisper", configured: true }; },
     async testOnlineAsr() { return { provider: "reachable", model_available: null }; },
+    async testYoloFocused() { return { available: true, detail: "probe passed" }; },
     async updateSessionLauncher() { return { session_launcher: "auto" }; },
     async updateToolCwd() { return { id: "", cwd: "" }; },
   });
   const response = await fetch(`http://127.0.0.1:${server.port}/api/settings/asr/test`, { method: "POST" });
   assert.deepEqual(await response.json(), { ok: true, provider: "reachable", model_available: null });
+  const yolo = await fetch(`http://127.0.0.1:${server.port}/api/settings/yolo/test`, { method: "POST" });
+  assert.deepEqual(await yolo.json(), { ok: true, available: true, detail: "probe passed" });
   await server.close();
 });
 

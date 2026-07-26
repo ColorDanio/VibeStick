@@ -34,6 +34,7 @@ async function main(): Promise<void> {
   };
   await loadSessions();
   let runtime: HostRuntime | undefined;
+  let testYoloFocused: (() => Promise<{ available: boolean; detail: string }>) | undefined;
   const environment = (): DashboardEnvironment => {
     const diagnostics = runtime?.diagnostics();
     return {
@@ -55,6 +56,10 @@ async function main(): Promise<void> {
   const dashboard = await startDashboardServer(core, args.port, environment, {
     async updateOnlineAsr(body) { config = updateOnlineAsr(config, body); await saveConfigFile(args.config, config); return publicAsrSettings(config); },
     async testOnlineAsr() { return verifyOnlineAsr(config); },
+    async testYoloFocused() {
+      if (!testYoloFocused) throw new Error("YOLO permission testing is available only with the native macOS or Windows adapter");
+      return testYoloFocused();
+    },
     async updateSessionLauncher(body) { config = updateSessionLauncher(config, body); await saveConfigFile(args.config, config); return { session_launcher: config.session_launcher }; },
     async updateToolCwd(body) {
       const rawCwd = typeof body === "object" && body !== null && "cwd" in body && typeof (body as { cwd?: unknown }).cwd === "string" ? (body as { cwd: string }).cwd.trim() : "";
@@ -208,9 +213,21 @@ async function main(): Promise<void> {
       asr: { available: false, reason: "Agent CLI session delivery is not implemented; YOLO supports online ASR only" },
       yolo: process.platform === "darwin" || process.platform === "win32"
         ? config.asr.engine === "online" && Boolean(config.asr.online.api_key)
-          ? { available: true, reason: "Requires macOS Accessibility or a normal-integrity Windows foreground app" }
+          ? { available: false, reason: "Run the focused-input permission test in Settings" }
           : { available: false, reason: "Configure online ASR before using YOLO" }
         : { available: false, reason: "Native YOLO focused input is available only on macOS and Windows" },
+    };
+    testYoloFocused = async () => {
+      if (config.asr.engine !== "online" || !config.asr.online.api_key) {
+        capabilities.yolo = { available: false, reason: "Configure online ASR before testing YOLO" };
+        return { available: false, detail: capabilities.yolo.reason ?? "" };
+      }
+      const available = await focused.probe();
+      capabilities.yolo = available
+        ? { available: true, reason: "Focused-input permission probe passed" }
+        : { available: false, reason: "Focused-input permission probe failed; grant macOS Accessibility or focus a normal-integrity Windows app" };
+      runtime?.reconcile();
+      return { available, detail: capabilities.yolo.reason ?? "" };
     };
     runtime = new HostRuntime(bridge, capabilities, 2_000, ownerPermission);
     await runtime.start();

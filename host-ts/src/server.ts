@@ -5,6 +5,7 @@ import { dashboardRequest, type DashboardEnvironment } from "./dashboard.js";
 export interface SettingsService {
   updateOnlineAsr(body: unknown): Promise<{ engine: string; api_base: string; model: string; configured: boolean }>;
   testOnlineAsr(): Promise<{ provider: "reachable"; model_available: boolean | null }>;
+  testYoloFocused(): Promise<{ available: boolean; detail: string }>;
   updateSessionLauncher(body: unknown): Promise<{ session_launcher: "auto" | "tmux" | "zellij" }>;
   updateToolCwd(body: unknown): Promise<{ id: string; cwd: string }>;
 }
@@ -49,6 +50,16 @@ export async function startDashboardServer(core: HostCore, port = 7861, environm
     if (request.method === "POST" && request.url === "/api/settings/asr/test" && settings) {
       try {
         const result = await settings.testOnlineAsr();
+        response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+        response.end(JSON.stringify({ ok: true, ...result })); return;
+      } catch (error) {
+        response.writeHead(400, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+        response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) })); return;
+      }
+    }
+    if (request.method === "POST" && request.url === "/api/settings/yolo/test" && settings) {
+      try {
+        const result = await settings.testYoloFocused();
         response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
         response.end(JSON.stringify({ ok: true, ...result })); return;
       } catch (error) {

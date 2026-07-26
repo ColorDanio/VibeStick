@@ -76,6 +76,11 @@ For macOS YOLO, grant the desktop app Accessibility permission. For Windows,
 the target app must be the foreground window and must not run at a higher
 integrity level than VibeStick Host. If focused input is refused, the Stick and
 desktop diagnostics show an error; no text is silently redirected to a session.
+Before the capability becomes ready, select **Settings → Test permission**.
+This is an explicit non-injecting probe: it checks only the current foreground
+target and OS accessibility/input permission, and never types text or sends
+Enter/Escape. It is not a substitute for the pending physical macOS/Windows
+end-to-end validation.
 
 ## Safe rollback and support bundle
 
