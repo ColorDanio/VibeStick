@@ -9,7 +9,7 @@ type Snapshot = {
   status: { state: string; session: string; tool: string; model: string };
   sessions: { list: Session[] };
   tools: { list: { id: string; name: string; state: string }[] };
-  environment: { owner: "active" | "inactive"; runtime: string; capabilities: { ble: Capability; keyboard: Capability; mic: Capability; asr: Capability }; config: { path: string; asr_engine: string; asr_api_base: string; asr_model: string; online_asr_configured: boolean; session_launcher: "auto" | "tmux" | "zellij"; tools: { id: string; name: string; cwd: string }[] }; error?: string };
+  environment: { owner: "active" | "inactive"; runtime: string; capabilities: { ble: Capability; keyboard: Capability; mic: Capability; asr: Capability }; traditional_owner: { state: "running" | "unavailable"; detail?: string }; config: { path: string; asr_engine: string; asr_api_base: string; asr_model: string; online_asr_configured: boolean; session_launcher: "auto" | "tmux" | "zellij"; tools: { id: string; name: string; cwd: string }[] }; error?: string };
 };
 
 const api = async (path: string, init?: RequestInit): Promise<Snapshot> => {
@@ -28,7 +28,7 @@ const demo: Snapshot = {
   tools: { list: [{ id: "opencode", name: "OpenCode", state: "ready" }, { id: "codex", name: "Codex", state: "running" }] },
   environment: { owner: "inactive", runtime: "stopped", capabilities: {
     ble: { available: false, reason: "Start the Host 2.0 runtime" }, keyboard: { available: false, reason: "Start the Host 2.0 runtime" }, mic: { available: false, reason: "Start the Host 2.0 runtime" }, asr: { available: false, reason: "Configure online ASR" },
-  }, config: { path: "~/.vibestick/config.json", asr_engine: "faster-whisper", asr_api_base: "https://api.groq.com/openai/v1", asr_model: "whisper-large-v3-turbo", online_asr_configured: false, session_launcher: "auto", tools: [{ id: "codex", name: "Codex", cwd: "" }] } },
+  }, traditional_owner: { state: "unavailable" }, config: { path: "~/.vibestick/config.json", asr_engine: "faster-whisper", asr_api_base: "https://api.groq.com/openai/v1", asr_model: "whisper-large-v3-turbo", online_asr_configured: false, session_launcher: "auto", tools: [{ id: "codex", name: "Codex", cwd: "" }] } },
 };
 
 export function App(): ReactElement {
@@ -55,7 +55,7 @@ export function App(): ReactElement {
         const snapshot = await api("/api/desktop");
         if (active) {
           setData(snapshot); setConnected(true);
-          setNotice(snapshot.environment.error ? `Host 2.0 needs attention: ${snapshot.environment.error}` : "");
+          setNotice(snapshot.environment.error ? `Host 2.0 needs attention: ${snapshot.environment.error}` : snapshot.environment.traditional_owner.state === "running" && snapshot.environment.owner === "inactive" ? `${snapshot.environment.traditional_owner.detail} Stop Python 1.x using the way you started it, then restart Host 2.0 here to hand off BLE safely.` : "");
         }
       }
       catch {

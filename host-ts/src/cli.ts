@@ -13,6 +13,7 @@ import type { DashboardEnvironment } from "./dashboard.js";
 import { VoicePipeline, onlineTranscriber } from "./asr.js";
 import { NodeProcessInspector, discoverProcessSessions, mergeSessions } from "./process-discovery.js";
 import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher, updateToolCwd } from "./settings.js";
+import { probeTraditionalOwner, type TraditionalOwner } from "./ownership.js";
 
 type Args = { config: string; sessions: string; port: number; helper?: string; address?: string };
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
@@ -21,6 +22,7 @@ async function main(): Promise<void> {
   const args = parse(process.argv.slice(2));
   let config = await loadConfigFile(args.config);
   const core = new HostCore(config);
+  let traditionalOwner: TraditionalOwner = await probeTraditionalOwner();
   const processes = new NodeProcessInspector();
   const loadSessions = async (): Promise<void> => {
     const files = await loadSessionDirectory(args.sessions);
@@ -35,6 +37,7 @@ async function main(): Promise<void> {
       implementation: "host-2",
       owner: runtime?.isBleOwner() ? "active" : "inactive",
       runtime: diagnostics?.state ?? "stopped",
+      traditional_owner: traditionalOwner,
       capabilities: diagnostics?.capabilities ?? {
         ble: { available: false, reason: "Start Host 2.0 with the Linux BLE helper" },
         keyboard: { available: false, reason: "Start Host 2.0 with the Linux BLE helper" },
@@ -151,7 +154,8 @@ async function main(): Promise<void> {
     await bridge?.sync();
   };
   const refreshTimer = setInterval(() => { void refresh().catch((error) => console.error(`session refresh failed: ${String(error)}`)); }, 1000);
-  const stop = async (): Promise<void> => { clearInterval(refreshTimer); await runtime?.stop(); await dashboard.close(); };
+  const ownerTimer = setInterval(() => { void probeTraditionalOwner().then((next) => { traditionalOwner = next; }); }, 5000);
+  const stop = async (): Promise<void> => { clearInterval(refreshTimer); clearInterval(ownerTimer); await runtime?.stop(); await dashboard.close(); };
   process.once("SIGINT", () => { void stop().finally(() => process.exit(0)); });
   process.once("SIGTERM", () => { void stop().finally(() => process.exit(0)); });
 }

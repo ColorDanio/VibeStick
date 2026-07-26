@@ -24,6 +24,7 @@ import { startDashboardServer } from "../server.js";
 import { VoicePipeline, wav, type AsrTranscriber } from "../asr.js";
 import { discoverProcessSessions, mergeSessions } from "../process-discovery.js";
 import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher, updateToolCwd } from "../settings.js";
+import { probeTraditionalOwner } from "../ownership.js";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
   const path = new URL(`../../../contracts/v1/${name}`, import.meta.url);
@@ -127,9 +128,19 @@ test("dashboard contract returns snapshots and routes commands through one core"
   const desktop = dashboardRequest(core, "GET", "/api/desktop", undefined, {
     implementation: "host-2", owner: "active", runtime: "ready",
     capabilities: { ble: { available: true }, keyboard: { available: true }, mic: { available: true }, asr: { available: true } },
+    traditional_owner: { state: "unavailable" },
     config: { path: "/tmp/config.json", asr_engine: "online", asr_api_base: "https://api.example.test/v1", asr_model: "whisper", online_asr_configured: true, session_launcher: "auto", tools: [] },
   });
   assert.equal((desktop.body as { environment: { owner: string } }).environment.owner, "active");
+});
+
+test("traditional Python owner probe is read-only and distinguishes connected state", async () => {
+  const connected = await probeTraditionalOwner(async () => new Response(JSON.stringify({ connected: true }), { status: 200 }));
+  assert.deepEqual(connected, { state: "running", detail: "Python 1.x is connected to the Stick." });
+  const idle = await probeTraditionalOwner(async () => new Response(JSON.stringify({ connected: false }), { status: 200 }));
+  assert.equal(idle.state, "running");
+  const unavailable = await probeTraditionalOwner(async () => { throw new Error("refused"); });
+  assert.deepEqual(unavailable, { state: "unavailable" });
 });
 
 test("online ASR settings validate provider data and never return API keys", () => {
