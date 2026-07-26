@@ -18,6 +18,7 @@ import { VibeBridge } from "../bridge.js";
 import { MemoryGattTransport } from "../transport.js";
 import { HostRuntime } from "../runtime.js";
 import { LinuxVibeMicSink } from "../mic-sink.js";
+import { startDashboardServer } from "../server.js";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
   const path = new URL(`../../../contracts/v1/${name}`, import.meta.url);
@@ -107,6 +108,15 @@ test("dashboard contract returns snapshots and routes commands through one core"
     capabilities: { ble: { available: true }, keyboard: { available: true }, mic: { available: true } },
   });
   assert.equal((desktop.body as { environment: { owner: string } }).environment.owner, "active");
+});
+
+test("loopback dashboard permits the desktop development origin and JSON commands", async () => {
+  const core = new HostCore(normalizeConfig({ tools: [] }));
+  const server = await startDashboardServer(core, 0);
+  const response = await fetch(`http://127.0.0.1:${server.port}/api/desktop`, { headers: { origin: "http://127.0.0.1:5174" } });
+  assert.equal(response.headers.get("access-control-allow-origin"), "http://127.0.0.1:5174");
+  assert.equal(response.status, 200);
+  await server.close();
 });
 
 test("file repository atomically persists config and defensively loads fresh sessions", async () => {

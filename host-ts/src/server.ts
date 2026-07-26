@@ -7,6 +7,14 @@ export interface DashboardServer { readonly port: number; close(): Promise<void>
 /** Minimal loopback-only HTTP adapter; Electron or a browser may consume it. */
 export async function startDashboardServer(core: HostCore, port = 7861, environment?: () => DashboardEnvironment): Promise<DashboardServer> {
   const server = createServer(async (request, response) => {
+    const origin = request.headers.origin;
+    if (origin === "http://127.0.0.1:5174" || origin === "http://localhost:5174" || origin === "null") {
+      response.setHeader("access-control-allow-origin", origin);
+      response.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
+      response.setHeader("access-control-allow-headers", "content-type");
+      response.setHeader("vary", "Origin");
+    }
+    if (request.method === "OPTIONS") { response.writeHead(204).end(); return; }
     const chunks: Buffer[] = [];
     for await (const chunk of request) {
       chunks.push(Buffer.from(chunk));
