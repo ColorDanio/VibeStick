@@ -137,6 +137,8 @@ test("dashboard contract returns snapshots and routes commands through one core"
     config: { path: "/tmp/config.json", asr_engine: "online", asr_api_base: "https://api.example.test/v1", asr_model: "whisper", online_asr_configured: true, session_launcher: "auto", tools: [] },
   });
   assert.equal((desktop.body as { environment: { owner: string } }).environment.owner, "active");
+  const preview = dashboardRequest(core, "GET", "/api/desktop").body as { environment: { capabilities: { yolo?: { available: boolean } } } };
+  assert.equal(preview.environment.capabilities.yolo?.available, false);
 });
 
 test("traditional Python owner probe is read-only and distinguishes connected state", async () => {

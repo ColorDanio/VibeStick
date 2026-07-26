@@ -2,7 +2,7 @@ import type { VibeBridge } from "./bridge.js";
 
 export type RuntimeState = "stopped" | "starting" | "ready" | "degraded" | "stopping";
 export interface Capability { available: boolean; reason?: string; }
-export interface Capabilities { ble: Capability; keyboard: Capability; mic: Capability; asr: Capability; }
+export interface Capabilities { ble: Capability; keyboard: Capability; mic: Capability; asr: Capability; yolo?: Capability; }
 export interface ConnectionPermission { allowed: boolean; reason: string; }
 export type ConnectionGuard = () => Promise<ConnectionPermission>;
 const allowConnection: ConnectionGuard = async () => ({ allowed: true, reason: "" });

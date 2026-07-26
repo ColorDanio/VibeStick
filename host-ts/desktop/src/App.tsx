@@ -9,7 +9,7 @@ type Snapshot = {
   status: { state: string; session: string; tool: string; model: string };
   sessions: { list: Session[] };
   tools: { list: { id: string; name: string; state: string }[] };
-  environment: { owner: "active" | "inactive"; runtime: string; capabilities: { ble: Capability; keyboard: Capability; mic: Capability; asr: Capability }; traditional_owner: { state: "running" | "unavailable"; detail?: string }; config: { path: string; asr_engine: string; asr_api_base: string; asr_model: string; online_asr_configured: boolean; session_launcher: "auto" | "tmux" | "zellij"; tools: { id: string; name: string; cwd: string }[] }; error?: string };
+  environment: { owner: "active" | "inactive"; runtime: string; capabilities: { ble: Capability; keyboard: Capability; mic: Capability; asr: Capability; yolo?: Capability }; traditional_owner: { state: "running" | "unavailable"; detail?: string }; config: { path: string; asr_engine: string; asr_api_base: string; asr_model: string; online_asr_configured: boolean; session_launcher: "auto" | "tmux" | "zellij"; tools: { id: string; name: string; cwd: string }[] }; error?: string };
 };
 
 const api = async (path: string, init?: RequestInit): Promise<Snapshot> => {
@@ -27,7 +27,7 @@ const demo: Snapshot = {
   ] },
   tools: { list: [{ id: "opencode", name: "OpenCode", state: "ready" }, { id: "codex", name: "Codex", state: "running" }] },
   environment: { owner: "inactive", runtime: "stopped", capabilities: {
-    ble: { available: false, reason: "Start the Host 2.0 runtime" }, keyboard: { available: false, reason: "Start the Host 2.0 runtime" }, mic: { available: false, reason: "Start the Host 2.0 runtime" }, asr: { available: false, reason: "Configure online ASR" },
+    ble: { available: false, reason: "Start the Host 2.0 runtime" }, keyboard: { available: false, reason: "Start the Host 2.0 runtime" }, mic: { available: false, reason: "Start the Host 2.0 runtime" }, asr: { available: false, reason: "Configure online ASR" }, yolo: { available: false, reason: "Start the Host 2.0 runtime" },
   }, traditional_owner: { state: "unavailable" }, config: { path: "~/.vibestick/config.json", asr_engine: "faster-whisper", asr_api_base: "https://api.groq.com/openai/v1", asr_model: "whisper-large-v3-turbo", online_asr_configured: false, session_launcher: "auto", tools: [{ id: "codex", name: "Codex", cwd: "" }] } },
 };
 
@@ -155,6 +155,7 @@ export function App(): ReactElement {
   };
   const runtime = data.environment.runtime;
   const bleConnected = data.environment.owner === "active";
+  const yolo = data.environment.capabilities.yolo;
   const selected = data.sessions.list.find((session) => session.id === data.active_session) ?? data.sessions.list[0];
 
   return <main className="app-shell">
@@ -173,10 +174,10 @@ export function App(): ReactElement {
       {notice && <div className="notice"><span>{notice}</span>{restartRequired && window.vibestickDesktop && <button onClick={() => void restartHost()} disabled={restarting}>{restarting ? "Restarting…" : "Restart Host 2.0"}</button>}</div>}
       <section className="device-row">
         <div className="device-summary"><div className="stick-art"><i></i><i></i><b>V</b></div><div><p className="eyebrow">M5STICKC PLUS</p><h2>VibeStick</h2><p>{bleConnected ? "BLE bridge connected and synchronized. Check capability cards for platform setup." : "Choose Host 2.0 as the BLE owner to connect."}</p></div></div>
-        <div className="capabilities">{(["ble", "keyboard", "mic", "asr"] as const).map((key) => <div className="cap" key={key}><span className={`cap-icon ${data.environment.capabilities[key].available ? "on" : ""}`}>{data.environment.capabilities[key].available ? "✓" : "–"}</span><div><b>{key === "ble" ? "BLE bridge" : key === "keyboard" ? "HID keys" : key === "mic" ? "Vibe Mic" : "Agent ASR"}</b><small>{data.environment.capabilities[key].available ? "Available" : data.environment.capabilities[key].reason}</small></div></div>)}</div>
+        <div className="capabilities">{(["ble", "keyboard", "mic", "asr"] as const).map((key) => <div className="cap" key={key}><span className={`cap-icon ${data.environment.capabilities[key].available ? "on" : ""}`}>{data.environment.capabilities[key].available ? "✓" : "–"}</span><div><b>{key === "ble" ? "BLE bridge" : key === "keyboard" ? "HID keys" : key === "mic" ? "Vibe Mic" : "Agent ASR"}</b><small>{data.environment.capabilities[key].available ? "Available" : data.environment.capabilities[key].reason}</small></div></div>)}{yolo && <div className="cap"><span className={`cap-icon ${yolo.available ? "on" : ""}`}>{yolo.available ? "✓" : "–"}</span><div><b>YOLO input</b><small>{yolo.available ? yolo.reason ?? "Available" : yolo.reason}</small></div></div>}</div>
       </section>
       <section className="modes" id="voice"><div className="section-heading"><div><p className="eyebrow">INPUT MODES</p><h2>How the Stick speaks</h2></div><span className="current-route">Current route: {data.audio_route === "mic" ? "Vibe Mic" : "Agent CLI ASR"}</span></div>
-        <div className="mode-list"><Mode name="Agent CLI" detail="Transcribe, then deliver to the selected session." active={data.audio_route === "asr"} /><Mode name="Vibe Mic" detail="Raw audio to your system input device." active={data.audio_route === "mic"} /><Mode name="YOLO" detail="Transcribe into the currently focused application." warning /></div>
+        <div className="mode-list"><Mode name="Agent CLI" detail="Transcribe, then deliver to the selected session." active={data.audio_route === "asr"} /><Mode name="Vibe Mic" detail="Raw audio to your system input device." active={data.audio_route === "mic"} /><Mode name="YOLO" detail={yolo?.available ? "Transcribe into the currently focused application." : yolo?.reason ?? "Transcribe into the currently focused application."} warning={Boolean(yolo && !yolo.available)} state={yolo?.available ? "Ready to try" : "Setup required"} /></div>
       </section>
       <div className="content-grid">
         <section className="sessions" id="sessions"><div className="section-heading"><div><p className="eyebrow">AGENT CLI</p><h2>Sessions</h2></div><button className="text-button" onClick={() => void send("session.next")}>Next session →</button></div>
@@ -195,6 +196,6 @@ export function App(): ReactElement {
   </main>;
 }
 
-function Mode({ name, detail, active, warning = false }: { name: string; detail: string; active?: boolean; warning?: boolean }): ReactElement {
-  return <div className={`mode ${active ? "mode-active" : ""}`}><span className="mode-index">{name === "Agent CLI" ? "01" : name === "Vibe Mic" ? "02" : "03"}</span><div><b>{name}</b><small>{detail}</small></div>{active ? <span className="mode-state">Active</span> : warning ? <span className="mode-state amber-label">Focused target</span> : <span className="mode-state">On Stick</span>}</div>;
+function Mode({ name, detail, active, warning = false, state }: { name: string; detail: string; active?: boolean; warning?: boolean; state?: string }): ReactElement {
+  return <div className={`mode ${active ? "mode-active" : ""}`}><span className="mode-index">{name === "Agent CLI" ? "01" : name === "Vibe Mic" ? "02" : "03"}</span><div><b>{name}</b><small>{detail}</small></div>{active ? <span className="mode-state">Active</span> : <span className={`mode-state ${warning ? "amber-label" : ""}`}>{state ?? "On Stick"}</span>}</div>;
 }

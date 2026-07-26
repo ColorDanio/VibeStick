@@ -46,6 +46,7 @@ async function main(): Promise<void> {
         keyboard: { available: false, reason: "Start Host 2.0 with the Linux BLE helper" },
         mic: { available: false, reason: "Start Host 2.0 with the Linux BLE helper" },
         asr: { available: false, reason: "Configure an ASR provider for Host 2.0" },
+        yolo: { available: false, reason: "Start the Host 2.0 runtime" },
       },
       config: { path: args.config, asr_engine: config.asr.engine, asr_api_base: config.asr.online.api_base, asr_model: config.asr.online.model, online_asr_configured: config.asr.engine === "online" && Boolean(config.asr.online.api_key), session_launcher: config.session_launcher, tools: config.tools.map((tool) => ({ id: tool.id, name: tool.name, cwd: tool.cwd ?? "" })) },
       ...(diagnostics?.error ? { error: diagnostics.error } : {}),
@@ -152,6 +153,7 @@ async function main(): Promise<void> {
       ble: { available: true }, keyboard: { available: true }, mic: { available: false, reason: "PipeWire probe pending" },
       asr: config.asr.engine === "online" && Boolean(config.asr.online.api_key)
         ? { available: true } : { available: false, reason: "Configure OpenAI-compatible online ASR for Host 2.0" },
+      yolo: { available: false, reason: "YOLO needs ydotool or wtype focused-input setup on Linux" },
     };
     runtime = new HostRuntime(bridge, capabilities, 2_000, ownerPermission);
     await runtime.start();
@@ -204,6 +206,11 @@ async function main(): Promise<void> {
       keyboard: { available: false, reason: "Vibe Mic HID/system key fallback is not implemented yet" },
       mic: { available: false, reason: "Platform virtual microphone is not implemented yet" },
       asr: { available: false, reason: "Agent CLI session delivery is not implemented; YOLO supports online ASR only" },
+      yolo: process.platform === "darwin" || process.platform === "win32"
+        ? config.asr.engine === "online" && Boolean(config.asr.online.api_key)
+          ? { available: true, reason: "Requires macOS Accessibility or a normal-integrity Windows foreground app" }
+          : { available: false, reason: "Configure online ASR before using YOLO" }
+        : { available: false, reason: "Native YOLO focused input is available only on macOS and Windows" },
     };
     runtime = new HostRuntime(bridge, capabilities, 2_000, ownerPermission);
     await runtime.start();
