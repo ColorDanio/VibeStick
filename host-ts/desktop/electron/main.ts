@@ -2,7 +2,8 @@ import { app, BrowserWindow, ipcMain, Menu, nativeImage, shell, Tray } from "ele
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { homedir } from "node:os";
 
 let windowRef: BrowserWindow | undefined;
 let host: ChildProcess | undefined;
@@ -84,4 +85,21 @@ void app.whenReady().then(() => {
 });
 ipcMain.handle("vibestick:host-status", () => hostStatus);
 ipcMain.handle("vibestick:restart-host", () => restartHostCore());
+ipcMain.handle("vibestick:login-startup", async (_event, action: unknown): Promise<{ ok: boolean; detail: string }> => {
+  if (action !== "install" && action !== "uninstall") return { ok: false, detail: "Invalid login-startup action" };
+  try {
+    const coreDirectory = app.isPackaged ? join(process.resourcesPath, "host-core") : resolve(currentDir, "../../dist");
+    const [{ desktopLifecyclePlan }, { executeLifecycle, nodeRunner }] = await Promise.all([
+      import(pathToFileURL(join(coreDirectory, "desktop-lifecycle.js")).href),
+      import(pathToFileURL(join(coreDirectory, "lifecycle-runner.js")).href),
+    ]);
+    const platform = process.platform === "darwin" || process.platform === "win32" ? process.platform : "linux";
+    const appArguments = app.isPackaged ? [] : [app.getAppPath()];
+    const plan = desktopLifecyclePlan({ platform, executable: process.execPath, appArguments, home: homedir(), uid: typeof process.getuid === "function" ? process.getuid() : 0, environment: process.env });
+    await executeLifecycle(plan, action, nodeRunner);
+    return { ok: true, detail: action === "install" ? "VibeStick Host will start at your next login." : "Login startup was removed." };
+  } catch (error) {
+    return { ok: false, detail: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240) };
+  }
+});
 app.on("before-quit", () => { quitting = true; host?.kill(); host = undefined; tray?.destroy(); tray = undefined; });

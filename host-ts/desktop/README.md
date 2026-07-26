@@ -13,6 +13,13 @@ The UI reads the loopback-only Host 2.0 API at `127.0.0.1:7861/api/desktop`. If 
 
 Electron is a thin cross-platform native shell and starts the shared TypeScript `HostCore` CLI when bundled. Platform-native BLE, audio and lifecycle adapters remain behind the same contracts.
 
+In the packaged desktop app, **Settings → Start at login** explicitly registers or
+removes a per-user startup entry: a systemd user service on Linux, a LaunchAgent
+on macOS, or a Task Scheduler entry on Windows. It starts the Electron shell,
+which in turn starts its own HostCore child. The action writes only the minimal
+Linux graphical-session environment needed for the shell, never persists secrets,
+and never stops Python 1.x or takes its BLE lock automatically.
+
 For Linux development, opt into the existing audited BlueZ/PipeWire bridge with
 `VIBESTICK_LINUX_HELPER=/absolute/path/to/python npm run desktop`. This starts
 Host 2.0 with that executable as the helper; it does not stop Python 1.x or

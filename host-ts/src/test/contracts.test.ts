@@ -29,6 +29,7 @@ import { diagnosticsReport } from "../diagnostics.js";
 import { NobleGattTransport, type NobleAdapter } from "../noble-transport.js";
 import { EventEmitter } from "node:events";
 import { PlatformFocusedInput, type ProcessInvocation } from "../focused-input.js";
+import { desktopEnvironment, desktopLifecyclePlan } from "../desktop-lifecycle.js";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
   const path = new URL(`../../../contracts/v1/${name}`, import.meta.url);
@@ -273,6 +274,18 @@ test("packaged lifecycle plans preserve required runtime environment on every pl
   assert.match(windows.files[0]?.path ?? "", /AppData\/Local\/VibeStick\/vibestick-ts\.cmd$/);
   assert.match(windows.files[0]?.contents ?? "", /set "ELECTRON_RUN_AS_NODE=1"/);
   assert.match(windows.install[0]?.args.join(" ") ?? "", /cmd\.exe/);
+});
+
+test("desktop login registration launches the shell and keeps only Linux session variables", () => {
+  const source = { DISPLAY: ":1", WAYLAND_DISPLAY: "wayland-1", XDG_RUNTIME_DIR: "/run/user/1000", DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/1000/bus", SECRET: "must-not-persist" };
+  assert.deepEqual(desktopEnvironment("linux", source), { DISPLAY: ":1", WAYLAND_DISPLAY: "wayland-1", XDG_RUNTIME_DIR: "/run/user/1000", DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/1000/bus" });
+  assert.deepEqual(desktopEnvironment("darwin", source), {});
+  const linux = desktopLifecyclePlan({ platform: "linux", executable: "/opt/VibeStick Host", appArguments: [], home: "/home/alice", uid: 1000, environment: source });
+  assert.match(linux.files[0]?.contents ?? "", /ExecStart=\/opt\/VibeStick\\ Host/);
+  assert.doesNotMatch(linux.files[0]?.contents ?? "", /must-not-persist/);
+  const windows = desktopLifecyclePlan({ platform: "win32", executable: "C:\\Program Files\\VibeStick\\VibeStick Host.exe", appArguments: [], home: "C:\\Users\\Alice", uid: 1, environment: source });
+  assert.equal(windows.files.length, 0);
+  assert.match(windows.install[0]?.args.join(" ") ?? "", /VibeStick Host\.exe/);
 });
 
 test("lifecycle executor writes before install, removes only after a successful uninstall", async () => {
