@@ -6,6 +6,64 @@ on:
   pull_request:
 
 jobs:
+  host-ts-tests:
+    name: Host 2.0 core (TypeScript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: host-ts/package-lock.json
+      - name: Install Host 2.0 dependencies
+        run: npm ci --prefix host-ts
+      - name: Run Host 2.0 contract tests
+        run: npm test --prefix host-ts
+
+  host-ts-desktop:
+    name: Host 2.0 desktop (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: Linux
+            output: host-ts/desktop/dist/linux-unpacked/resources/host-core/cli.js
+          - os: macos-latest
+            label: macOS
+            output: host-ts/desktop/dist/mac/VibeStick Host.app/Contents/Resources/host-core/cli.js
+          - os: windows-latest
+            label: Windows
+            output: host-ts/desktop/dist/win-unpacked/resources/host-core/cli.js
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            host-ts/package-lock.json
+            host-ts/desktop/package-lock.json
+      - name: Install Host 2.0 dependencies
+        run: npm ci --prefix host-ts
+      - name: Build Host 2.0 core
+        run: npm run build --prefix host-ts
+      - name: Install desktop dependencies
+        run: npm ci --prefix host-ts/desktop
+      - name: Package current platform
+        run: npm run package:dir --prefix host-ts/desktop
+      - name: Verify packaged HostCore resource
+        shell: bash
+        run: test -f "${{ matrix.output }}"
+      - name: Upload unpacked desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibestick-host-2-${{ matrix.label }}-unpacked
+          path: host-ts/desktop/dist/*-unpacked
+          if-no-files-found: error
+
   host-tests:
     name: Host tests (pytest)
     runs-on: ubuntu-latest

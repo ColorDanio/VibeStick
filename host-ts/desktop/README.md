@@ -23,3 +23,10 @@ conflict as degraded until the user explicitly switches owners.
 Release targets are declared for AppImage/deb (Linux), dmg/zip (macOS), and
 NSIS/zip (Windows). macOS notarization and Windows signing are release
 pipeline responsibilities, not silently bypassed at build time.
+
+CI packages this desktop app on native Linux, macOS, and Windows runners and
+checks that the bundled HostCore resource is present. Tag releases attach
+those native desktop artifacts alongside firmware and Python 1.x packages.
+This verifies packaging compatibility only; it is not evidence that BLE,
+virtual audio, permissions, notarization, or code signing have completed on a
+platform.

@@ -13,8 +13,8 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build artifacts
+  base-artifacts:
+    name: Firmware and Python artifacts
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -47,6 +47,67 @@ jobs:
           done
           cp host/dist/*.whl host/dist/*.tar.gz dist-release/
           ls -la dist-release/
+      - name: Upload base release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibestick-base-release
+          path: dist-release/*
+          if-no-files-found: error
+
+  host-ts-desktop:
+    name: Host 2.0 desktop (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: Linux
+          - os: macos-latest
+            label: macOS
+          - os: windows-latest
+            label: Windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            host-ts/package-lock.json
+            host-ts/desktop/package-lock.json
+      - name: Install and build Host 2.0 core
+        run: |
+          npm ci --prefix host-ts
+          npm run build --prefix host-ts
+      - name: Install desktop dependencies
+        run: npm ci --prefix host-ts/desktop
+      - name: Package Host 2.0 for native platform
+        run: npm run package --prefix host-ts/desktop
+      - name: Upload Host 2.0 release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibestick-host-2-${{ matrix.label }}-release
+          path: |
+            host-ts/desktop/dist/*.AppImage
+            host-ts/desktop/dist/*.deb
+            host-ts/desktop/dist/*.dmg
+            host-ts/desktop/dist/*.zip
+            host-ts/desktop/dist/*.exe
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: [base-artifacts, host-ts-desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-release
+          merge-multiple: true
+      - name: List release artifacts
+        run: ls -la dist-release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
