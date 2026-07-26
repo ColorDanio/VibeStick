@@ -28,9 +28,12 @@ conflict as degraded until the user explicitly switches owners.
 
 On macOS and Windows the packaged desktop app starts the TypeScript-native
 Noble GATT transport automatically. It can own the BLE link and synchronize
-the Stick, but it intentionally does **not** claim Vibe Mic, keyboard/focused
-input, or session delivery until native adapters for those capabilities are
-implemented and tested. Linux can opt into the same transport for bring-up via
+the Stick, but it intentionally does **not** claim Vibe Mic, keyboard, or
+session delivery until native adapters for those capabilities are implemented
+and tested. The deliberate exception is **YOLO**: on macOS and Windows,
+online-ASR text can be sent only to the OS's currently focused app
+(Accessibility permission on macOS; normal-integrity foreground app on Windows).
+Linux can opt into the same transport for bring-up via
 `VIBESTICK_NATIVE_BLE=1`; its Python helper remains the supported full-feature
 path.
 

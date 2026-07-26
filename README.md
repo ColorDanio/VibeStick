@@ -121,5 +121,6 @@ CI builds both on every push (`.github/workflows/ci.yml`).
 
 - `docs/protocol.md` — BLE GATT protocol v2 (single source of truth).
 - `docs/architecture.md` — component and data-flow deep dive.
+- `docs/host-2-migration.md` — Host 2.0 owner handoff, capability matrix, rollback, and uninstall guide.
 - `firmware/` — PlatformIO project for the StickC Plus.
 - `host/` — Python daemon, dashboard, desktop app, CLI adapters, tests.

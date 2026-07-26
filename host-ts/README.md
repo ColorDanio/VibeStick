@@ -21,8 +21,10 @@ and session delivery. The TS app speaks JSON-lines to it. Host 2.0 also now
 has a native Noble GATT transport for macOS/Windows (and opt-in Linux via
 `--native-ble`), so those platforms can connect and synchronize the Stick
 without the Python daemon. It deliberately reports keyboard delivery, virtual
-microphone, session delivery, and focused input as unavailable until their
-platform adapters are implemented and tested.
+microphone, and Agent CLI session delivery as unavailable until their platform
+adapters are implemented and tested. Native macOS/Windows YOLO focused input
+is the explicit exception: it uses online ASR plus OS-focused-input permission,
+never a selected Agent CLI session.
 
 For Linux TS-owner verification (stop the Python daemon first), supply its
 existing virtual environment as the helper executable:
@@ -55,3 +57,7 @@ Host 2.0 currently implements its own OpenAI-compatible online ASR path. Set
 configuration before it will advertise Agent ASR as available. The existing
 local faster-whisper path remains part of Python 1.x until a TS-native local
 provider is packaged.
+
+See [the Host 2.0 migration guide](../docs/host-2-migration.md) for safe owner
+handoff, capability limits, online-ASR testing, login startup, rollback, and
+uninstall guidance.
