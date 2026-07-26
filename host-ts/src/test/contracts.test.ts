@@ -14,6 +14,8 @@ import { HostCore } from "../core.js";
 import { dashboardRequest } from "../dashboard.js";
 import { loadConfigFile, loadSessionDirectory, saveConfigFile } from "../files.js";
 import { lifecyclePlan } from "../lifecycle.js";
+import { VibeBridge } from "../bridge.js";
+import { MemoryGattTransport } from "../transport.js";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
   const path = new URL(`../../../contracts/v1/${name}`, import.meta.url);
@@ -123,4 +125,19 @@ test("lifecycle plans are per-user and contain idempotent unregister operations"
   const windows = lifecyclePlan("win32", common);
   assert.deepEqual(windows.files, []);
   assert.deepEqual(windows.uninstall[0]?.args, ["/Delete", "/TN", "VibeStick Host", "/F"]);
+});
+
+test("BLE bridge subscribes, syncs and keeps Vibe Mic audio separate from ASR", async () => {
+  const core = new HostCore(normalizeConfig({ tools: [{ id: "codex", name: "Codex" }] }));
+  const transport = new MemoryGattTransport();
+  const audio: string[] = [];
+  const bridge = new VibeBridge(transport, core, { onAudio: (destination) => audio.push(destination) });
+  await bridge.connect();
+  assert.deepEqual(transport.subscriptions, ["INPUT", "COMMAND", "AUDIO", "HID_INPUT"]);
+  assert.deepEqual(transport.writes.map((item) => item.characteristic), ["STATUS", "SESSIONS", "TOOLS"]);
+  transport.notify("COMMAND", new TextEncoder().encode('{"cmd":"voice.start","mode":"mic"}'));
+  transport.notify("AUDIO", new Uint8Array([128, 129]));
+  transport.notify("COMMAND", new TextEncoder().encode('{"cmd":"voice.start"}'));
+  transport.notify("AUDIO", new Uint8Array([130]));
+  assert.deepEqual(audio, ["mic", "asr"]);
 });
