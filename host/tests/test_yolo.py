@@ -38,11 +38,27 @@ def test_focused_input_uses_ydotool_argv(monkeypatch):
 def test_focused_input_uses_clipboard_for_unicode_wayland_text(monkeypatch):
     calls = []
 
+    class Pipe:
+        def write(self, payload):
+            calls.append(("input", payload))
+
+        async def drain(self):
+            pass
+
+        def close(self):
+            calls.append(("close",))
+
+        async def wait_closed(self):
+            pass
+
     class Proc:
         returncode = 0
+        stdin = Pipe()
 
-        async def communicate(self, payload=None):
-            calls.append(("input", payload))
+        async def wait(self):
+            return 0
+
+        async def communicate(self, *_input):
             return b"", b""
 
     async def spawn(*argv, **kwargs):
@@ -54,9 +70,9 @@ def test_focused_input_uses_clipboard_for_unicode_wayland_text(monkeypatch):
     monkeypatch.setattr(yolo.asyncio, "create_subprocess_exec", spawn)
     focused = yolo.FocusedInput()
     assert asyncio.run(focused.text("中文 text")) is True
-    assert calls[0][0] == ("/usr/bin/wl-copy",)
+    assert calls[0][0] == ("/usr/bin/wl-copy", "--foreground", "--paste-once")
     assert calls[1] == ("input", "中文 text".encode())
-    assert calls[2][0] == (
+    assert calls[3][0] == (
         "/usr/bin/ydotool", "key", "29:1", "47:1", "47:0", "29:0",
     )
 

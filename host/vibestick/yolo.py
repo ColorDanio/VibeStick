@@ -11,6 +11,7 @@ log = logging.getLogger(__name__)
 # editors and browsers.  (Ctrl+Shift+V is terminal-specific and was not
 # accepted by the user's notepad.)
 _PASTE = ("29:1", "47:1", "47:0", "29:0")
+_CLIPBOARD_READY_DELAY_SEC = 0.04
 
 
 class FocusedInput:
@@ -55,18 +56,37 @@ class FocusedInput:
             return False
         try:
             p = await asyncio.create_subprocess_exec(
-                self.clipboard, stdin=asyncio.subprocess.PIPE,
+                # Keep the owner in the foreground and serve exactly the
+                # upcoming Ctrl+V.  Waiting for the default wl-copy process
+                # races its background owner startup, which is why the first
+                # YOLO utterance could be missed while later ones succeeded.
+                self.clipboard, "--foreground", "--paste-once",
+                stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.PIPE,
             )
-            _out, err = await p.communicate(text.encode("utf-8"))
-            if p.returncode == 0:
-                return True
-            log.warning("YOLO clipboard copy failed: %s",
-                        err.decode(errors="replace").strip()[:200])
+            if p.stdin is None:
+                log.warning("YOLO clipboard copy has no stdin")
+                return False
+            p.stdin.write(text.encode("utf-8"))
+            await p.stdin.drain()
+            p.stdin.close()
+            await p.stdin.wait_closed()
+            # wl-copy now owns the selection, but exits only after the paste
+            # request.  Do not await it here or the first injection blocks.
+            asyncio.create_task(self._reap_clipboard(p))
+            await asyncio.sleep(_CLIPBOARD_READY_DELAY_SEC)
+            return True
         except OSError as exc:
             log.warning("YOLO clipboard command could not start: %s", exc)
         return False
+
+    async def _reap_clipboard(self, process: asyncio.subprocess.Process) -> None:
+        """Collect one-shot wl-copy once ydotool has consumed the selection."""
+        try:
+            await process.wait()
+        except OSError:
+            pass
 
     async def text(self, text: str) -> bool:
         if not text:

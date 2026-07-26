@@ -579,6 +579,34 @@ static const uint16_t* entryLogo(int idx) {
   return toolLogo(gTools.list[idx].id);
 }
 
+// Small carousel neighbours need the same local-mode semantics as the large
+// selected cards.  Do not reuse the old top-aligned pixel assets here: inside
+// a 40 px circle they read as broken/incorrect logos.
+static void drawLocalHomeBadge(int cx, int cy, bool yolo) {
+  if (!yolo) {
+    M5Lcd.fillRoundRect(cx - 3, cy - 8, 6, 12, 3, TFT_WHITE);
+    M5Lcd.drawFastVLine(cx - 6, cy, 6, COL_ACCENT);
+    M5Lcd.drawFastVLine(cx + 6, cy, 6, COL_ACCENT);
+    M5Lcd.drawFastHLine(cx - 4, cy + 7, 9, COL_ACCENT);
+    M5Lcd.drawFastVLine(cx, cy + 7, 4, COL_ACCENT);
+    M5Lcd.drawFastHLine(cx - 5, cy + 11, 11, COL_ACCENT);
+  } else {
+    const uint16_t purple = 0x781F;
+    M5Lcd.fillTriangle(cx - 8, cy - 9, cx - 8, cy + 8, cx + 3, cy + 1,
+                       purple);
+    M5Lcd.fillTriangle(cx - 4, cy + 5, cx + 2, cy + 11, cx + 5, cy + 7,
+                       purple);
+    M5Lcd.fillRect(cx + 8, cy + 2, 2, 5, COL_ACCENT);
+    M5Lcd.fillRect(cx + 12, cy - 1, 2, 10, COL_ACCENT);
+  }
+}
+
+static void drawHomeNeighbor(int cx, int cy, int idx) {
+  if (isMicEntry(idx)) drawLocalHomeBadge(cx, cy, isYoloEntry(idx));
+  else M5Lcd.pushImage(cx - 12, cy - 12, 24, 24, entryLogo(idx),
+                        ICON_TRANSPARENT);
+}
+
 // Local modes are product surfaces rather than host tools.  Their selected
 // home state follows the square-card language: dark field, thin frame,
 // coloured corner brackets and one deliberately large symbol.
@@ -655,12 +683,10 @@ void uiShowHome(int selTool) {
       int next = (selTool + 1) % n;
       M5Lcd.fillCircle(cx - 74, cy, 20, TFT_BLACK);
       M5Lcd.drawCircle(cx - 74, cy, 20, COL_FAINT);
-      M5Lcd.pushImage(cx - 86, cy - 12, 24, 24, entryLogo(prev),
-                       ICON_TRANSPARENT);
+      drawHomeNeighbor(cx - 74, cy, prev);
       M5Lcd.fillCircle(cx + 74, cy, 20, TFT_BLACK);
       M5Lcd.drawCircle(cx + 74, cy, 20, COL_FAINT);
-      M5Lcd.pushImage(cx + 62, cy - 12, 24, 24, entryLogo(next),
-                       ICON_TRANSPARENT);
+      drawHomeNeighbor(cx + 74, cy, next);
     }
     if (isMicEntry(selTool)) {
       drawLocalHomeCard(cx - 28, cy - 26, isYoloEntry(selTool));
@@ -680,12 +706,10 @@ void uiShowHome(int selTool) {
       int next = (selTool + 1) % n;
       M5Lcd.fillCircle(cx, 40, 18, TFT_BLACK);
       M5Lcd.drawCircle(cx, 40, 18, COL_FAINT);
-      M5Lcd.pushImage(cx - 12, 28, 24, 24, entryLogo(prev),
-                       ICON_TRANSPARENT);
+      drawHomeNeighbor(cx, 40, prev);
       M5Lcd.fillCircle(cx, 180, 18, TFT_BLACK);
       M5Lcd.drawCircle(cx, 180, 18, COL_FAINT);
-      M5Lcd.pushImage(cx - 12, 168, 24, 24, entryLogo(next),
-                       ICON_TRANSPARENT);
+      drawHomeNeighbor(cx, 180, next);
     }
     if (isMicEntry(selTool)) {
       drawLocalHomeCard(cx - 28, 68, isYoloEntry(selTool));
@@ -1294,13 +1318,15 @@ void uiShowMic(const char* errorText, bool yolo) {
   int cy = land ? 52 : (sH * 36) / 100;
 
   M5Lcd.drawCircle(cx, cy, ringR, COL_FAINT);
-  // Mic glyph at 2x (per-pixel) inside the ring.
-  for (int gy = 0; gy < 24; ++gy) {
-    for (int gx = 0; gx < 24; ++gx) {
-      const uint16_t* modeIcon = yolo ? icon_yolo24 : icon_vibe_mic24;
-      uint16_t px = pgm_read_word(modeIcon + gy * 24 + gx);
+  // Both local mode idle screens start from the familiar microphone glyph.
+  // YOLO differs through its title and focused-input controls, not by making
+  // the device look like an unrelated cursor before recording begins.
+  for (int gy = 0; gy < 16; ++gy) {
+    for (int gx = 0; gx < 16; ++gx) {
+      const uint16_t* modeIcon = icon_voice;
+      uint16_t px = pgm_read_word(modeIcon + gy * 16 + gx);
       if (px != ICON_TRANSPARENT) {
-        M5Lcd.fillRect(cx - 24 + gx * 2, cy - 24 + gy * 2, 2, 2, TFT_WHITE);
+        M5Lcd.fillRect(cx - 24 + gx * 3, cy - 24 + gy * 3, 3, 3, TFT_WHITE);
       }
     }
   }
