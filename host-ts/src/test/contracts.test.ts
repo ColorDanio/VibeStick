@@ -16,6 +16,7 @@ import { loadConfigFile, loadSessionDirectory, saveConfigFile } from "../files.j
 import { lifecyclePlan } from "../lifecycle.js";
 import { VibeBridge } from "../bridge.js";
 import { MemoryGattTransport } from "../transport.js";
+import { HostRuntime } from "../runtime.js";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
   const path = new URL(`../../../contracts/v1/${name}`, import.meta.url);
@@ -140,4 +141,16 @@ test("BLE bridge subscribes, syncs and keeps Vibe Mic audio separate from ASR", 
   transport.notify("COMMAND", new TextEncoder().encode('{"cmd":"voice.start"}'));
   transport.notify("AUDIO", new Uint8Array([130]));
   assert.deepEqual(audio, ["mic", "asr"]);
+});
+
+test("runtime reports a missing Vibe Mic capability as degraded instead of ready", async () => {
+  const core = new HostCore(normalizeConfig({ tools: [] }));
+  const bridge = new VibeBridge(new MemoryGattTransport(), core);
+  const runtime = new HostRuntime(bridge, {
+    ble: { available: true }, keyboard: { available: true }, mic: { available: false, reason: "driver missing" },
+  });
+  assert.equal(await runtime.start(), "degraded");
+  assert.deepEqual(runtime.diagnostics().capabilities.mic, { available: false, reason: "driver missing" });
+  await runtime.stop();
+  assert.equal(runtime.state, "stopped");
 });
