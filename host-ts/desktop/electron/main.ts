@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, shell, Tray } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -6,15 +6,15 @@ import { fileURLToPath } from "node:url";
 
 let windowRef: BrowserWindow | undefined;
 let host: ChildProcess | undefined;
+let tray: Tray | undefined;
+let quitting = false;
 let hostStatus: { state: "starting" | "running" | "exited" | "missing"; detail?: string } = { state: "starting" };
 let hostGeneration = 0;
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else app.on("second-instance", () => {
-  if (!windowRef) return;
-  if (windowRef.isMinimized()) windowRef.restore();
-  windowRef.focus();
+  showWindow();
 });
 
 /** Electron is deliberately a thin, cross-platform native shell; HostCore stays shared TypeScript. */
@@ -55,14 +55,32 @@ function createWindow(): void {
   const devServer = process.env.VIBESTICK_DESKTOP_URL;
   if (devServer) void windowRef.loadURL(devServer); else void windowRef.loadFile(join(currentDir, "../dist/index.html"));
   windowRef.webContents.setWindowOpenHandler(({ url }) => { void shell.openExternal(url); return { action: "deny" }; });
+  windowRef.on("close", (event) => { if (!quitting) { event.preventDefault(); windowRef?.hide(); } });
+}
+
+function showWindow(): void {
+  if (!windowRef || windowRef.isDestroyed()) createWindow();
+  if (windowRef?.isMinimized()) windowRef.restore();
+  windowRef?.show(); windowRef?.focus();
+}
+
+function createTray(): void {
+  const icon = nativeImage.createFromDataURL("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDE2IDE2Ij48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iMTQiIGhlaWdodD0iMTQiIHJ4PSI0IiBmaWxsPSIjMjEyNzJiIiBzdHJva2U9IiM3YmUwYmQiLz48cGF0aCBkPSJtNCA1IDQgNiA0LTYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzdiZTBiZCIgc3Ryb2tlLXdpZHRoPSIyIi8+PC9zdmc+");
+  tray = new Tray(icon); tray.setToolTip("VibeStick Host 2.0");
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: "Show VibeStick", click: showWindow },
+    { label: "Restart Host 2.0", click: () => { void restartHostCore(); } },
+    { type: "separator" },
+    { label: "Quit", click: () => { quitting = true; app.quit(); } },
+  ]));
+  tray.on("click", showWindow);
 }
 
 void app.whenReady().then(() => {
   if (!app.hasSingleInstanceLock()) return;
-  startHostCore(); createWindow();
+  startHostCore(); createWindow(); createTray();
   app.on("activate", () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });
 ipcMain.handle("vibestick:host-status", () => hostStatus);
 ipcMain.handle("vibestick:restart-host", () => restartHostCore());
-app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
-app.on("before-quit", () => { host?.kill(); host = undefined; });
+app.on("before-quit", () => { quitting = true; host?.kill(); host = undefined; tray?.destroy(); tray = undefined; });
