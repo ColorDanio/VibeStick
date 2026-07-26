@@ -1,5 +1,7 @@
 import { useEffect, useState, type ReactElement } from "react";
 
+declare global { interface Window { vibestickDesktop?: { hostStatus(): Promise<{ state: string; detail?: string }> }; } }
+
 type Capability = { available: boolean; reason?: string };
 type Session = { id: string; state: "idle" | "running" | "waiting"; session: string; model: string; last: string; tool: string };
 type Snapshot = {
@@ -38,7 +40,13 @@ export function App(): ReactElement {
     let active = true;
     const refresh = async (): Promise<void> => {
       try { const snapshot = await api("/api/desktop"); if (active) { setData(snapshot); setConnected(true); setNotice(""); } }
-      catch { if (active) setConnected(false); }
+      catch {
+        if (!active) return;
+        setConnected(false);
+        const native = await window.vibestickDesktop?.hostStatus().catch(() => undefined);
+        if (native?.state === "exited") setNotice(`Host 2.0 stopped: ${native.detail ?? "see diagnostics"}`);
+        else if (native?.state === "missing") setNotice(`Host 2.0 unavailable: ${native.detail ?? "runtime missing"}`);
+      }
     };
     void refresh(); const timer = window.setInterval(() => void refresh(), 1200);
     return () => { active = false; window.clearInterval(timer); };

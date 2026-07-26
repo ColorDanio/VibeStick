@@ -1,5 +1,5 @@
 {
   "extends": "../tsconfig.json",
   "compilerOptions": { "noEmit": false, "outDir": "../electron-dist", "rootDir": ".", "types": ["node"] },
-  "include": ["main.ts"]
+  "include": ["main.ts", "preload.ts"]
 }
