@@ -7,7 +7,7 @@ type Snapshot = {
   status: { state: string; session: string; tool: string; model: string };
   sessions: { list: Session[] };
   tools: { list: { id: string; name: string; state: string }[] };
-  environment: { owner: "active" | "inactive"; runtime: string; capabilities: { ble: Capability; keyboard: Capability; mic: Capability }; error?: string };
+  environment: { owner: "active" | "inactive"; runtime: string; capabilities: { ble: Capability; keyboard: Capability; mic: Capability; asr: Capability }; error?: string };
 };
 
 const api = async (path: string, init?: RequestInit): Promise<Snapshot> => {
@@ -25,7 +25,7 @@ const demo: Snapshot = {
   ] },
   tools: { list: [{ id: "opencode", name: "OpenCode", state: "ready" }, { id: "codex", name: "Codex", state: "running" }] },
   environment: { owner: "inactive", runtime: "stopped", capabilities: {
-    ble: { available: false, reason: "Start the Host 2.0 runtime" }, keyboard: { available: false, reason: "Start the Host 2.0 runtime" }, mic: { available: false, reason: "Start the Host 2.0 runtime" },
+    ble: { available: false, reason: "Start the Host 2.0 runtime" }, keyboard: { available: false, reason: "Start the Host 2.0 runtime" }, mic: { available: false, reason: "Start the Host 2.0 runtime" }, asr: { available: false, reason: "Configure online ASR" },
   } },
 };
 
@@ -69,7 +69,7 @@ export function App(): ReactElement {
       {notice && <div className="notice">{notice}</div>}
       <section className="device-row">
         <div className="device-summary"><div className="stick-art"><i></i><i></i><b>V</b></div><div><p className="eyebrow">M5STICKC PLUS</p><h2>VibeStick</h2><p>{runtime === "ready" ? "BLE bridge connected and synchronized." : "Choose Host 2.0 as the BLE owner to connect."}</p></div></div>
-        <div className="capabilities">{(["ble", "keyboard", "mic"] as const).map((key) => <div className="cap" key={key}><span className={`cap-icon ${data.environment.capabilities[key].available ? "on" : ""}`}>{data.environment.capabilities[key].available ? "✓" : "–"}</span><div><b>{key === "ble" ? "BLE bridge" : key === "keyboard" ? "HID keys" : "Vibe Mic"}</b><small>{data.environment.capabilities[key].available ? "Available" : data.environment.capabilities[key].reason}</small></div></div>)}</div>
+        <div className="capabilities">{(["ble", "keyboard", "mic", "asr"] as const).map((key) => <div className="cap" key={key}><span className={`cap-icon ${data.environment.capabilities[key].available ? "on" : ""}`}>{data.environment.capabilities[key].available ? "✓" : "–"}</span><div><b>{key === "ble" ? "BLE bridge" : key === "keyboard" ? "HID keys" : key === "mic" ? "Vibe Mic" : "Agent ASR"}</b><small>{data.environment.capabilities[key].available ? "Available" : data.environment.capabilities[key].reason}</small></div></div>)}</div>
       </section>
       <section className="modes" id="voice"><div className="section-heading"><div><p className="eyebrow">INPUT MODES</p><h2>How the Stick speaks</h2></div><span className="current-route">Current route: {data.audio_route === "mic" ? "Vibe Mic" : "Agent CLI ASR"}</span></div>
         <div className="mode-list"><Mode name="Agent CLI" detail="Transcribe, then deliver to the selected session." active={data.audio_route === "asr"} /><Mode name="Vibe Mic" detail="Raw audio to your system input device." active={data.audio_route === "mic"} /><Mode name="YOLO" detail="Transcribe into the currently focused application." warning /></div>

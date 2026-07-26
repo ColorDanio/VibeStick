@@ -2,11 +2,12 @@
 import { resolve } from "node:path";
 import { HostCore } from "./core.js";
 import { loadConfigFile, loadSessionDirectory } from "./files.js";
-import { createLinuxBridge } from "./linux-bridge.js";
+import { createLinuxBridge, type LinuxBridgeOptions } from "./linux-bridge.js";
 import { HostRuntime, type Capabilities } from "./runtime.js";
 import { startDashboardServer } from "./server.js";
 import type { VibeBridge } from "./bridge.js";
 import type { DashboardEnvironment } from "./dashboard.js";
+import { VoicePipeline, onlineTranscriber } from "./asr.js";
 
 type Args = { config: string; sessions: string; port: number; helper?: string; address?: string };
 
@@ -26,6 +27,7 @@ async function main(): Promise<void> {
         ble: { available: false, reason: "Start Host 2.0 with the Linux BLE helper" },
         keyboard: { available: false, reason: "Start Host 2.0 with the Linux BLE helper" },
         mic: { available: false, reason: "Start Host 2.0 with the Linux BLE helper" },
+        asr: { available: false, reason: "Configure an ASR provider for Host 2.0" },
       },
       ...(diagnostics?.error ? { error: diagnostics.error } : {}),
     };
@@ -34,18 +36,39 @@ async function main(): Promise<void> {
   console.log(`VibeStick TS dashboard: http://127.0.0.1:${dashboard.port}`);
 
   let bridge: VibeBridge | undefined;
+  let deliverSelected: ((text: string) => Promise<boolean>) | undefined;
+  const voice = new VoicePipeline(config.asr, onlineTranscriber, (update) => { void bridge?.publishVoice(update); });
   if (args.helper) {
-    const bridgeOptions = {
+    const bridgeOptions: LinuxBridgeOptions = {
       helperExecutable: args.helper,
       helperArgs: [resolve(process.cwd(), "../host/tools/ble_gatt_helper.py")],
       onError: (error: Error) => console.error(`capability error: ${error.message}`),
+      onAsrAudio: (pcm: Uint8Array) => voice.feed(pcm),
+      onRoutingActions: async (actions) => {
+        for (const action of actions) {
+          if (action === "asr.start") {
+            if (config.asr.engine !== "online") { await bridge?.publishVoice({ state: "error", text: "Host 2.0 needs online ASR configured" }); continue; }
+            voice.start();
+          }
+          if (action === "asr.stop") await voice.stop();
+          if (action === "asr.cancel") voice.cancel();
+        }
+      },
+      onCommand: async (command) => {
+        if (command.cmd !== "voice.confirm") return;
+        const text = voice.confirm();
+        if (text && (!deliverSelected || !(await deliverSelected(text)))) throw new Error("voice delivery failed");
+      },
       ...(args.address ? { address: args.address } : {}),
     };
     const linux = createLinuxBridge(core, bridgeOptions);
     bridge = linux.bridge;
+    deliverSelected = linux.deliver;
     const { mic } = linux;
     const capabilities: Capabilities = {
       ble: { available: true }, keyboard: { available: true }, mic: { available: false, reason: "PipeWire probe pending" },
+      asr: config.asr.engine === "online" && Boolean(config.asr.online.api_key)
+        ? { available: true } : { available: false, reason: "Configure OpenAI-compatible online ASR for Host 2.0" },
     };
     runtime = new HostRuntime(bridge, capabilities);
     await runtime.start();

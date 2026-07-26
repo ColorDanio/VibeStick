@@ -14,6 +14,7 @@ const unavailable: Capabilities = {
   ble: { available: false, reason: "Host 2.0 is not connected" },
   keyboard: { available: false, reason: "Host 2.0 is not connected" },
   mic: { available: false, reason: "Host 2.0 is not connected" },
+  asr: { available: false, reason: "Host 2.0 is not connected" },
 };
 
 /** HTTP/IPC contract; a Node HTTP server or Electron IPC adapter can call this. */

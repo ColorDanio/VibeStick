@@ -2,7 +2,7 @@ import type { VibeBridge } from "./bridge.js";
 
 export type RuntimeState = "stopped" | "starting" | "ready" | "degraded" | "stopping";
 export interface Capability { available: boolean; reason?: string; }
-export interface Capabilities { ble: Capability; keyboard: Capability; mic: Capability; }
+export interface Capabilities { ble: Capability; keyboard: Capability; mic: Capability; asr: Capability; }
 
 /** Owns the host lifecycle state without hiding unavailable platform features. */
 export class HostRuntime {
@@ -18,7 +18,7 @@ export class HostRuntime {
     try {
       await this.bridge.connect();
       this.ownsBleLink = true;
-      this.state = this.capabilities.ble.available && this.capabilities.keyboard.available && this.capabilities.mic.available
+      this.state = this.capabilities.ble.available && this.capabilities.keyboard.available && this.capabilities.mic.available && this.capabilities.asr.available
         ? "ready" : "degraded";
     } catch (error) {
       this.ownsBleLink = false;
@@ -38,7 +38,7 @@ export class HostRuntime {
   /** Re-evaluate probes completed after BLE connection (for example PipeWire). */
   reconcile(): RuntimeState {
     if (this.state === "ready" || this.state === "degraded") {
-      this.state = this.capabilities.ble.available && this.capabilities.keyboard.available && this.capabilities.mic.available
+      this.state = this.capabilities.ble.available && this.capabilities.keyboard.available && this.capabilities.mic.available && this.capabilities.asr.available
         ? "ready" : "degraded";
     }
     return this.state;

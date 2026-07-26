@@ -20,6 +20,7 @@ import { MemoryGattTransport } from "../transport.js";
 import { HostRuntime } from "../runtime.js";
 import { LinuxVibeMicSink } from "../mic-sink.js";
 import { startDashboardServer } from "../server.js";
+import { VoicePipeline, wav, type AsrTranscriber } from "../asr.js";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
   const path = new URL(`../../../contracts/v1/${name}`, import.meta.url);
@@ -106,7 +107,7 @@ test("dashboard contract returns snapshots and routes commands through one core"
   assert.equal(dashboardRequest(core, "POST", "/api/command", { cmd: "tool.select", id: "nope" }).status, 400);
   const desktop = dashboardRequest(core, "GET", "/api/desktop", undefined, {
     implementation: "host-2", owner: "active", runtime: "ready",
-    capabilities: { ble: { available: true }, keyboard: { available: true }, mic: { available: true } },
+    capabilities: { ble: { available: true }, keyboard: { available: true }, mic: { available: true }, asr: { available: true } },
   });
   assert.equal((desktop.body as { environment: { owner: string } }).environment.owner, "active");
 });
@@ -201,7 +202,7 @@ test("runtime reports a missing Vibe Mic capability as degraded instead of ready
   const core = new HostCore(normalizeConfig({ tools: [] }));
   const bridge = new VibeBridge(new MemoryGattTransport(), core);
   const runtime = new HostRuntime(bridge, {
-    ble: { available: true }, keyboard: { available: true }, mic: { available: false, reason: "driver missing" },
+    ble: { available: true }, keyboard: { available: true }, mic: { available: false, reason: "driver missing" }, asr: { available: true },
   });
   assert.equal(await runtime.start(), "degraded");
   assert.equal(runtime.isBleOwner(), true);
@@ -218,7 +219,7 @@ test("runtime never claims BLE ownership when its transport connection fails", a
     async connect() { throw new Error("other host owns the VibeStick"); }, async disconnect() {}, async subscribe() {}, async write() {},
   }, core);
   const runtime = new HostRuntime(bridge, {
-    ble: { available: true }, keyboard: { available: true }, mic: { available: true },
+    ble: { available: true }, keyboard: { available: true }, mic: { available: true }, asr: { available: true },
   });
   assert.equal(await runtime.start(), "degraded");
   assert.equal(runtime.isBleOwner(), false);
@@ -239,4 +240,22 @@ test("Linux Vibe Mic sink only forwards frames during a mic route", async () => 
   await sink.apply(["relay.stop"]);
   await sink.feed(new Uint8Array([128]));
   assert.deepEqual(calls, ["mic.warmup", "mic.start", "mic.feed:gA==", "mic.stop"]);
+});
+
+test("TypeScript voice pipeline buffers firmware PCM, publishes states, and only delivers after confirm", async () => {
+  const updates: string[] = [];
+  const transcriber: AsrTranscriber = { async transcribe(pcm) { assert.deepEqual([...pcm], [128, 129, 130]); return "continue implementation"; } };
+  const pipeline = new VoicePipeline(normalizeConfig({}).asr, transcriber, (update) => updates.push(`${update.state}:${update.text}`));
+  pipeline.start(); pipeline.feed(new Uint8Array([128, 129])); pipeline.feed(new Uint8Array([130])); await pipeline.stop();
+  assert.deepEqual(updates, ["recording:", "transcribing:", "ready:continue implementation"]);
+  assert.equal(pipeline.confirm(), "continue implementation");
+  assert.equal(pipeline.confirm(), undefined);
+});
+
+test("TypeScript WAV encoding preserves the 8 kHz unsigned firmware format", () => {
+  const encoded = wav(new Uint8Array([0, 128, 255]));
+  assert.equal(Buffer.from(encoded.subarray(0, 4)).toString("ascii"), "RIFF");
+  assert.equal(new DataView(encoded.buffer).getUint32(24, true), 8000);
+  assert.equal(new DataView(encoded.buffer).getUint16(34, true), 8);
+  assert.deepEqual([...encoded.subarray(44)], [0, 128, 255]);
 });
