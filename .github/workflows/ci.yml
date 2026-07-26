@@ -39,13 +39,10 @@ jobs:
         include:
           - os: ubuntu-latest
             label: Linux
-            output: host-ts/desktop/dist/linux-unpacked/resources/host-core/cli.js
           - os: macos-latest
             label: macOS
-            output: host-ts/desktop/dist/mac/VibeConn 2.0.app/Contents/Resources/host-core/cli.js
           - os: windows-latest
             label: Windows
-            output: host-ts/desktop/dist/win-unpacked/resources/host-core/cli.js
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -56,6 +53,10 @@ jobs:
           cache-dependency-path: |
             host-ts/package-lock.json
             host-ts/desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux Tauri prerequisites
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libsoup-3.0-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
       - name: Install Host 2.0 dependencies
         run: npm ci --prefix host-ts
       - name: Build Host 2.0 core
@@ -63,20 +64,12 @@ jobs:
       - name: Install desktop dependencies
         run: npm ci --prefix host-ts/desktop
       - name: Package current platform
-        run: npm run package:dir --prefix host-ts/desktop
-      - name: Verify packaged HostCore resource
-        shell: bash
-        run: test -f "${{ matrix.output }}"
-      - name: Verify packaged Linux Noble addon loads in Electron
-        if: matrix.os == 'ubuntu-latest'
-        working-directory: host-ts/desktop
-        shell: bash
-        run: ELECTRON_RUN_AS_NODE=1 ./dist/linux-unpacked/vibeconn-2 -e "require('./dist/linux-unpacked/resources/host-core/node_modules/@abandonware/noble'); console.log('packaged noble loads')"
-      - name: Upload unpacked desktop artifact
+        run: npm run package --prefix host-ts/desktop
+      - name: Upload Tauri desktop artifact
         uses: actions/upload-artifact@v4
         with:
-          name: vibestick-host-2-${{ matrix.label }}-unpacked
-          path: host-ts/desktop/dist/*-unpacked
+          name: vibestick-host-2-${{ matrix.label }}
+          path: host-ts/desktop/src-tauri/target/release/bundle/**
           if-no-files-found: error
 
   host-tests:

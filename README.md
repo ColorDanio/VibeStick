@@ -110,7 +110,7 @@ daemon:
 ```sh
 tools/vibeconn                           # VibeConn 1.x: daemon + UI
 tools/vibeconn --implementation 1 --daemon
-tools/vibeconn --implementation 2        # VibeConn 2.0 Electron UI + daemon
+tools/vibeconn --implementation 2        # VibeConn 2.0 Tauri UI + daemon
 VIBECONN_IMPLEMENTATION=2 make vibeconn
 ```
 

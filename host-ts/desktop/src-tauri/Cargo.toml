@@ -1,0 +1,15 @@
+[package]
+name = "vibeconn"
+version = "0.2.0"
+description = "VibeConn 2.0 desktop shell"
+authors = ["VibeStick contributors"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+

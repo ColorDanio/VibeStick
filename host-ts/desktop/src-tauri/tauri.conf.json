@@ -1,0 +1,44 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "VibeConn",
+  "version": "0.2.0",
+  "identifier": "io.vibeconn.host2",
+  "build": {
+    "beforeDevCommand": "npm run dev:ui",
+    "devUrl": "http://127.0.0.1:5174",
+    "beforeBuildCommand": "npm run build:ui",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "VibeConn",
+        "width": 1180,
+        "height": 760,
+        "minWidth": 980,
+        "minHeight": 680,
+        "resizable": true,
+        "decorations": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:7860 http://127.0.0.1:7861; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "resources": {
+      "../dist/": "host-core/",
+      "../node_modules/": "host-core/node_modules/",
+      "resources/": "runtime/",
+      "../../host/tools/ble_gatt_helper.py": "host/tools/ble_gatt_helper.py",
+      "../../host/tools/asr_helper.py": "host/tools/asr_helper.py",
+      "../../host/tools/session_discovery_helper.py": "host/tools/session_discovery_helper.py"
+    },
+    "linux": {
+      "category": "Utility"
+    }
+  }
+}

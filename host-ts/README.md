@@ -2,7 +2,7 @@
 
 This is the new cross-platform TypeScript VibeConn 2.0 runtime, developed
 alongside—not in place of—the supported Python 1.x daemon. Its React +
-Electron desktop control center lives in [`desktop/`](desktop/). Platform
+Tauri desktop control center lives in [`desktop/`](desktop/). Platform
 capabilities are added only after this core conforms to `../contracts/v1`.
 
 ```bash
@@ -12,7 +12,7 @@ npm start -- --config ~/.vibestick/config.json
 ```
 
 For repository development, prefer the versioned launcher from the project
-root: `tools/vibeconn --implementation 2`. It starts the Electron UI and its
+root: `tools/vibeconn --implementation 2`. It starts the Tauri UI and its
 own HostCore daemon. `tools/vibeconn` without an implementation remains the
 stable VibeConn 1.x command.
 
@@ -54,8 +54,8 @@ The desktop shell remains in preview until Host 2.0 owns the BLE link; it
 never presents unavailable BLE, HID, or Vibe Mic capabilities as usable.
 
 The cross-platform login lifecycle model also carries the executable's
-arguments and non-secret runtime environment. This is needed when an Electron
-package launches the bundled HostCore through Electron's Node compatibility
+arguments and non-secret runtime environment. This is needed when the Tauri
+package launches the bundled HostCore through its versioned Node sidecar
 mode: systemd receives an `Environment` entry, LaunchAgent receives
 `EnvironmentVariables`, and Windows receives a user-local wrapper consumed by
 Task Scheduler. Registration itself remains an explicit user action; Host 2.0

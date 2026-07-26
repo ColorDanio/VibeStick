@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability set for the VibeConn primary window.",
+  "windows": ["main"],
+  "permissions": ["core:default", "opener:default"]
+}

@@ -23,7 +23,7 @@ while (($#)); do
 Usage: vibeconn [--implementation 1|2] [--daemon]
 
 VibeConn 1.x (default) starts the stable Python daemon and its UI.
-VibeConn 2.0 starts the TypeScript/Electron refactor.  It will remain on
+VibeConn 2.0 starts the TypeScript/Tauri refactor.  It will remain on
 standby while 1.x owns BLE; use the explicit owner handoff in its UI.
 
 Environment:
@@ -70,8 +70,8 @@ case "$implementation" in
       exec node dist/cli.js "${native_args[@]}" "${args[@]}"
     fi
     cd "$ROOT_DIR/host-ts/desktop"
-    [[ -f electron-dist/main.js && -f ../dist/cli.js ]] || npm run build
-    exec npm run desktop -- "${args[@]}"
+    [[ -f ../dist/cli.js ]] || (cd "$ROOT_DIR/host-ts" && npm run build)
+    exec npm run dev -- "${args[@]}"
     ;;
   *)
     printf '%s\n' "VIBECONN_IMPLEMENTATION must be 1 or 2 (got: $implementation)." >&2

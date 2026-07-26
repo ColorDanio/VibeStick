@@ -83,6 +83,10 @@ jobs:
           cache-dependency-path: |
             host-ts/package-lock.json
             host-ts/desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux Tauri prerequisites
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libsoup-3.0-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
       - name: Install and build Host 2.0 core
         run: |
           npm ci --prefix host-ts
@@ -96,11 +100,11 @@ jobs:
         with:
           name: vibestick-host-2-${{ matrix.label }}-release
           path: |
-            host-ts/desktop/dist/*.AppImage
-            host-ts/desktop/dist/*.deb
-            host-ts/desktop/dist/*.dmg
-            host-ts/desktop/dist/*.zip
-            host-ts/desktop/dist/*.exe
+            host-ts/desktop/src-tauri/target/release/bundle/**/*.AppImage
+            host-ts/desktop/src-tauri/target/release/bundle/**/*.deb
+            host-ts/desktop/src-tauri/target/release/bundle/**/*.dmg
+            host-ts/desktop/src-tauri/target/release/bundle/**/*.msi
+            host-ts/desktop/src-tauri/target/release/bundle/**/*.exe
           if-no-files-found: error
 
   release:

@@ -5,92 +5,27 @@
   "description": "Cross-platform VibeConn 2.0 desktop companion",
   "author": "VibeStick contributors",
   "type": "module",
-  "main": "electron-dist/main.js",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build && npm run build:electron",
-    "build:electron": "tsc -p electron/tsconfig.json",
-    "rebuild:noble": "node scripts/rebuild-native.mjs",
+    "dev:ui": "vite --host 127.0.0.1",
+    "dev": "tauri dev",
+    "build:ui": "tsc -b && vite build",
+    "prepare:runtime": "npm run build --prefix .. && node scripts/stage-tauri-runtime.mjs",
+    "build": "npm run prepare:runtime && tauri build",
     "preview": "vite preview",
-    "desktop": "electron electron-dist/main.js",
-    "package:dir": "npm run rebuild:noble && npm run build && electron-builder --dir",
-    "package": "npm run rebuild:noble && npm run build && electron-builder"
+    "package": "tauri build"
   },
   "dependencies": {
-    "@abandonware/noble": "^1.9.2-20"
+    "@tauri-apps/api": "^2.11.1"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.4.1",
-    "electron": "^35.0.0",
-    "electron-builder": "^26.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "typescript": "^5.8.0",
     "vite": "^6.1.0"
-  },
-  "build": {
-    "appId": "io.vibeconn.host2",
-    "productName": "VibeConn 2.0",
-    "executableName": "vibeconn-2",
-    "asar": true,
-    "npmRebuild": false,
-    "files": [
-      "dist/**/*",
-      "electron-dist/**/*",
-      "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "../dist",
-        "to": "host-core",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "node_modules",
-        "to": "host-core/node_modules",
-        "filter": [
-          "@abandonware/**",
-          "debug/**",
-          "ms/**",
-          "napi-thread-safe-callback/**",
-          "node-addon-api/**",
-          "node-gyp-build/**"
-        ]
-      },
-      {
-        "from": "../../host/tools",
-        "to": "vibeconn-compat",
-        "filter": [
-          "ble_gatt_helper.py",
-          "asr_helper.py",
-          "session_discovery_helper.py"
-        ]
-      }
-    ],
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ],
-      "category": "Utility"
-    },
-    "mac": {
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "category": "public.app-category.utilities"
-    },
-    "win": {
-      "target": [
-        "nsis",
-        "zip"
-      ]
-    }
   }
 }
