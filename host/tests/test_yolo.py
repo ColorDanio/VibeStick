@@ -12,8 +12,10 @@ def test_focused_input_uses_ydotool_argv(monkeypatch):
     calls = []
 
     class Proc:
-        async def wait(self):
-            return 0
+        returncode = 0
+
+        async def communicate(self, *_input):
+            return b"", b""
 
     async def spawn(*argv, **_kwargs):
         calls.append(argv)
@@ -26,11 +28,38 @@ def test_focused_input_uses_ydotool_argv(monkeypatch):
     assert asyncio.run(focused.enter()) is True
     assert asyncio.run(focused.escape_twice()) is True
     assert calls == [
-        ("/usr/bin/ydotool", "type", "--", "你好 world"),
+        ("/usr/bin/ydotool", "type", "你好 world"),
         ("/usr/bin/ydotool", "key", "28:1", "28:0"),
         ("/usr/bin/ydotool", "key", "1:1", "1:0"),
         ("/usr/bin/ydotool", "key", "1:1", "1:0"),
     ]
+
+
+def test_focused_input_uses_clipboard_for_unicode_wayland_text(monkeypatch):
+    calls = []
+
+    class Proc:
+        returncode = 0
+
+        async def communicate(self, payload=None):
+            calls.append(("input", payload))
+            return b"", b""
+
+    async def spawn(*argv, **kwargs):
+        calls.append((argv, kwargs))
+        return Proc()
+
+    paths = {"ydotool": "/usr/bin/ydotool", "wl-copy": "/usr/bin/wl-copy"}
+    monkeypatch.setattr(yolo.shutil, "which", paths.get)
+    monkeypatch.setattr(yolo.asyncio, "create_subprocess_exec", spawn)
+    focused = yolo.FocusedInput()
+    assert asyncio.run(focused.text("中文 text")) is True
+    assert calls[0][0] == ("/usr/bin/wl-copy",)
+    assert calls[1] == ("input", "中文 text".encode())
+    assert calls[2][0] == (
+        "/usr/bin/ydotool", "key", "29:1", "42:1", "47:1",
+        "47:0", "42:0", "29:0",
+    )
 
 
 def test_focused_input_without_tool_is_safe(monkeypatch):
