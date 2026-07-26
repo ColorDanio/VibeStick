@@ -13,6 +13,7 @@ import { HostSessionStore } from "../store.js";
 import { HostCore } from "../core.js";
 import { dashboardRequest } from "../dashboard.js";
 import { loadConfigFile, loadSessionDirectory, saveConfigFile } from "../files.js";
+import { lifecyclePlan } from "../lifecycle.js";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
   const path = new URL(`../../../contracts/v1/${name}`, import.meta.url);
@@ -109,4 +110,17 @@ test("file repository atomically persists config and defensively loads fresh ses
   await writeFile(join(directory, "bad.json"), "not json");
   assert.deepEqual((await loadSessionDirectory(directory)).map((record) => record.id), ["good"]);
   assert.match(await readFile(configPath, "utf8"), /"session_launcher"/);
+});
+
+test("lifecycle plans are per-user and contain idempotent unregister operations", () => {
+  const common = { executable: "/Applications/VibeStick Host", configPath: "/tmp/config.json", home: "/home/alice", uid: 501 };
+  const linux = lifecyclePlan("linux", common);
+  assert.match(linux.files[0]?.contents ?? "", /ExecStart=.*VibeStick\\ Host/);
+  assert.deepEqual(linux.uninstall[0]?.args, ["--user", "disable", "--now", "vibestick-ts.service"]);
+  const mac = lifecyclePlan("darwin", common);
+  assert.match(mac.files[0]?.path ?? "", /LaunchAgents\/io\.vibestick\.host\.plist$/);
+  assert.match(mac.files[0]?.contents ?? "", /RunAtLoad/);
+  const windows = lifecyclePlan("win32", common);
+  assert.deepEqual(windows.files, []);
+  assert.deepEqual(windows.uninstall[0]?.args, ["/Delete", "/TN", "VibeStick Host", "/F"]);
 });
