@@ -24,9 +24,10 @@ daemon. The Linux native route now owns its PipeWire **Vibe Mic** source and
 `pw-cat` feeder in TypeScript; it does not invoke the Python helper for that
 capability. It deliberately still reports keyboard delivery and Agent CLI
 session delivery as unavailable until their platform adapters are implemented
-and tested. Native macOS/Windows YOLO focused input
-is the explicit exception: it uses online ASR plus OS-focused-input permission,
-never a selected Agent CLI session.
+and tested. Native YOLO focused input is another explicit exception: Linux
+uses `ydotool` then `wtype` with argv-only calls; macOS uses System Events and
+Windows uses SendInput. Each platform requires online ASR and a successful
+explicit focused-input probe, and never targets a selected Agent CLI session.
 
 For Linux TS-owner verification (stop the Python daemon first), supply its
 existing virtual environment as the helper executable:

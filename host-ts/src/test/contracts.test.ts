@@ -30,6 +30,7 @@ import { diagnosticsReport } from "../diagnostics.js";
 import { NobleGattTransport, type NobleAdapter } from "../noble-transport.js";
 import { EventEmitter } from "node:events";
 import { PlatformFocusedInput, type ProcessInvocation } from "../focused-input.js";
+import { LinuxFocusedInput, type LinuxInvocation } from "../linux-focused-input.js";
 import { desktopEnvironment, desktopLifecyclePlan } from "../desktop-lifecycle.js";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
@@ -220,6 +221,30 @@ test("cross-platform YOLO focused input uses safe argv/environment boundaries", 
   assert.equal(calls[0]?.env, undefined);
   const linux = new PlatformFocusedInput("linux", runner);
   assert.equal(await linux.text("no"), false);
+});
+
+test("Linux native YOLO focused input probes then uses ydotool or wtype argv", async () => {
+  const calls: LinuxInvocation[] = [];
+  const ydotool = new LinuxFocusedInput(async (input) => { calls.push(input); return input.command === "ydotool"; });
+  assert.equal(await ydotool.probe(), true);
+  assert.equal(await ydotool.text("你好; no shell"), true);
+  assert.equal(await ydotool.enter(), true);
+  assert.equal(await ydotool.escapeTwice(), true);
+  assert.deepEqual(calls, [
+    { command: "ydotool", args: ["--help"] },
+    { command: "ydotool", args: ["type", "--", "你好; no shell"] },
+    { command: "ydotool", args: ["key", "28:1"] },
+    { command: "ydotool", args: ["key", "1:1"] },
+    { command: "ydotool", args: ["key", "1:1"] },
+  ]);
+  const wtypeCalls: LinuxInvocation[] = [];
+  const wtype = new LinuxFocusedInput(async (input) => { wtypeCalls.push(input); return input.command === "wtype"; });
+  assert.equal(await wtype.probe(), true);
+  assert.equal(await wtype.escapeTwice(), true);
+  assert.deepEqual(wtypeCalls, [
+    { command: "ydotool", args: ["--help"] }, { command: "wtype", args: ["--help"] },
+    { command: "wtype", args: ["-k", "ESC", "-k", "ESC"] },
+  ]);
 });
 
 test("online ASR settings validate provider data and never return API keys", async () => {

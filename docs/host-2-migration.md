@@ -38,8 +38,8 @@ required for either direction.
 | Agent CLI voice delivery | supported | verified | not implemented |
 | Vibe Mic virtual input | supported | helper verified; Linux native BLE TS adapter smoke-tested | not implemented |
 | System HID fallback | supported | verified | not implemented |
-| YOLO voice to focused app | Linux focused injector | verified | implemented; requires online ASR plus OS permission |
-| YOLO A=Enter, B=Escape×2 | supported | verified | implemented with focused-input permission |
+| YOLO voice to focused app | Linux focused injector | verified | Linux native BLE TS adapter (`ydotool`/`wtype`) smoke-tested; macOS/Windows implemented, hardware validation pending |
+| YOLO A=Enter, B=Escape×2 | supported | verified | Linux TS adapter covered; macOS/Windows implemented with focused-input permission |
 | Local faster-whisper | supported | not in TS | not in TS |
 | Online ASR | optional | supported | YOLO-only while session delivery is unavailable |
 

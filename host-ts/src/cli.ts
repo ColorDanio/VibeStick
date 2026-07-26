@@ -18,6 +18,7 @@ import { diagnosticsReport } from "./diagnostics.js";
 import { NobleGattTransport } from "./noble-transport.js";
 import { PlatformFocusedInput } from "./focused-input.js";
 import { PipeWireVibeMicSink } from "./pipewire-mic.js";
+import { LinuxFocusedInput } from "./linux-focused-input.js";
 
 type Args = { config: string; sessions: string; port: number; helper?: string; address?: string; nativeBle: boolean };
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
@@ -58,7 +59,7 @@ async function main(): Promise<void> {
     async updateOnlineAsr(body) { config = updateOnlineAsr(config, body); await saveConfigFile(args.config, config); return publicAsrSettings(config); },
     async testOnlineAsr() { return verifyOnlineAsr(config); },
     async testYoloFocused() {
-      if (!testYoloFocused) throw new Error("YOLO permission testing is available only with the native macOS or Windows adapter");
+      if (!testYoloFocused) throw new Error("YOLO permission testing is available only with a native focused-input adapter");
       return testYoloFocused();
     },
     async updateSessionLauncher(body) { config = updateSessionLauncher(config, body); await saveConfigFile(args.config, config); return { session_launcher: config.session_launcher }; },
@@ -166,7 +167,7 @@ async function main(): Promise<void> {
     capabilities.mic = (await mic.warmup().catch(() => false)) ? { available: true } : { available: false, reason: "PipeWire Vibe Mic unavailable" };
     console.log(`VibeStick TS runtime: ${runtime.reconcile()}`);
   } else if (args.nativeBle || process.platform !== "linux") {
-    const focused = new PlatformFocusedInput();
+    const focused = process.platform === "linux" ? new LinuxFocusedInput() : new PlatformFocusedInput();
     const nativeMic = process.platform === "linux" ? new PipeWireVibeMicSink(config.mic.enabled) : undefined;
     bridge = new VibeBridge(new NobleGattTransport(args.address ?? ""), core, {
       onConnectionState: (connected) => runtime?.onBleConnectionState(connected),
@@ -219,11 +220,11 @@ async function main(): Promise<void> {
       keyboard: { available: false, reason: "Vibe Mic HID/system key fallback is not implemented yet" },
       mic: nativeMic ? { available: false, reason: "PipeWire Vibe Mic probe pending" } : { available: false, reason: "Platform virtual microphone is not implemented yet" },
       asr: { available: false, reason: "Agent CLI session delivery is not implemented; YOLO supports online ASR only" },
-      yolo: process.platform === "darwin" || process.platform === "win32"
+      yolo: process.platform === "darwin" || process.platform === "win32" || process.platform === "linux"
         ? config.asr.engine === "online" && Boolean(config.asr.online.api_key)
           ? { available: false, reason: "Run the focused-input permission test in Settings", testable: true }
           : { available: false, reason: "Configure online ASR before using YOLO" }
-        : { available: false, reason: "Native YOLO focused input is available only on macOS and Windows" },
+        : { available: false, reason: "Native YOLO focused input is unavailable on this platform" },
     };
     testYoloFocused = async () => {
       if (config.asr.engine !== "online" || !config.asr.online.api_key) {
