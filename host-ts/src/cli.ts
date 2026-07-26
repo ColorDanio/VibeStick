@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stat } from "node:fs/promises";
+import { homedir } from "node:os";
 import { HostCore } from "./core.js";
 import { loadConfigFile, loadSessionDirectory, saveConfigFile } from "./files.js";
 import { createLinuxBridge, type LinuxBridgeOptions } from "./linux-bridge.js";
@@ -10,7 +12,7 @@ import type { VibeBridge } from "./bridge.js";
 import type { DashboardEnvironment } from "./dashboard.js";
 import { VoicePipeline, onlineTranscriber } from "./asr.js";
 import { NodeProcessInspector, discoverProcessSessions, mergeSessions } from "./process-discovery.js";
-import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher } from "./settings.js";
+import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher, updateToolCwd } from "./settings.js";
 
 type Args = { config: string; sessions: string; port: number; helper?: string; address?: string };
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
@@ -39,13 +41,26 @@ async function main(): Promise<void> {
         mic: { available: false, reason: "Start Host 2.0 with the Linux BLE helper" },
         asr: { available: false, reason: "Configure an ASR provider for Host 2.0" },
       },
-      config: { path: args.config, asr_engine: config.asr.engine, asr_api_base: config.asr.online.api_base, asr_model: config.asr.online.model, online_asr_configured: config.asr.engine === "online" && Boolean(config.asr.online.api_key), session_launcher: config.session_launcher },
+      config: { path: args.config, asr_engine: config.asr.engine, asr_api_base: config.asr.online.api_base, asr_model: config.asr.online.model, online_asr_configured: config.asr.engine === "online" && Boolean(config.asr.online.api_key), session_launcher: config.session_launcher, tools: config.tools.map((tool) => ({ id: tool.id, name: tool.name, cwd: tool.cwd ?? "" })) },
       ...(diagnostics?.error ? { error: diagnostics.error } : {}),
     };
   };
   const dashboard = await startDashboardServer(core, args.port, environment, {
     async updateOnlineAsr(body) { config = updateOnlineAsr(config, body); await saveConfigFile(args.config, config); return publicAsrSettings(config); },
     async updateSessionLauncher(body) { config = updateSessionLauncher(config, body); await saveConfigFile(args.config, config); return { session_launcher: config.session_launcher }; },
+    async updateToolCwd(body) {
+      const rawCwd = typeof body === "object" && body !== null && "cwd" in body && typeof (body as { cwd?: unknown }).cwd === "string" ? (body as { cwd: string }).cwd.trim() : "";
+      const cwd = rawCwd === "~" ? homedir() : rawCwd.startsWith("~/") ? resolve(homedir(), rawCwd.slice(2)) : rawCwd ? resolve(rawCwd) : "";
+      const candidate = updateToolCwd(config, { ...(typeof body === "object" && body !== null ? body : {}), cwd });
+      const id = typeof body === "object" && body !== null && "id" in body && typeof (body as { id?: unknown }).id === "string" ? (body as { id: string }).id : "";
+      const changed = candidate.tools.find((tool) => tool.id === id);
+      if (!changed) throw new Error("Unknown Agent CLI tool");
+      if (changed.cwd) {
+        const directory = await stat(resolve(changed.cwd)).catch(() => undefined);
+        if (!directory?.isDirectory()) throw new Error("Working directory does not exist");
+      }
+      config = candidate; await saveConfigFile(args.config, config); return { id: changed.id, cwd: changed.cwd ?? "" };
+    },
   });
   console.log(`VibeStick TS dashboard: http://127.0.0.1:${dashboard.port}`);
 

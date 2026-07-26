@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactElement } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactElement } from "react";
 
 declare global { interface Window { vibestickDesktop?: { hostStatus(): Promise<{ state: string; detail?: string }>; restartHost(): Promise<{ state: string; detail?: string }> }; } }
 
@@ -9,7 +9,7 @@ type Snapshot = {
   status: { state: string; session: string; tool: string; model: string };
   sessions: { list: Session[] };
   tools: { list: { id: string; name: string; state: string }[] };
-  environment: { owner: "active" | "inactive"; runtime: string; capabilities: { ble: Capability; keyboard: Capability; mic: Capability; asr: Capability }; config: { path: string; asr_engine: string; asr_api_base: string; asr_model: string; online_asr_configured: boolean; session_launcher: "auto" | "tmux" | "zellij" }; error?: string };
+  environment: { owner: "active" | "inactive"; runtime: string; capabilities: { ble: Capability; keyboard: Capability; mic: Capability; asr: Capability }; config: { path: string; asr_engine: string; asr_api_base: string; asr_model: string; online_asr_configured: boolean; session_launcher: "auto" | "tmux" | "zellij"; tools: { id: string; name: string; cwd: string }[] }; error?: string };
 };
 
 const api = async (path: string, init?: RequestInit): Promise<Snapshot> => {
@@ -28,7 +28,7 @@ const demo: Snapshot = {
   tools: { list: [{ id: "opencode", name: "OpenCode", state: "ready" }, { id: "codex", name: "Codex", state: "running" }] },
   environment: { owner: "inactive", runtime: "stopped", capabilities: {
     ble: { available: false, reason: "Start the Host 2.0 runtime" }, keyboard: { available: false, reason: "Start the Host 2.0 runtime" }, mic: { available: false, reason: "Start the Host 2.0 runtime" }, asr: { available: false, reason: "Configure online ASR" },
-  }, config: { path: "~/.vibestick/config.json", asr_engine: "faster-whisper", asr_api_base: "https://api.groq.com/openai/v1", asr_model: "whisper-large-v3-turbo", online_asr_configured: false, session_launcher: "auto" } },
+  }, config: { path: "~/.vibestick/config.json", asr_engine: "faster-whisper", asr_api_base: "https://api.groq.com/openai/v1", asr_model: "whisper-large-v3-turbo", online_asr_configured: false, session_launcher: "auto", tools: [{ id: "codex", name: "Codex", cwd: "" }] } },
 };
 
 export function App(): ReactElement {
@@ -41,6 +41,10 @@ export function App(): ReactElement {
   const [saving, setSaving] = useState(false);
   const [launcher, setLauncher] = useState<"auto" | "tmux" | "zellij">(demo.environment.config.session_launcher);
   const [savingLauncher, setSavingLauncher] = useState(false);
+  const [cwdTool, setCwdTool] = useState(demo.environment.config.tools[0]?.id ?? "");
+  const [cwd, setCwd] = useState("");
+  const [savingCwd, setSavingCwd] = useState(false);
+  const cwdInitialized = useRef(false);
   const [restartRequired, setRestartRequired] = useState(false);
   const [restarting, setRestarting] = useState(false);
 
@@ -67,6 +71,7 @@ export function App(): ReactElement {
   }, []);
 
   useEffect(() => { setApiBase(data.environment.config.asr_api_base); setModel(data.environment.config.asr_model); setLauncher(data.environment.config.session_launcher); }, [data.environment.config.asr_api_base, data.environment.config.asr_model, data.environment.config.session_launcher]);
+  useEffect(() => { if (!cwdInitialized.current && data.environment.config.tools.length) { const tool = data.environment.config.tools.find((item) => item.id === cwdTool) ?? data.environment.config.tools[0]; if (tool) { setCwdTool(tool.id); setCwd(tool.cwd); cwdInitialized.current = true; } } }, [data.environment.config.tools, cwdTool]);
 
   const send = async (cmd: string, id?: string): Promise<void> => {
     try {
@@ -93,6 +98,16 @@ export function App(): ReactElement {
       setRestartRequired(true); setNotice("Session launcher saved. Restart Host 2.0 to apply it.");
     } catch (error) { setNotice(`Could not save session launcher: ${error instanceof Error ? error.message : String(error)}`); }
     finally { setSavingLauncher(false); }
+  };
+  const saveCwd = async (event: FormEvent): Promise<void> => {
+    event.preventDefault(); setSavingCwd(true);
+    try {
+      const response = await fetch("http://127.0.0.1:7861/api/settings/tool-cwd", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: cwdTool, cwd }) });
+      const result: unknown = await response.json();
+      if (!response.ok) throw new Error(typeof result === "object" && result !== null && typeof (result as { error?: unknown }).error === "string" ? (result as { error: string }).error : "settings save failed");
+      setRestartRequired(true); setNotice("Working directory saved. Restart Host 2.0 to apply it.");
+    } catch (error) { setNotice(`Could not save working directory: ${error instanceof Error ? error.message : String(error)}`); }
+    finally { setSavingCwd(false); }
   };
   const restartHost = async (): Promise<void> => {
     if (!window.vibestickDesktop) return;
@@ -135,6 +150,7 @@ export function App(): ReactElement {
         <div className="settings-grid"><div><b>Agent ASR</b><p>{data.environment.config.online_asr_configured ? `Online · ${data.environment.config.asr_model}` : "Host 2.0 currently needs an OpenAI-compatible online ASR provider for Agent CLI and YOLO voice."}</p><small>Key is write-only: it is never read back into this application.</small></div><div><b>Shared configuration</b><p className="path">{data.environment.config.path || "Start Host 2.0 to locate configuration."}</p><small>Python 1.x local faster-whisper remains available independently.</small></div></div>
         <form className="asr-form" onSubmit={(event) => void saveAsr(event)}><label>OpenAI-compatible API base<input value={apiBase} onChange={(event) => setApiBase(event.target.value)} inputMode="url" required /></label><label>Model<input value={model} onChange={(event) => setModel(event.target.value)} required /></label><label>API key <small>Leave empty to keep existing key.</small><input value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" autoComplete="new-password" /></label><button type="submit" disabled={saving || !connected}>{saving ? "Saving…" : "Save and restart later"}</button></form>
         <form className="launcher-form" onSubmit={(event) => void saveLauncher(event)}><label>New-session launcher<select value={launcher} onChange={(event) => setLauncher(event.target.value as "auto" | "tmux" | "zellij")}><option value="auto">Auto (tmux → zellij → managed tmux)</option><option value="tmux">tmux only</option><option value="zellij">zellij only</option></select></label><small>Controls where Stick <code>session.new</code> opens the selected Agent CLI. A forced zellij launch needs an existing zellij session.</small><button type="submit" disabled={savingLauncher || !connected}>{savingLauncher ? "Saving…" : "Save launcher"}</button></form>
+        <form className="cwd-form" onSubmit={(event) => void saveCwd(event)}><label>Agent CLI<select value={cwdTool} onChange={(event) => { const id = event.target.value; const tool = data.environment.config.tools.find((item) => item.id === id); setCwdTool(id); setCwd(tool?.cwd ?? ""); }}>{data.environment.config.tools.map((tool) => <option key={tool.id} value={tool.id}>{tool.name}</option>)}</select></label><label>Working directory<input value={cwd} onChange={(event) => setCwd(event.target.value)} placeholder="Empty: inherit pane / home" /></label><small>Used only when Stick creates a new session. Existing tmux/zellij panes keep their directory if this is empty.</small><button type="submit" disabled={savingCwd || !connected || !cwdTool}>{savingCwd ? "Saving…" : "Save directory"}</button></form>
       </section>
     </section>
   </main>;

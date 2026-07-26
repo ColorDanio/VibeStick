@@ -24,4 +24,19 @@ export function updateSessionLauncher(config: Config, input: unknown): Config {
   return { ...config, session_launcher: launcher };
 }
 
+export function updateToolCwd(config: Config, input: unknown): Config {
+  const values = typeof input === "object" && input !== null && !Array.isArray(input) ? input as { id?: unknown; cwd?: unknown } : {};
+  const id = typeof values.id === "string" ? values.id : "";
+  const cwd = typeof values.cwd === "string" ? values.cwd.trim() : "";
+  if (!id || !config.tools.some((tool) => tool.id === id)) throw new TypeError("Unknown Agent CLI tool");
+  return {
+    ...config,
+    tools: config.tools.map((tool) => {
+      if (tool.id !== id) return tool;
+      const { cwd: _previousCwd, ...withoutCwd } = tool;
+      return cwd ? { ...withoutCwd, cwd } : withoutCwd;
+    }),
+  };
+}
+
 const string = (value: unknown, fallback: string): string => typeof value === "string" ? value : fallback;

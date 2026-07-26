@@ -23,7 +23,7 @@ import { LinuxVibeMicSink } from "../mic-sink.js";
 import { startDashboardServer } from "../server.js";
 import { VoicePipeline, wav, type AsrTranscriber } from "../asr.js";
 import { discoverProcessSessions, mergeSessions } from "../process-discovery.js";
-import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher } from "../settings.js";
+import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher, updateToolCwd } from "../settings.js";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
   const path = new URL(`../../../contracts/v1/${name}`, import.meta.url);
@@ -127,7 +127,7 @@ test("dashboard contract returns snapshots and routes commands through one core"
   const desktop = dashboardRequest(core, "GET", "/api/desktop", undefined, {
     implementation: "host-2", owner: "active", runtime: "ready",
     capabilities: { ble: { available: true }, keyboard: { available: true }, mic: { available: true }, asr: { available: true } },
-    config: { path: "/tmp/config.json", asr_engine: "online", asr_api_base: "https://api.example.test/v1", asr_model: "whisper", online_asr_configured: true, session_launcher: "auto" },
+    config: { path: "/tmp/config.json", asr_engine: "online", asr_api_base: "https://api.example.test/v1", asr_model: "whisper", online_asr_configured: true, session_launcher: "auto", tools: [] },
   });
   assert.equal((desktop.body as { environment: { owner: string } }).environment.owner, "active");
 });
@@ -139,6 +139,11 @@ test("online ASR settings validate provider data and never return API keys", () 
   assert.throws(() => updateOnlineAsr(updated, { api_base: "file:///tmp", model: "x" }), /http/);
   assert.equal(updateSessionLauncher(updated, { session_launcher: "zellij" }).session_launcher, "zellij");
   assert.throws(() => updateSessionLauncher(updated, { session_launcher: "screen" }), /launcher/);
+  const withTool = normalizeConfig({ tools: [{ id: "codex", name: "Codex" }] });
+  assert.equal(updateToolCwd(withTool, { id: "codex", cwd: "/work" }).tools[0]?.cwd, "/work");
+  const configuredTool = updateToolCwd(withTool, { id: "codex", cwd: "/work" });
+  assert.equal(updateToolCwd(configuredTool, { id: "codex", cwd: "" }).tools[0]?.cwd, undefined);
+  assert.throws(() => updateToolCwd(withTool, { id: "none", cwd: "/work" }), /Unknown/);
 });
 
 test("loopback dashboard permits the desktop development origin and JSON commands", async () => {
