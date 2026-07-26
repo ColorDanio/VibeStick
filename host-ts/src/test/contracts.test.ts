@@ -8,6 +8,8 @@ import { transition, type AudioRoute } from "../routing.js";
 import { SendQueue } from "../queue.js";
 import { SessionSelection } from "../session.js";
 import { HostSessionStore } from "../store.js";
+import { HostCore } from "../core.js";
+import { dashboardRequest } from "../dashboard.js";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
   const path = new URL(`../../../contracts/v1/${name}`, import.meta.url);
@@ -82,4 +84,14 @@ test("domain store derives ready/running tool states and selected payloads", () 
   store.apply({ cmd: "tool.next" });
   assert.deepEqual(store.sessionsPayload().list.map((session) => session.id), ["codex-1"]);
   assert.deepEqual(store.toolsPayload().list[1]?.fns, ["status", "sessions", "voice"]);
+});
+
+test("dashboard contract returns snapshots and routes commands through one core", () => {
+  const core = new HostCore(normalizeConfig({ tools: [{ id: "codex", name: "Codex" }] }));
+  core.replaceSessions([{ id: "c1", status: { tool: "codex", model: "", session: "Work", state: "idle", ctx_pct: -1, cost_usd: -1, last: "", updated: 1 } }]);
+  assert.equal((dashboardRequest(core, "GET", "/api/status").body as { selected_tool: string }).selected_tool, "codex");
+  const mic = dashboardRequest(core, "POST", "/api/command", { cmd: "voice.start", mode: "mic" });
+  const micBody = mic.body as { actions: string[]; audio_route: string };
+  assert.deepEqual([mic.status, micBody.actions, micBody.audio_route], [200, ["relay.start"], "mic"]);
+  assert.equal(dashboardRequest(core, "POST", "/api/command", { cmd: "tool.select", id: "nope" }).status, 400);
 });
