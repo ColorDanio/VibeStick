@@ -23,6 +23,7 @@ import { LinuxVibeMicSink } from "../mic-sink.js";
 import { startDashboardServer } from "../server.js";
 import { VoicePipeline, wav, type AsrTranscriber } from "../asr.js";
 import { discoverProcessSessions, mergeSessions } from "../process-discovery.js";
+import { publicAsrSettings, updateOnlineAsr } from "../settings.js";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
   const path = new URL(`../../../contracts/v1/${name}`, import.meta.url);
@@ -126,9 +127,16 @@ test("dashboard contract returns snapshots and routes commands through one core"
   const desktop = dashboardRequest(core, "GET", "/api/desktop", undefined, {
     implementation: "host-2", owner: "active", runtime: "ready",
     capabilities: { ble: { available: true }, keyboard: { available: true }, mic: { available: true }, asr: { available: true } },
-    config: { path: "/tmp/config.json", asr_engine: "online", asr_model: "whisper", online_asr_configured: true },
+    config: { path: "/tmp/config.json", asr_engine: "online", asr_api_base: "https://api.example.test/v1", asr_model: "whisper", online_asr_configured: true },
   });
   assert.equal((desktop.body as { environment: { owner: string } }).environment.owner, "active");
+});
+
+test("online ASR settings validate provider data and never return API keys", () => {
+  const updated = updateOnlineAsr(normalizeConfig({}), { api_base: "https://api.example.test/v1", model: "whisper", api_key: "secret-key" });
+  assert.equal(updated.asr.engine, "online");
+  assert.deepEqual(publicAsrSettings(updated), { engine: "online", api_base: "https://api.example.test/v1", model: "whisper", configured: true });
+  assert.throws(() => updateOnlineAsr(updated, { api_base: "file:///tmp", model: "x" }), /http/);
 });
 
 test("loopback dashboard permits the desktop development origin and JSON commands", async () => {

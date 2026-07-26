@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useState, type FormEvent, type ReactElement } from "react";
 
 declare global { interface Window { vibestickDesktop?: { hostStatus(): Promise<{ state: string; detail?: string }> }; } }
 
@@ -9,7 +9,7 @@ type Snapshot = {
   status: { state: string; session: string; tool: string; model: string };
   sessions: { list: Session[] };
   tools: { list: { id: string; name: string; state: string }[] };
-  environment: { owner: "active" | "inactive"; runtime: string; capabilities: { ble: Capability; keyboard: Capability; mic: Capability; asr: Capability }; config: { path: string; asr_engine: string; asr_model: string; online_asr_configured: boolean }; error?: string };
+  environment: { owner: "active" | "inactive"; runtime: string; capabilities: { ble: Capability; keyboard: Capability; mic: Capability; asr: Capability }; config: { path: string; asr_engine: string; asr_api_base: string; asr_model: string; online_asr_configured: boolean }; error?: string };
 };
 
 const api = async (path: string, init?: RequestInit): Promise<Snapshot> => {
@@ -28,13 +28,17 @@ const demo: Snapshot = {
   tools: { list: [{ id: "opencode", name: "OpenCode", state: "ready" }, { id: "codex", name: "Codex", state: "running" }] },
   environment: { owner: "inactive", runtime: "stopped", capabilities: {
     ble: { available: false, reason: "Start the Host 2.0 runtime" }, keyboard: { available: false, reason: "Start the Host 2.0 runtime" }, mic: { available: false, reason: "Start the Host 2.0 runtime" }, asr: { available: false, reason: "Configure online ASR" },
-  }, config: { path: "~/.vibestick/config.json", asr_engine: "faster-whisper", asr_model: "whisper-large-v3-turbo", online_asr_configured: false } },
+  }, config: { path: "~/.vibestick/config.json", asr_engine: "faster-whisper", asr_api_base: "https://api.groq.com/openai/v1", asr_model: "whisper-large-v3-turbo", online_asr_configured: false } },
 };
 
 export function App(): ReactElement {
   const [data, setData] = useState<Snapshot>(demo);
   const [connected, setConnected] = useState(false);
   const [notice, setNotice] = useState("Host 2.0 is not running — showing a local preview.");
+  const [apiBase, setApiBase] = useState(demo.environment.config.asr_api_base);
+  const [model, setModel] = useState(demo.environment.config.asr_model);
+  const [apiKey, setApiKey] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -58,11 +62,23 @@ export function App(): ReactElement {
     return () => { active = false; window.clearInterval(timer); };
   }, []);
 
+  useEffect(() => { setApiBase(data.environment.config.asr_api_base); setModel(data.environment.config.asr_model); }, [data.environment.config.asr_api_base, data.environment.config.asr_model]);
+
   const send = async (cmd: string, id?: string): Promise<void> => {
     try {
       const snapshot = await api("/api/command", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cmd, ...(id ? { id } : {}) }) });
       setData(snapshot); setNotice("");
     } catch { setNotice("That control needs a running Host 2.0 runtime."); }
+  };
+  const saveAsr = async (event: FormEvent): Promise<void> => {
+    event.preventDefault(); setSaving(true);
+    try {
+      const response = await fetch("http://127.0.0.1:7861/api/settings/asr", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ api_base: apiBase, model, ...(apiKey ? { api_key: apiKey } : {}) }) });
+      const result: unknown = await response.json();
+      if (!response.ok) throw new Error(typeof result === "object" && result !== null && typeof (result as { error?: unknown }).error === "string" ? (result as { error: string }).error : "settings save failed");
+      setApiKey(""); setNotice("Online ASR settings saved. Restart Host 2.0 to apply them.");
+    } catch (error) { setNotice(`Could not save ASR settings: ${error instanceof Error ? error.message : String(error)}`); }
+    finally { setSaving(false); }
   };
   const runtime = data.environment.runtime;
   const selected = data.sessions.list.find((session) => session.id === data.active_session) ?? data.sessions.list[0];
@@ -95,7 +111,8 @@ export function App(): ReactElement {
         <aside className="activity"><p className="eyebrow">LIVE ACTIVITY</p><h2>{selected?.session ?? "No session selected"}</h2><div className="activity-line"><span className="dot green"></span><span>{selected?.last || "Waiting for a session"}</span></div><hr/><p className="eyebrow">YOLO SAFETY</p><p className="warning-copy">YOLO types into the focused app. VibeStick cannot inspect or choose that target.</p><div className="key-hints"><kbd>A</kbd><span>Enter</span><kbd>B</kbd><span>Escape ×2</span></div></aside>
       </div>
       <section className="settings" id="settings"><div className="section-heading"><div><p className="eyebrow">HOST SETUP</p><h2>Settings</h2></div><span className={data.environment.config.online_asr_configured ? "settings-good" : "settings-warn"}>{data.environment.config.online_asr_configured ? "Online ASR configured" : "Action required"}</span></div>
-        <div className="settings-grid"><div><b>Agent ASR</b><p>{data.environment.config.online_asr_configured ? `Online · ${data.environment.config.asr_model}` : "Host 2.0 currently needs an OpenAI-compatible online ASR provider for Agent CLI and YOLO voice."}</p></div><div><b>Shared configuration</b><p className="path">{data.environment.config.path || "Start Host 2.0 to locate configuration."}</p><small>Set <code>asr.engine</code> to <code>online</code> and provide the provider key. Python 1.x local faster-whisper remains available independently.</small></div></div>
+        <div className="settings-grid"><div><b>Agent ASR</b><p>{data.environment.config.online_asr_configured ? `Online · ${data.environment.config.asr_model}` : "Host 2.0 currently needs an OpenAI-compatible online ASR provider for Agent CLI and YOLO voice."}</p><small>Key is write-only: it is never read back into this application.</small></div><div><b>Shared configuration</b><p className="path">{data.environment.config.path || "Start Host 2.0 to locate configuration."}</p><small>Python 1.x local faster-whisper remains available independently.</small></div></div>
+        <form className="asr-form" onSubmit={(event) => void saveAsr(event)}><label>OpenAI-compatible API base<input value={apiBase} onChange={(event) => setApiBase(event.target.value)} inputMode="url" required /></label><label>Model<input value={model} onChange={(event) => setModel(event.target.value)} required /></label><label>API key <small>Leave empty to keep existing key.</small><input value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" autoComplete="new-password" /></label><button type="submit" disabled={saving || !connected}>{saving ? "Saving…" : "Save and restart later"}</button></form>
       </section>
     </section>
   </main>;

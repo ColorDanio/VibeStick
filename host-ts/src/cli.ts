@@ -2,7 +2,7 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HostCore } from "./core.js";
-import { loadConfigFile, loadSessionDirectory } from "./files.js";
+import { loadConfigFile, loadSessionDirectory, saveConfigFile } from "./files.js";
 import { createLinuxBridge, type LinuxBridgeOptions } from "./linux-bridge.js";
 import { HostRuntime, type Capabilities } from "./runtime.js";
 import { startDashboardServer } from "./server.js";
@@ -10,13 +10,14 @@ import type { VibeBridge } from "./bridge.js";
 import type { DashboardEnvironment } from "./dashboard.js";
 import { VoicePipeline, onlineTranscriber } from "./asr.js";
 import { NodeProcessInspector, discoverProcessSessions, mergeSessions } from "./process-discovery.js";
+import { publicAsrSettings, updateOnlineAsr } from "./settings.js";
 
 type Args = { config: string; sessions: string; port: number; helper?: string; address?: string };
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 
 async function main(): Promise<void> {
   const args = parse(process.argv.slice(2));
-  const config = await loadConfigFile(args.config);
+  let config = await loadConfigFile(args.config);
   const core = new HostCore(config);
   const processes = new NodeProcessInspector();
   const loadSessions = async (): Promise<void> => {
@@ -38,11 +39,13 @@ async function main(): Promise<void> {
         mic: { available: false, reason: "Start Host 2.0 with the Linux BLE helper" },
         asr: { available: false, reason: "Configure an ASR provider for Host 2.0" },
       },
-      config: { path: args.config, asr_engine: config.asr.engine, asr_model: config.asr.online.model, online_asr_configured: config.asr.engine === "online" && Boolean(config.asr.online.api_key) },
+      config: { path: args.config, asr_engine: config.asr.engine, asr_api_base: config.asr.online.api_base, asr_model: config.asr.online.model, online_asr_configured: config.asr.engine === "online" && Boolean(config.asr.online.api_key) },
       ...(diagnostics?.error ? { error: diagnostics.error } : {}),
     };
   };
-  const dashboard = await startDashboardServer(core, args.port, environment);
+  const dashboard = await startDashboardServer(core, args.port, environment, {
+    async updateOnlineAsr(body) { config = updateOnlineAsr(config, body); await saveConfigFile(args.config, config); return publicAsrSettings(config); },
+  });
   console.log(`VibeStick TS dashboard: http://127.0.0.1:${dashboard.port}`);
 
   let bridge: VibeBridge | undefined;
