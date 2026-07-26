@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { configToWire, normalizeConfig } from "../config.js";
 import { keycodesFromReport } from "../hid.js";
-import { sessionsToWire, statusToWire } from "../protocol.js";
+import { BLE, sessionsToWire, statusToWire } from "../protocol.js";
 import { transition, type AudioRoute } from "../routing.js";
 import { SendQueue } from "../queue.js";
 import { SessionSelection } from "../session.js";
@@ -26,6 +26,8 @@ import { discoverProcessSessions, mergeSessions } from "../process-discovery.js"
 import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher, updateToolCwd } from "../settings.js";
 import { probeTraditionalOwner } from "../ownership.js";
 import { diagnosticsReport } from "../diagnostics.js";
+import { NobleGattTransport, type NobleAdapter } from "../noble-transport.js";
+import { EventEmitter } from "node:events";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
   const path = new URL(`../../../contracts/v1/${name}`, import.meta.url);
@@ -155,6 +157,36 @@ test("diagnostics export is useful while redacting secrets, paths, and conversat
   const text = JSON.stringify(report);
   assert.match(text, /vibestick-host-diagnostics\/v1/);
   for (const secret of ["do-not-export", "/private", "codex --danger", "Top secret", "private transcript", "Sensitive session"]) assert.equal(text.includes(secret), false);
+});
+
+test("native Noble transport discovers VibeStick, maps GATT and preserves notifications", async () => {
+  class FakeCharacteristic extends EventEmitter {
+    writes: Uint8Array[] = []; subscribed = false;
+    constructor(readonly uuid: string) { super(); }
+    async subscribeAsync() { this.subscribed = true; }
+    async writeAsync(data: Buffer) { this.writes.push(new Uint8Array(data)); }
+  }
+  const characteristics = [BLE.status, BLE.sessions, BLE.tools, BLE.voice, BLE.input, BLE.command, BLE.audio, BLE.hidInput].map((id) => new FakeCharacteristic(id.replaceAll("-", "")));
+  const peripheral = new EventEmitter() as EventEmitter & { id: string; address: string; advertisement: { localName: string; serviceUuids: string[] }; connectAsync(): Promise<void>; disconnectAsync(): Promise<void>; discoverAllServicesAndCharacteristicsAsync(): Promise<{ characteristics: FakeCharacteristic[] }> };
+  Object.assign(peripheral, {
+    id: "p1", address: "AA:BB:CC:DD:EE:FF", advertisement: { localName: "VibeStick", serviceUuids: [BLE.service.replaceAll("-", "")] },
+    async connectAsync() {}, async disconnectAsync() {}, async discoverAllServicesAndCharacteristicsAsync() { return { characteristics }; },
+  });
+  const noble = new EventEmitter() as EventEmitter & NobleAdapter;
+  Object.assign(noble, {
+    state: "poweredOn", async startScanningAsync() { noble.emit("discover", peripheral); }, async stopScanningAsync() {},
+  });
+  const transport = new NobleGattTransport("", async () => noble, 100);
+  const notices: string[] = [];
+  transport.onNotification((kind, data) => notices.push(`${kind}:${new TextDecoder().decode(data)}`));
+  await transport.connect();
+  await transport.subscribe("INPUT");
+  characteristics.find((item) => item.uuid === BLE.input.replaceAll("-", ""))?.emit("data", Buffer.from("hello"));
+  await transport.write("STATUS", new TextEncoder().encode("status"));
+  assert.equal(transport.address, "AA:BB:CC:DD:EE:FF");
+  assert.deepEqual(notices, ["INPUT:hello"]);
+  assert.equal(characteristics.find((item) => item.uuid === BLE.status.replaceAll("-", ""))?.writes[0] && new TextDecoder().decode(characteristics.find((item) => item.uuid === BLE.status.replaceAll("-", ""))!.writes[0]), "status");
+  await transport.disconnect();
 });
 
 test("online ASR settings validate provider data and never return API keys", () => {

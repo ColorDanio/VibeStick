@@ -8,15 +8,16 @@ import { loadConfigFile, loadSessionDirectory, saveConfigFile } from "./files.js
 import { createLinuxBridge, type LinuxBridgeOptions } from "./linux-bridge.js";
 import { HostRuntime, type Capabilities } from "./runtime.js";
 import { startDashboardServer } from "./server.js";
-import type { VibeBridge } from "./bridge.js";
+import { VibeBridge } from "./bridge.js";
 import type { DashboardEnvironment } from "./dashboard.js";
 import { VoicePipeline, onlineTranscriber } from "./asr.js";
 import { NodeProcessInspector, discoverProcessSessions, mergeSessions } from "./process-discovery.js";
 import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher, updateToolCwd } from "./settings.js";
 import { probeTraditionalOwner, type TraditionalOwner } from "./ownership.js";
 import { diagnosticsReport } from "./diagnostics.js";
+import { NobleGattTransport } from "./noble-transport.js";
 
-type Args = { config: string; sessions: string; port: number; helper?: string; address?: string };
+type Args = { config: string; sessions: string; port: number; helper?: string; address?: string; nativeBle: boolean };
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 
 async function main(): Promise<void> {
@@ -147,6 +148,17 @@ async function main(): Promise<void> {
     await runtime.start();
     capabilities.mic = (await mic.warmup().catch(() => false)) ? { available: true } : { available: false, reason: "PipeWire Vibe Mic unavailable" };
     console.log(`VibeStick TS runtime: ${runtime.reconcile()}`);
+  } else if (args.nativeBle || process.platform !== "linux") {
+    bridge = new VibeBridge(new NobleGattTransport(args.address ?? ""), core);
+    const capabilities: Capabilities = {
+      ble: { available: true },
+      keyboard: { available: false, reason: "Platform keyboard delivery is not implemented yet" },
+      mic: { available: false, reason: "Platform virtual microphone is not implemented yet" },
+      asr: { available: false, reason: "Session/focused delivery is not implemented for the native BLE adapter" },
+    };
+    runtime = new HostRuntime(bridge, capabilities);
+    await runtime.start();
+    console.log(`VibeStick TS native BLE runtime: ${runtime.reconcile()}`);
   } else {
     console.log("VibeStick TS runtime: degraded (no Linux BLE helper; Python traditional daemon remains available)");
   }
@@ -170,6 +182,7 @@ function parse(argv: string[]): Args {
     port: Number(value("--port", "7861")),
     ...(helper ? { helper } : {}),
     ...(argv.includes("--address") ? { address: value("--address", "") } : {}),
+    nativeBle: argv.includes("--native-ble"),
   };
 }
 

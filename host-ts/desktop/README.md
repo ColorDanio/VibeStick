@@ -19,6 +19,20 @@ Host 2.0 with that executable as the helper; it does not stop Python 1.x or
 steal the BLE owner lock. If Python 1.x owns the Stick, the UI reports the
 conflict as degraded until the user explicitly switches owners.
 
+On macOS and Windows the packaged desktop app starts the TypeScript-native
+Noble GATT transport automatically. It can own the BLE link and synchronize
+the Stick, but it intentionally does **not** claim Vibe Mic, keyboard/focused
+input, or session delivery until native adapters for those capabilities are
+implemented and tested. Linux can opt into the same transport for bring-up via
+`VIBESTICK_NATIVE_BLE=1`; its Python helper remains the supported full-feature
+path.
+
+The operating system must grant the desktop app Bluetooth permission. A denied,
+powered-off, unsupported, or missing adapter is reported as a Host 2.0 runtime
+failure; the app never falls back to forcibly taking Python 1.x's BLE owner
+lock. Pairing, reconnect, MTU, and permission flows still need physical macOS
+and Windows validation.
+
 `npm run package:dir` produces an unpacked package for the current platform.
 Release targets are declared for AppImage/deb (Linux), dmg/zip (macOS), and
 NSIS/zip (Windows). macOS notarization and Windows signing are release

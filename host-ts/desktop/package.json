@@ -34,7 +34,10 @@
     "executableName": "vibestick-host",
     "asar": true,
     "files": ["dist/**/*", "electron-dist/**/*", "package.json"],
-    "extraResources": [{ "from": "../dist", "to": "host-core", "filter": ["**/*"] }],
+    "extraResources": [
+      { "from": "../dist", "to": "host-core", "filter": ["**/*"] },
+      { "from": "../node_modules", "to": "host-core/node_modules", "filter": ["@abandonware/**", "debug/**", "ms/**", "napi-thread-safe-callback/**", "node-addon-api/**", "node-gyp-build/**"] }
+    ],
     "linux": { "target": ["AppImage", "deb"], "category": "Utility" },
     "mac": { "target": ["dmg", "zip"], "category": "public.app-category.utilities" },
     "win": { "target": ["nsis", "zip"] }

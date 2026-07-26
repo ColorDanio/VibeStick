@@ -26,6 +26,7 @@ function startHostCore(): void {
   const args = [cli, "--port", "7861"];
   const helper = process.platform === "linux" ? process.env.VIBESTICK_LINUX_HELPER : undefined;
   if (helper) args.push("--linux-helper", helper);
+  else if (process.platform !== "linux" || process.env.VIBESTICK_NATIVE_BLE === "1") args.push("--native-ble");
   if (process.env.VIBESTICK_DEVICE_ADDRESS) args.push("--address", process.env.VIBESTICK_DEVICE_ADDRESS);
   host = spawn(process.execPath, args, {
     cwd: dirname(cli), env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, stdio: "pipe", windowsHide: true,

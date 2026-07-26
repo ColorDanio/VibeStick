@@ -15,11 +15,14 @@ The test suite reads the same versioned JSON fixtures as Python.  Do not copy
 or alter product semantics in platform UI code: add them here and prove them
 through a contract fixture first.
 
-On Linux, `host/tools/ble_gatt_helper.py` is the first real GATT capability
-adapter. The TS app speaks JSON-lines to it; run it with the Python host
-environment so its existing `bleak` dependency is available. It is not yet a
-macOS/Windows release adapter, so those platforms correctly report BLE as
-unavailable instead of attempting a partial connection.
+On Linux, `host/tools/ble_gatt_helper.py` remains the verified full-capability
+adapter: it supplies GATT, PipeWire Vibe Mic, keyboard fallback, focused input,
+and session delivery. The TS app speaks JSON-lines to it. Host 2.0 also now
+has a native Noble GATT transport for macOS/Windows (and opt-in Linux via
+`--native-ble`), so those platforms can connect and synchronize the Stick
+without the Python daemon. It deliberately reports keyboard delivery, virtual
+microphone, session delivery, and focused input as unavailable until their
+platform adapters are implemented and tested.
 
 For Linux TS-owner verification (stop the Python daemon first), supply its
 existing virtual environment as the helper executable:
