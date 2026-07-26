@@ -20,6 +20,7 @@ import { MemoryGattTransport } from "../transport.js";
 import { HostRuntime } from "../runtime.js";
 import { LinuxCommandAdapter } from "../linux-bridge.js";
 import { LinuxVibeMicSink } from "../mic-sink.js";
+import { PipeWireVibeMicSink, applyGain } from "../pipewire-mic.js";
 import { startDashboardServer } from "../server.js";
 import { VoicePipeline, wav, type AsrTranscriber } from "../asr.js";
 import { discoverProcessSessions, mergeSessions } from "../process-discovery.js";
@@ -445,6 +446,23 @@ test("runtime reports a missing Vibe Mic capability as degraded instead of ready
   await runtime.stop();
   assert.equal(runtime.state, "stopped");
   assert.equal(runtime.isBleOwner(), false);
+});
+
+test("native TypeScript PipeWire Vibe Mic registers a source without the Python helper", async () => {
+  let nodePresent = false;
+  const calls: { command: string; args: string[] }[] = [];
+  const sink = new PipeWireVibeMicSink(true, async (command, args) => {
+    calls.push({ command, args });
+    if (command === "pw-dump") return { code: 0, stdout: nodePresent ? JSON.stringify([{ id: 42, info: { props: { "node.name": "vibe-mic" } } }]) : "[]" };
+    if (command === "pw-cli" && args[0] === "create-node") { nodePresent = true; return { code: 0, stdout: "" }; }
+    return { code: 0, stdout: "" };
+  });
+  assert.equal(await sink.warmup(), true);
+  assert.equal(calls.some((call) => call.command === "pw-cli" && call.args[0] === "create-node"), true);
+  assert.deepEqual([...applyGain(new Uint8Array([0, 128, 255]))], [0, 128, 255]);
+  assert.deepEqual([...applyGain(new Uint8Array([100, 156]), 2)], [72, 184]);
+  await sink.close();
+  assert.equal(calls.some((call) => call.command === "pw-cli" && call.args[0] === "destroy"), true);
 });
 
 test("runtime reports a post-connect delivery failure as degraded diagnostics", async () => {

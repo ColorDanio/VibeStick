@@ -36,7 +36,7 @@ required for either direction.
 |---|---|---|---|
 | BLE sessions/status | supported | verified | adapter implemented; hardware validation pending |
 | Agent CLI voice delivery | supported | verified | not implemented |
-| Vibe Mic virtual input | supported | verified | not implemented |
+| Vibe Mic virtual input | supported | helper verified; Linux native BLE TS adapter smoke-tested | not implemented |
 | System HID fallback | supported | verified | not implemented |
 | YOLO voice to focused app | Linux focused injector | verified | implemented; requires online ASR plus OS permission |
 | YOLO A=Enter, B=Escape×2 | supported | verified | implemented with focused-input permission |

@@ -16,13 +16,15 @@ or alter product semantics in platform UI code: add them here and prove them
 through a contract fixture first.
 
 On Linux, `host/tools/ble_gatt_helper.py` remains the verified full-capability
-adapter: it supplies GATT, PipeWire Vibe Mic, keyboard fallback, focused input,
-and session delivery. The TS app speaks JSON-lines to it. Host 2.0 also now
-has a native Noble GATT transport for macOS/Windows (and opt-in Linux via
-`--native-ble`), so those platforms can connect and synchronize the Stick
-without the Python daemon. It deliberately reports keyboard delivery, virtual
-microphone, and Agent CLI session delivery as unavailable until their platform
-adapters are implemented and tested. Native macOS/Windows YOLO focused input
+adapter: it supplies GATT, keyboard fallback, focused input, and session
+delivery. The TS app speaks JSON-lines to it. Host 2.0 also has a native Noble
+GATT transport for macOS/Windows (and opt-in Linux via `--native-ble`), so
+those platforms can connect and synchronize the Stick without the Python
+daemon. The Linux native route now owns its PipeWire **Vibe Mic** source and
+`pw-cat` feeder in TypeScript; it does not invoke the Python helper for that
+capability. It deliberately still reports keyboard delivery and Agent CLI
+session delivery as unavailable until their platform adapters are implemented
+and tested. Native macOS/Windows YOLO focused input
 is the explicit exception: it uses online ASR plus OS-focused-input permission,
 never a selected Agent CLI session.
 

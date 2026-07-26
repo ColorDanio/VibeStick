@@ -17,6 +17,7 @@ import { probeTraditionalOwner, type TraditionalOwner } from "./ownership.js";
 import { diagnosticsReport } from "./diagnostics.js";
 import { NobleGattTransport } from "./noble-transport.js";
 import { PlatformFocusedInput } from "./focused-input.js";
+import { PipeWireVibeMicSink } from "./pipewire-mic.js";
 
 type Args = { config: string; sessions: string; port: number; helper?: string; address?: string; nativeBle: boolean };
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
@@ -166,9 +167,13 @@ async function main(): Promise<void> {
     console.log(`VibeStick TS runtime: ${runtime.reconcile()}`);
   } else if (args.nativeBle || process.platform !== "linux") {
     const focused = new PlatformFocusedInput();
+    const nativeMic = process.platform === "linux" ? new PipeWireVibeMicSink(config.mic.enabled) : undefined;
     bridge = new VibeBridge(new NobleGattTransport(args.address ?? ""), core, {
       onConnectionState: (connected) => runtime?.onBleConnectionState(connected),
-      onAudio: (destination, pcm) => { if (destination === "asr") voice.feed(pcm); },
+      onAudio: (destination, pcm) => {
+        if (destination === "mic") nativeMic?.feed(pcm);
+        else voice.feed(pcm);
+      },
       onActions: async (actions) => {
         for (const action of actions) {
           if (action === "asr.start") {
@@ -177,7 +182,10 @@ async function main(): Promise<void> {
           }
           if (action === "asr.stop") await voice.stop();
           if (action === "asr.cancel") voice.cancel();
-          if (action === "relay.start" || action === "relay.stop") runtime?.reportError("Vibe Mic is unavailable for the native BLE adapter");
+          if (action === "relay.start" || action === "relay.stop") {
+            if (nativeMic) await nativeMic.apply([action]);
+            else runtime?.reportError("Vibe Mic is unavailable for the native BLE adapter");
+          }
         }
       },
       onCommand: async (command) => {
@@ -209,7 +217,7 @@ async function main(): Promise<void> {
     const capabilities: Capabilities = {
       ble: { available: true },
       keyboard: { available: false, reason: "Vibe Mic HID/system key fallback is not implemented yet" },
-      mic: { available: false, reason: "Platform virtual microphone is not implemented yet" },
+      mic: nativeMic ? { available: false, reason: "PipeWire Vibe Mic probe pending" } : { available: false, reason: "Platform virtual microphone is not implemented yet" },
       asr: { available: false, reason: "Agent CLI session delivery is not implemented; YOLO supports online ASR only" },
       yolo: process.platform === "darwin" || process.platform === "win32"
         ? config.asr.engine === "online" && Boolean(config.asr.online.api_key)
@@ -231,6 +239,11 @@ async function main(): Promise<void> {
     };
     runtime = new HostRuntime(bridge, capabilities, 2_000, ownerPermission);
     await runtime.start();
+    if (nativeMic) {
+      capabilities.mic = (await nativeMic.warmup().catch(() => false))
+        ? { available: true } : { available: false, reason: "PipeWire Vibe Mic unavailable" };
+      runtime.reconcile();
+    }
     console.log(`VibeStick TS native BLE runtime: ${runtime.reconcile()}`);
   } else {
     console.log("VibeStick TS runtime: degraded (no Linux BLE helper; Python traditional daemon remains available)");
