@@ -12,7 +12,7 @@
     "prepare:runtime": "npm run build --prefix .. && node scripts/stage-tauri-runtime.mjs",
     "build": "npm run prepare:runtime && tauri build",
     "preview": "vite preview",
-    "package": "tauri build"
+    "package": "npm run build"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1"

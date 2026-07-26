@@ -1,7 +1,8 @@
 import { chmod, copyFile, mkdir, stat } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-const root = dirname(dirname(new URL(import.meta.url).pathname));
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const destination = join(root, "src-tauri", "resources", process.platform === "win32" ? "vibeconn-node.exe" : "vibeconn-node");
 const hostCore = join(root, "..", "dist", "cli.js");
 
