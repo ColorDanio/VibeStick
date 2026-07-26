@@ -20,7 +20,7 @@ async function main(): Promise<void> {
     const diagnostics = runtime?.diagnostics();
     return {
       implementation: "host-2",
-      owner: runtime ? "active" : "inactive",
+      owner: runtime?.isBleOwner() ? "active" : "inactive",
       runtime: diagnostics?.state ?? "stopped",
       capabilities: diagnostics?.capabilities ?? {
         ble: { available: false, reason: "Start Host 2.0 with the Linux BLE helper" },

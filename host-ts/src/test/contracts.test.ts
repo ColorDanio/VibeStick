@@ -177,9 +177,25 @@ test("runtime reports a missing Vibe Mic capability as degraded instead of ready
     ble: { available: true }, keyboard: { available: true }, mic: { available: false, reason: "driver missing" },
   });
   assert.equal(await runtime.start(), "degraded");
+  assert.equal(runtime.isBleOwner(), true);
   assert.deepEqual(runtime.diagnostics().capabilities.mic, { available: false, reason: "driver missing" });
   await runtime.stop();
   assert.equal(runtime.state, "stopped");
+  assert.equal(runtime.isBleOwner(), false);
+});
+
+test("runtime never claims BLE ownership when its transport connection fails", async () => {
+  const core = new HostCore(normalizeConfig({ tools: [] }));
+  const bridge = new VibeBridge({
+    onNotification() {}, isConnected: () => false,
+    async connect() { throw new Error("other host owns the VibeStick"); }, async disconnect() {}, async subscribe() {}, async write() {},
+  }, core);
+  const runtime = new HostRuntime(bridge, {
+    ble: { available: true }, keyboard: { available: true }, mic: { available: true },
+  });
+  assert.equal(await runtime.start(), "degraded");
+  assert.equal(runtime.isBleOwner(), false);
+  assert.match(runtime.diagnostics().error ?? "", /other host owns/);
 });
 
 test("Linux Vibe Mic sink only forwards frames during a mic route", async () => {

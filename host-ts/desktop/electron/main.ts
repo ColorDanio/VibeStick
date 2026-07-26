@@ -6,6 +6,13 @@ import { join, resolve } from "node:path";
 let windowRef: BrowserWindow | undefined;
 let host: ChildProcess | undefined;
 
+if (!app.requestSingleInstanceLock()) app.quit();
+else app.on("second-instance", () => {
+  if (!windowRef) return;
+  if (windowRef.isMinimized()) windowRef.restore();
+  windowRef.focus();
+});
+
 /** Electron is deliberately a thin, cross-platform native shell; HostCore stays shared TypeScript. */
 function startHostCore(): void {
   if (process.env.VIBESTICK_NO_CORE === "1") return;
@@ -25,6 +32,10 @@ function createWindow(): void {
   windowRef.webContents.setWindowOpenHandler(({ url }) => { void shell.openExternal(url); return { action: "deny" }; });
 }
 
-void app.whenReady().then(() => { startHostCore(); createWindow(); app.on("activate", () => { if (!BrowserWindow.getAllWindows().length) createWindow(); }); });
+void app.whenReady().then(() => {
+  if (!app.hasSingleInstanceLock()) return;
+  startHostCore(); createWindow();
+  app.on("activate", () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
+});
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
 app.on("before-quit", () => { host?.kill(); host = undefined; });
