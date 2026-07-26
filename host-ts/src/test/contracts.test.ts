@@ -246,6 +246,18 @@ test("runtime reports a missing Vibe Mic capability as degraded instead of ready
   assert.equal(runtime.isBleOwner(), false);
 });
 
+test("runtime reports a post-connect delivery failure as degraded diagnostics", async () => {
+  const core = new HostCore(normalizeConfig({ tools: [] }));
+  const runtime = new HostRuntime(new VibeBridge(new MemoryGattTransport(), core), {
+    ble: { available: true }, keyboard: { available: true }, mic: { available: true }, asr: { available: true },
+  });
+  assert.equal(await runtime.start(), "ready");
+  runtime.reportError(new Error("focused injection denied"));
+  assert.deepEqual(runtime.diagnostics().state, "degraded");
+  assert.equal(runtime.diagnostics().error, "focused injection denied");
+  await runtime.stop();
+});
+
 test("runtime never claims BLE ownership when its transport connection fails", async () => {
   const core = new HostCore(normalizeConfig({ tools: [] }));
   const bridge = new VibeBridge({

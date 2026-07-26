@@ -45,7 +45,7 @@ async function main(): Promise<void> {
     const bridgeOptions: LinuxBridgeOptions = {
       helperExecutable: args.helper,
       helperArgs: [resolve(moduleDirectory, "../../host/tools/ble_gatt_helper.py")],
-      onError: (error: Error) => console.error(`capability error: ${error.message}`),
+      onError: (error: Error) => { console.error(`capability error: ${error.message}`); runtime?.reportError(error); },
       onAsrAudio: (pcm: Uint8Array) => voice.feed(pcm),
       onRoutingActions: async (actions) => {
         for (const action of actions) {

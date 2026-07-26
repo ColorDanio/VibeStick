@@ -46,7 +46,10 @@ export function createLinuxBridge(core: HostCore, options: LinuxBridgeOptions): 
   const commands = new LinuxCommandAdapter(transport, core, reportError);
   const bridge = new VibeBridge(transport, core, {
     onActions: async (actions) => { try { await mic.apply(actions); await options.onRoutingActions?.(actions); } catch (error) { reportError(error); throw error; } },
-    ...(options.onCommand ? { onCommand: options.onCommand } : {}),
+    ...(options.onCommand ? { onCommand: async (command) => {
+      try { await options.onCommand?.(command); }
+      catch (error) { reportError(error); throw error; }
+    } } : {}),
     onAudio: async (destination, pcm) => {
       if (destination === "mic") { try { await mic.feed(pcm); } catch (error) { reportError(error); throw error; } }
       else options.onAsrAudio?.(pcm);

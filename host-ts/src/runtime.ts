@@ -51,4 +51,10 @@ export class HostRuntime {
 
   /** True only after this process has connected the platform GATT transport. */
   isBleOwner(): boolean { return this.ownsBleLink; }
+
+  /** Adapter side-effects (delivery, HID, focused input) can degrade a live runtime. */
+  reportError(error: Error | string): void {
+    this.lastError = typeof error === "string" ? error : error.message;
+    if (this.state === "ready") this.state = "degraded";
+  }
 }
