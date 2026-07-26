@@ -557,15 +557,19 @@ void uiTickWaiting(int animPhase) {
 }
 
 // ---- Home: tool picker carousel ----
-// Entries = host tools + one device-local "Vibe Mic" entry appended
+// Entries = host tools + device-local "Vibe Mic" and "YOLO" entries.
 // at the end (index == gTools.count); it exists even with no host tools.
 
 static int homeEntryCount() {
-  return (gTools.valid ? gTools.count : 0) + 1;
+  return (gTools.valid ? gTools.count : 0) + 2;
 }
 
 static bool isMicEntry(int idx) {
   return !gTools.valid || idx >= gTools.count;
+}
+
+static bool isYoloEntry(int idx) {
+  return idx >= (gTools.valid ? gTools.count : 0) + 1;
 }
 
 static const uint16_t* entryLogo(int idx) {
@@ -584,8 +588,8 @@ void uiShowHome(int selTool) {
   const char* name;
   const char* state;
   if (isMicEntry(selTool)) {
-    name = "Vibe Mic";
-    state = "system input";
+    name = isYoloEntry(selTool) ? "YOLO" : "Vibe Mic";
+    state = isYoloEntry(selTool) ? "focus input" : "system input";
   } else {
     const ToolEntry& t = gTools.list[selTool];
     name = t.name;  // global buffer: safe for the marquee to keep
@@ -1250,7 +1254,7 @@ void uiShowConvo(bool sendMarked, bool sentBusy, const char* errorText) {
 // Idle view below; while held, the shared full-screen recording view
 // (uiShowRecording) takes over. No transcript/confirm states.
 
-void uiShowMic(const char* errorText) {
+void uiShowMic(const char* errorText, bool yolo) {
   // Minimal microphone screen: big mic glyph in a ring, one status line,
   // one hint line. Recording switches to the full-screen RMS view.
   M5Lcd.fillScreen(TFT_BLACK);
@@ -1273,7 +1277,7 @@ void uiShowMic(const char* errorText) {
   }
 
   // "Vibe Mic" (16 px rich text) + connection state below it.
-  const char* title = "Vibe Mic";
+  const char* title = yolo ? "YOLO" : "Vibe Mic";
   drawText16((sW - textWidth16(title)) / 2, cy + ringR + 10, title, TFT_WHITE,
              TFT_BLACK);
   const char* st = bleConnected() ? "connected" : "advertising";
@@ -1284,7 +1288,12 @@ void uiShowMic(const char* errorText) {
   M5Lcd.drawFastHLine(0, footDivY(), sW, COL_FAINT);
   M5Lcd.setTextSize(1);
   M5Lcd.setTextColor(COL_FAINT, TFT_BLACK);
-  if (land) {
+  if (yolo && land) {
+    centerText("hold A: voice  A: enter  B: esc x2", footL1Y(), 1, COL_FAINT);
+  } else if (yolo) {
+    centerText("hold A: voice", footL1Y(), 1, COL_FAINT);
+    centerText("A: enter  B: esc x2", footL2Y(), 1, COL_FAINT);
+  } else if (land) {
     centerText("A: PTT + F15  B: F14  pwr: back", footL1Y(), 1, COL_FAINT);
   } else {
     centerText("A: PTT + F15", footL1Y(), 1, COL_FAINT);

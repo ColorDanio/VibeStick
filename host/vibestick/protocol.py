@@ -46,6 +46,8 @@ CMD_VOICE_CONFIRM = "voice.confirm"
 CMD_VOICE_CANCEL = "voice.cancel"
 CMD_INFERENCE_CANCEL = "inference.cancel"
 CMD_SESSION_NEW = "session.new"
+CMD_YOLO_ENTER = "yolo.enter"
+CMD_YOLO_ESCAPE = "yolo.escape"
 
 VOICE_COMMANDS = (CMD_VOICE_START, CMD_VOICE_STOP, CMD_VOICE_CONFIRM, CMD_VOICE_CANCEL)
 

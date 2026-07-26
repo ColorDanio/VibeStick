@@ -49,7 +49,7 @@ void uiShowRecording(int levelPct, uint32_t elapsedMs);
 void uiTickRecording(int levelPct, uint32_t elapsedMs);
 
 // Device-local voice-input microphone screen (fake-CLI idle view).
-void uiShowMic(const char* errorText);
+void uiShowMic(const char* errorText, bool yolo = false);
 
 // Partial redraw of the conversation content area (tail message view).
 void uiRedrawConvoTail();

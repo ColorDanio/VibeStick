@@ -39,10 +39,9 @@
 #define AUDIO_CHUNK 180
 #define AUDIO_CHUNKS_PER_LOOP 3
 
-static const char* SCREEN_NAMES[] = {"waiting", "home", "sessions", "convo",
-                                     "mic"};
+static const char* SCREEN_NAMES[] = {"waiting", "home", "sessions", "convo", "mic", "yolo"};
 
-enum Screen { SCR_WAITING, SCR_HOME, SCR_SESSIONS, SCR_CONVO, SCR_MIC };
+enum Screen { SCR_WAITING, SCR_HOME, SCR_SESSIONS, SCR_CONVO, SCR_MIC, SCR_YOLO };
 
 enum Event { EV_NONE, EV_A_SHORT, EV_A_LONG, EV_A_DBL, EV_B_SHORT, EV_B_LONG };
 
@@ -126,12 +125,15 @@ static void activity() {
   }
 }
 
-static void startRecording(bool micMode) {
+static void startRecording(bool micMode, bool yoloMode = false) {
   // v2.1: mode "mic" = raw voice-input microphone (host forwards PCM to a virtual
   // mic); no mode = the normal ASR voice flow. Old hosts ignore the key.
   if (micMode) {
     bleNotifyCommand("voice.start", "mode", "mic");
     Serial.println("[VOICE] recording started (mode=mic)");
+  } else if (yoloMode) {
+    bleNotifyCommand("voice.start", "mode", "yolo");
+    Serial.println("[VOICE] recording started (mode=yolo)");
   } else {
     bleNotifyCommand("voice.start");
     Serial.println("[VOICE] recording started");
@@ -182,6 +184,10 @@ static void redraw() {
         uiShowMic(visibleError());
       }
       break;
+    case SCR_YOLO:
+      if (sRecording) uiShowRecording(micLevel(), millis() - sRecStart);
+      else uiShowMic(visibleError(), true);
+      break;
   }
 }
 
@@ -198,6 +204,10 @@ static void back() {  // one level up
       break;
     case SCR_MIC:
       if (sRecording) stopRecording();  // no transcript states: nothing to cancel
+      setScreen(SCR_HOME);
+      break;
+    case SCR_YOLO:
+      if (sRecording) stopRecording();
       setScreen(SCR_HOME);
       break;
     default:
@@ -219,7 +229,7 @@ static void handleEvent(Event e) {
 
     case SCR_HOME: {
       int toolCount = gTools.valid ? gTools.count : 0;
-      int entries = toolCount + 1;  // + device-local Microphone entry
+      int entries = toolCount + 2;  // + Vibe Mic + YOLO device-local entries
       if (e == EV_B_SHORT) {
         int from = sSelTool;
         sSelTool = (sSelTool + 1) % entries;  // optimistic: move instantly
@@ -230,8 +240,10 @@ static void handleEvent(Event e) {
         Serial.printf("[UI] home select -> %d/%d\n", sSelTool, entries - 1);
         uiHomeAnimate(from, sSelTool);
       } else if (e == EV_A_SHORT) {
-        if (sSelTool >= toolCount) {
+        if (sSelTool == toolCount) {
           setScreen(SCR_MIC);  // device-local voice-input microphone
+        } else if (sSelTool > toolCount) {
+          setScreen(SCR_YOLO);
         } else {
           bleNotifyCommand("tool.select", "id", gTools.list[sSelTool].id);
           sSelEntry = gSessions.valid ? gSessions.active + 1 : 0;
@@ -300,6 +312,10 @@ static void handleEvent(Event e) {
         }
       }
       break;
+    case SCR_YOLO:
+      if (e == EV_A_SHORT) bleNotifyCommand("yolo.enter");
+      else if (e == EV_B_SHORT) bleNotifyCommand("yolo.escape");
+      break;
   }
 }
 
@@ -313,7 +329,8 @@ static uint32_t sFirstClickAt = 0;
 
 static void pollButtons() {
   bool convo = (sScreen == SCR_CONVO);
-  bool holdTalk = convo;  // conversation retains the 500 ms hold gesture
+  bool yoloMode = (sScreen == SCR_YOLO);
+  bool holdTalk = convo || yoloMode;
   // HID is deliberately scoped to the device-local microphone mode.  On the
   // home/session/conversation screens A/B remain exclusive CLI controls.
   bool hidMicMode = (sScreen == SCR_MIC);
@@ -358,6 +375,8 @@ static void pollButtons() {
           sRecAutoStopped = false;  // release after the 20 s cap: no click
         } else if (sRecording) {
           stopRecording();
+        } else if (yoloMode) {
+          pushEvent(EV_A_SHORT);
         } else if (convo) {
           bool ready =
               gVoice.valid && strcmp(gVoice.state, "ready") == 0;
@@ -724,10 +743,10 @@ void loop() {
 
   // Conversation uses a 500 ms hold to avoid turning its paging A click into
   // voice input. Microphone mode starts immediately on physical A down.
-  if (sScreen == SCR_CONVO && !sRecording &&
+  if ((sScreen == SCR_CONVO || sScreen == SCR_YOLO) && !sRecording &&
       sADownAt != 0 && boardBtnA_isPressed() &&
       millis() - sADownAt >= REC_HOLD_MS) {
-    startRecording(sScreen == SCR_MIC);
+    startRecording(sScreen == SCR_MIC, sScreen == SCR_YOLO);
   }
 
   Event e;
@@ -786,7 +805,7 @@ void loop() {
       sWaitPhase = (sWaitPhase + 1) % 3;
       uiTickWaiting(sWaitPhase);  // ring box + message line only
       sAnimNext = now + 400;
-    } else if ((sScreen == SCR_CONVO || sScreen == SCR_MIC) && sRecording) {
+    } else if ((sScreen == SCR_CONVO || sScreen == SCR_MIC || sScreen == SCR_YOLO) && sRecording) {
       uiTickRecording(micLevel(), millis() - sRecStart);
       sAnimNext = now + 100;
     } else if (sScreen == SCR_CONVO) {

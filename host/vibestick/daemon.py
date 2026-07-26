@@ -15,7 +15,7 @@ from collections import deque
 from pathlib import Path
 
 from . import config as config_mod
-from . import delivery, discover, mic as mic_mod, procwatch, protocol, routing, setupui, voice
+from . import delivery, discover, mic as mic_mod, procwatch, protocol, routing, setupui, voice, yolo
 from .bridge import BleakTransport, Bridge, Transport
 from .hid import VirtualKeyboard
 from .store import POLL_INTERVAL_SEC, SessionStore
@@ -242,8 +242,14 @@ async def run_daemon(
         if rec is None or rec.status.state != "running":
             spawn(_flush_queue())
 
+    focused = yolo.FocusedInput()
+    holder["voice_mode"] = "asr"
+
     def deliver_transcript(text: str) -> None:
-        deliver_message(text)
+        if holder["voice_mode"] == "yolo":
+            spawn(focused.text(text))
+        else:
+            deliver_message(text)
 
     def push_status_error(text: str) -> None:
         """Ad-hoc STATUS state=error feedback (e.g. inference.cancel with no
@@ -358,7 +364,13 @@ async def run_daemon(
             on_inference_cancel()
         elif cmd == protocol.CMD_SESSION_NEW:
             on_session_new()
+        elif cmd == protocol.CMD_YOLO_ENTER:
+            spawn(focused.enter())
+        elif cmd == protocol.CMD_YOLO_ESCAPE:
+            spawn(focused.escape_twice())
         elif cmd in (protocol.CMD_VOICE_START, protocol.CMD_VOICE_STOP, protocol.CMD_VOICE_CANCEL):
+            if cmd == protocol.CMD_VOICE_START:
+                holder["voice_mode"] = "yolo" if payload.get("mode") == "yolo" else "asr"
             route_change = routing.transition(holder["audio_route"], cmd, payload.get("mode"))
             holder["audio_route"] = route_change.route
             for action in route_change.actions:
@@ -369,7 +381,12 @@ async def run_daemon(
                 elif action == "asr.start":
                     pipeline.start()
                 elif action == "asr.stop":
-                    spawn(pipeline.stop())
+                    async def finish() -> None:
+                        await pipeline.stop()
+                        if holder["voice_mode"] == "yolo":
+                            pipeline.confirm()
+                            holder["voice_mode"] = "asr"
+                    spawn(finish())
                 elif action == "asr.cancel":
                     pipeline.cancel()
         elif cmd == protocol.CMD_VOICE_CONFIRM:
