@@ -52,29 +52,43 @@ def test_focused_input_uses_clipboard_for_unicode_wayland_text(monkeypatch):
             pass
 
     class Proc:
-        returncode = 0
-        stdin = Pipe()
+        def __init__(self, output=b""):
+            self.returncode = None
+            self.stdin = Pipe()
+            self.output = output
 
         async def wait(self):
+            self.returncode = 0
             return 0
 
         async def communicate(self, *_input):
-            return b"", b""
+            self.returncode = 0
+            return self.output, b""
+
+        def terminate(self):
+            calls.append(("terminate",))
+            self.returncode = 0
 
     async def spawn(*argv, **kwargs):
         calls.append((argv, kwargs))
-        return Proc()
+        return Proc("中文 text".encode() if argv[0] == "/usr/bin/wl-paste" else b"")
 
-    paths = {"ydotool": "/usr/bin/ydotool", "wl-copy": "/usr/bin/wl-copy"}
+    paths = {
+        "ydotool": "/usr/bin/ydotool",
+        "wl-copy": "/usr/bin/wl-copy",
+        "wl-paste": "/usr/bin/wl-paste",
+    }
     monkeypatch.setattr(yolo.shutil, "which", paths.get)
     monkeypatch.setattr(yolo.asyncio, "create_subprocess_exec", spawn)
     focused = yolo.FocusedInput()
     assert asyncio.run(focused.text("中文 text")) is True
-    assert calls[0][0] == ("/usr/bin/wl-copy", "--foreground", "--paste-once")
+    assert calls[0][0] == ("/usr/bin/wl-copy", "--foreground")
     assert calls[1] == ("input", "中文 text".encode())
-    assert calls[3][0] == (
+    assert calls[3][0] == ("/usr/bin/wl-paste", "--no-newline")
+    assert calls[4][0] == (
         "/usr/bin/ydotool", "key", "29:1", "47:1", "47:0", "29:0",
     )
+    assert ("terminate",) in calls
 
 
 def test_focused_input_without_tool_is_safe(monkeypatch):

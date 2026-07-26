@@ -11,7 +11,9 @@ log = logging.getLogger(__name__)
 # editors and browsers.  (Ctrl+Shift+V is terminal-specific and was not
 # accepted by the user's notepad.)
 _PASTE = ("29:1", "47:1", "47:0", "29:0")
-_CLIPBOARD_READY_DELAY_SEC = 0.04
+_CLIPBOARD_READY_DELAY_SEC = 0.02
+_PASTE_DELIVERY_GRACE_SEC = 0.08
+_CLIPBOARD_READY_ATTEMPTS = 12
 
 
 class FocusedInput:
@@ -28,6 +30,8 @@ class FocusedInput:
         self.wtype = shutil.which("wtype")
         self.ydotool = shutil.which("ydotool")
         self.clipboard = shutil.which("wl-copy")
+        self.clipboard_reader = shutil.which("wl-paste")
+        self._clipboard_owner: asyncio.subprocess.Process | None = None
         # Keep this public attribute for callers that only need a capability
         # summary and for compatibility with the earlier implementation.
         self.bin = self.wtype or self.ydotool
@@ -51,16 +55,55 @@ class FocusedInput:
             log.warning("YOLO input command could not start (%s): %s", argv[0], exc)
         return False
 
+    async def _stop_clipboard_owner(self) -> None:
+        owner = self._clipboard_owner
+        self._clipboard_owner = None
+        if owner is None or owner.returncode is not None:
+            return
+        try:
+            owner.terminate()
+            await owner.wait()
+        except OSError:
+            pass
+
+    async def _clipboard_matches(self, text: str) -> bool:
+        """Read back the selection before injecting Ctrl+V.
+
+        This turns Wayland clipboard ownership into an acknowledged handoff:
+        a fresh transcript can never race a stale selection from the previous
+        YOLO turn.
+        """
+        if not self.clipboard_reader:
+            await asyncio.sleep(_CLIPBOARD_READY_DELAY_SEC * 2)
+            return True
+        expected = text.encode("utf-8")
+        for _ in range(_CLIPBOARD_READY_ATTEMPTS):
+            try:
+                p = await asyncio.create_subprocess_exec(
+                    self.clipboard_reader, "--no-newline",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                out, _err = await p.communicate()
+                if p.returncode == 0 and out == expected:
+                    return True
+            except OSError as exc:
+                log.warning("YOLO clipboard readback could not start: %s", exc)
+                return False
+            await asyncio.sleep(_CLIPBOARD_READY_DELAY_SEC)
+        log.warning("YOLO clipboard did not become current text before paste")
+        return False
+
     async def _copy(self, text: str) -> bool:
         if not self.clipboard:
             return False
         try:
+            await self._stop_clipboard_owner()
             p = await asyncio.create_subprocess_exec(
-                # Keep the owner in the foreground and serve exactly the
-                # upcoming Ctrl+V.  Waiting for the default wl-copy process
-                # races its background owner startup, which is why the first
-                # YOLO utterance could be missed while later ones succeeded.
-                self.clipboard, "--foreground", "--paste-once",
+                # Keep the owner in the foreground while the target requests
+                # the bytes.  ``--paste-once`` made a delayed first Ctrl+V
+                # consume the prior owner, shifting every transcript by one.
+                self.clipboard, "--foreground",
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.PIPE,
@@ -72,21 +115,11 @@ class FocusedInput:
             await p.stdin.drain()
             p.stdin.close()
             await p.stdin.wait_closed()
-            # wl-copy now owns the selection, but exits only after the paste
-            # request.  Do not await it here or the first injection blocks.
-            asyncio.create_task(self._reap_clipboard(p))
-            await asyncio.sleep(_CLIPBOARD_READY_DELAY_SEC)
-            return True
+            self._clipboard_owner = p
+            return await self._clipboard_matches(text)
         except OSError as exc:
             log.warning("YOLO clipboard command could not start: %s", exc)
         return False
-
-    async def _reap_clipboard(self, process: asyncio.subprocess.Process) -> None:
-        """Collect one-shot wl-copy once ydotool has consumed the selection."""
-        try:
-            await process.wait()
-        except OSError:
-            pass
 
     async def text(self, text: str) -> bool:
         if not text:
@@ -95,8 +128,17 @@ class FocusedInput:
             return await self._run([self.wtype, text])
         # Clipboard paste carries Unicode faithfully.  This is the normal
         # Linux/Wayland path on the current host, where wtype is not installed.
-        if self.ydotool and self.clipboard and await self._copy(text):
-            return await self._run([self.ydotool, "key", *_PASTE])
+        if self.ydotool and self.clipboard:
+            copied = await self._copy(text)
+            if copied:
+                pasted = await self._run([self.ydotool, "key", *_PASTE])
+                # Keep the selection alive long enough for the focused client
+                # to fetch it, then remove it so it cannot bleed into a later
+                # turn.
+                await asyncio.sleep(_PASTE_DELIVERY_GRACE_SEC)
+                await self._stop_clipboard_owner()
+                return pasted
+            await self._stop_clipboard_owner()
         if self.ydotool:
             # ydotool accepts the text directly; "--" was previously passed
             # here and became a literal/unsupported argument on this version.

@@ -665,7 +665,7 @@ void uiShowHome(int selTool) {
   const char* state;
   if (isMicEntry(selTool)) {
     name = isYoloEntry(selTool) ? "YOLO" : "Vibe Mic";
-    state = isYoloEntry(selTool) ? "focus input" : "system input";
+    state = isYoloEntry(selTool) ? "whisper asr" : "sound only";
   } else {
     const ToolEntry& t = gTools.list[selTool];
     name = t.name;  // global buffer: safe for the marquee to keep
