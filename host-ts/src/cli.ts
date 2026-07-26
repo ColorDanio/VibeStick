@@ -20,6 +20,7 @@ import { PlatformFocusedInput } from "./focused-input.js";
 import { PipeWireVibeMicSink } from "./pipewire-mic.js";
 import { LinuxFocusedInput } from "./linux-focused-input.js";
 import { TerminalSessionAdapter } from "./terminal-session.js";
+import { LinuxHidFallback } from "./linux-hid-fallback.js";
 
 type Args = { config: string; sessions: string; port: number; helper?: string; address?: string; nativeBle: boolean };
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
@@ -170,6 +171,7 @@ async function main(): Promise<void> {
   } else if (args.nativeBle || process.platform !== "linux") {
     const focused = process.platform === "linux" ? new LinuxFocusedInput() : new PlatformFocusedInput();
     const nativeMic = process.platform === "linux" ? new PipeWireVibeMicSink(config.mic.enabled) : undefined;
+    const nativeHid = process.platform === "linux" ? new LinuxHidFallback() : undefined;
     const terminals = process.platform === "win32" ? undefined : new TerminalSessionAdapter(core);
     bridge = new VibeBridge(new NobleGattTransport(args.address ?? ""), core, {
       onConnectionState: (connected) => runtime?.onBleConnectionState(connected),
@@ -177,6 +179,7 @@ async function main(): Promise<void> {
         if (destination === "mic") nativeMic?.feed(pcm);
         else voice.feed(pcm);
       },
+      onHid: (keycodes) => { void nativeHid?.report(keycodes).then((ok) => { if (!ok) runtime?.reportError("Vibe Mic HID fallback failed"); }); },
       onActions: async (actions) => {
         for (const action of actions) {
           if (action === "asr.start") {
@@ -238,7 +241,7 @@ async function main(): Promise<void> {
     });
     const capabilities: Capabilities = {
       ble: { available: true },
-      keyboard: { available: false, reason: "Vibe Mic HID/system key fallback is not implemented yet" },
+      keyboard: nativeHid ? { available: false, reason: "Vibe Mic HID fallback probe pending" } : { available: false, reason: "Vibe Mic HID/system key fallback is not implemented yet" },
       mic: nativeMic ? { available: false, reason: "PipeWire Vibe Mic probe pending" } : { available: false, reason: "Platform virtual microphone is not implemented yet" },
       asr: terminals && config.asr.engine === "online" && Boolean(config.asr.online.api_key)
         ? { available: true, reason: "Delivery requires the selected session to be tmux or zellij" }
@@ -266,6 +269,11 @@ async function main(): Promise<void> {
     if (nativeMic) {
       capabilities.mic = (await nativeMic.warmup().catch(() => false))
         ? { available: true } : { available: false, reason: "PipeWire Vibe Mic unavailable" };
+      runtime.reconcile();
+    }
+    if (nativeHid) {
+      capabilities.keyboard = (await nativeHid.probe().catch(() => false))
+        ? { available: true } : { available: false, reason: "ydotool Vibe Mic HID fallback unavailable" };
       runtime.reconcile();
     }
     console.log(`VibeStick TS native BLE runtime: ${runtime.reconcile()}`);

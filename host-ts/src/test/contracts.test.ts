@@ -32,6 +32,7 @@ import { EventEmitter } from "node:events";
 import { PlatformFocusedInput, type ProcessInvocation } from "../focused-input.js";
 import { LinuxFocusedInput, type LinuxInvocation } from "../linux-focused-input.js";
 import { TerminalSessionAdapter, type TerminalInvocation } from "../terminal-session.js";
+import { LinuxHidFallback } from "../linux-hid-fallback.js";
 import { desktopEnvironment, desktopLifecyclePlan } from "../desktop-lifecycle.js";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
@@ -263,6 +264,17 @@ test("native terminal adapter delivers only to selected tmux or zellij sessions"
   ]);
   core.replaceSessions([{ id: "plain", status: { tool: "codex", model: "", session: "Task", state: "idle", ctx_pct: -1, cost_usd: -1, last: "", updated: 1 }, fg: true, raw: { pid: 1 } }]);
   assert.equal(await adapter.deliver("never global"), false);
+});
+
+test("Linux HID fallback emits only F15/F14 state transitions", async () => {
+  const calls: string[][] = [];
+  const fallback = new LinuxHidFallback(async (_command, args) => { calls.push(args); return true; });
+  assert.equal(await fallback.probe(), true);
+  assert.equal(await fallback.report([185]), true);
+  assert.equal(await fallback.report([185, 184]), true);
+  assert.equal(await fallback.report([184]), true);
+  await fallback.release();
+  assert.deepEqual(calls, [["--help"], ["key", "185:1"], ["key", "184:1"], ["key", "185:0"], ["key", "184:0"]]);
 });
 
 test("online ASR settings validate provider data and never return API keys", async () => {
