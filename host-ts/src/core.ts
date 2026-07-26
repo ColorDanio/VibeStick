@@ -41,6 +41,7 @@ export class HostCore {
   }
 
   drainQueued(): PendingMessage[] { return this.queue.drain(this.store.statusPayload().state); }
+  activeSessionRaw(): Record<string, unknown> | undefined { return this.store.activeRaw(); }
   snapshot(): CoreSnapshot {
     return {
       selected_tool: this.store.selectedTool,

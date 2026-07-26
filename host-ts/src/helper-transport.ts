@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
 import type { Characteristic, GattTransport, NotificationHandler } from "./transport.js";
 
-export type HelperReply = { id?: number; ok?: boolean; result?: { address?: string; available?: boolean }; error?: string; event?: string; characteristic?: Characteristic; data?: string };
+export type HelperReply = { id?: number; ok?: boolean; result?: { address?: string; available?: boolean; delivered?: boolean }; error?: string; event?: string; characteristic?: Characteristic; data?: string };
 
 /** GattTransport backed by a signed/platform-specific JSON-lines helper. */
 export class HelperGattTransport implements GattTransport {

@@ -38,7 +38,7 @@ export async function loadSessionDirectory(directory: string, now = Date.now()):
       const status = statusFromFile(raw, Math.floor(info.mtimeMs / 1000));
       // Keep the existing 30-minute expiry behaviour, based on protocol time.
       if (now / 1000 - status.updated > 30 * 60) continue;
-      records.push({ id: string(raw.id) || entry.name.slice(0, -5), status });
+      records.push({ id: string(raw.id) || entry.name.slice(0, -5), status, raw });
     } catch {
       // One malformed adapter file must not take down the host.
     }

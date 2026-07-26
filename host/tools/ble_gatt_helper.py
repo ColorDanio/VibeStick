@@ -18,6 +18,7 @@ from pathlib import Path
 from vibestick import protocol
 from vibestick.hid import VirtualKeyboard
 from vibestick.mic import MicRelay
+from vibestick import delivery
 
 CACHE = Path.home() / ".vibestick" / "device-address"
 LOCK = Path.home() / ".vibestick" / "daemon.lock"
@@ -147,6 +148,9 @@ async def main() -> None:
                 await helper.mic.stop(); result = {}
             elif command == "hid.report":
                 helper.keyboard.report(base64.b64decode(str(request["data"]))); result = {}
+            elif command == "delivery.text":
+                raw = request.get("record")
+                result = {"delivered": await delivery.deliver_text(raw if isinstance(raw, dict) else None, str(request.get("text") or ""))}
             else:
                 raise ValueError("unknown command")
             emit({"id": ident, "ok": True, "result": result})

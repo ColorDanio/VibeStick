@@ -22,6 +22,7 @@ export function createLinuxBridge(core: HostCore, options: LinuxBridgeOptions): 
       if (destination === "mic") { try { await mic.feed(pcm); } catch (error) { reportError(error); throw error; } }
       else options.onAsrAudio?.(pcm);
     },
+    onInput: (text) => { const record = core.activeSessionRaw(); void transport.invoke("delivery.text", { record, text }).then((reply) => { if (!reply.result?.delivered) reportError(new Error("delivery failed")); }).catch(reportError); },
     onHid: (_keycodes, report) => { void transport.invoke("hid.report", { data: Buffer.from(report).toString("base64") }).catch(reportError); },
   });
   return { bridge, mic };

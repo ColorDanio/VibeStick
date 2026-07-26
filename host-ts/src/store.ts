@@ -2,7 +2,7 @@ import type { Config, ToolConfig } from "./config.js";
 import type { SessionInfo, SessionStatus, SessionsPayload } from "./protocol.js";
 import { SessionSelection } from "./session.js";
 
-export interface SessionRecord { id: string; status: SessionStatus; fg?: boolean; }
+export interface SessionRecord { id: string; status: SessionStatus; fg?: boolean; raw?: Record<string, unknown>; }
 export interface ToolInfo { id: string; name: string; state: string; fns: string[]; }
 export interface ToolsPayload { active: number; list: ToolInfo[]; }
 
@@ -39,6 +39,7 @@ export class HostSessionStore {
   apply(command: { cmd: string; id?: string }): boolean { return this.selection.apply(command); }
   get selectedTool(): string | null { return this.selection.selectedTool; }
   get activeId(): string | null { return this.selection.activeId; }
+  activeRaw(): Record<string, unknown> | undefined { return this.records.find((record) => record.id === this.activeId)?.raw; }
 
   statusPayload(): SessionStatus {
     return this.records.find((record) => record.id === this.activeId)?.status
