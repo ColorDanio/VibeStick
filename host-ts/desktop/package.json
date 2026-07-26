@@ -2,13 +2,18 @@
   "name": "@vibestick/host-desktop",
   "version": "0.1.0",
   "private": true,
+  "description": "Cross-platform VibeStick Host 2.0 desktop companion",
+  "author": "VibeStick contributors",
   "type": "module",
+  "main": "electron-dist/main.js",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build && npm run build:electron",
     "build:electron": "tsc -p electron/tsconfig.json",
     "preview": "vite preview",
-    "desktop": "electron electron-dist/main.js"
+    "desktop": "electron electron-dist/main.js",
+    "package:dir": "npm run build && electron-builder --dir",
+    "package": "npm run build && electron-builder"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.4.1",
@@ -21,6 +26,18 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/node": "^24.0.0",
-    "electron": "^35.0.0"
+    "electron": "^35.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "io.vibestick.host",
+    "productName": "VibeStick Host",
+    "executableName": "vibestick-host",
+    "asar": true,
+    "files": ["dist/**/*", "electron-dist/**/*", "package.json"],
+    "extraResources": [{ "from": "../dist", "to": "host-core", "filter": ["**/*"] }],
+    "linux": { "target": ["AppImage", "deb"], "category": "Utility" },
+    "mac": { "target": ["dmg", "zip"], "category": "public.app-category.utilities" },
+    "win": { "target": ["nsis", "zip"] }
   }
 }

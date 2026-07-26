@@ -13,6 +13,7 @@ host-ts/desktop/electron-dist/
 host-ts/desktop/.playwright-cli/
 host-ts/desktop/output/
 host-ts/desktop/*.tsbuildinfo
+host-ts/desktop/release/
 
 # PlatformIO
 .pio/

@@ -18,3 +18,8 @@ For Linux development, opt into the existing audited BlueZ/PipeWire bridge with
 Host 2.0 with that executable as the helper; it does not stop Python 1.x or
 steal the BLE owner lock. If Python 1.x owns the Stick, the UI reports the
 conflict as degraded until the user explicitly switches owners.
+
+`npm run package:dir` produces an unpacked package for the current platform.
+Release targets are declared for AppImage/deb (Linux), dmg/zip (macOS), and
+NSIS/zip (Windows). macOS notarization and Windows signing are release
+pipeline responsibilities, not silently bypassed at build time.
