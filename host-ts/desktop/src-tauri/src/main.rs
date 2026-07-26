@@ -225,7 +225,8 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .manage(HostProcess(Mutex::new(None)))
         .setup(|app| {
-            start_host(&app.handle(), app.state::<HostProcess>()).map_err(std::io::Error::other)?;
+            start_host(&app.handle(), &app.state::<HostProcess>())
+                .map_err(std::io::Error::other)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
