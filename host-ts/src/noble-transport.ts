@@ -1,5 +1,5 @@
 import { BLE } from "./protocol.js";
-import type { Characteristic, GattTransport, NotificationHandler } from "./transport.js";
+import type { Characteristic, ConnectionHandler, GattTransport, NotificationHandler } from "./transport.js";
 
 type NobleCharacteristic = {
   uuid: string;
@@ -39,11 +39,13 @@ export class NobleGattTransport implements GattTransport {
   private peripheral: NoblePeripheral | undefined;
   private characteristics = new Map<string, NobleCharacteristic>();
   private handler: NotificationHandler | undefined;
+  private connectionHandler: ConnectionHandler | undefined;
   private connected = false;
   address: string | undefined;
 
   constructor(private readonly targetAddress = "", private readonly loader: NobleLoader = loadNoble, private readonly timeoutMs = 15_000) {}
   onNotification(handler: NotificationHandler): void { this.handler = handler; }
+  onConnectionState(handler: ConnectionHandler): void { this.connectionHandler = handler; }
   isConnected(): boolean { return this.connected; }
 
   async connect(): Promise<void> {
@@ -61,7 +63,8 @@ export class NobleGattTransport implements GattTransport {
       this.peripheral = peripheral;
       this.address = peripheral.address || peripheral.id;
       this.connected = true;
-      peripheral.on("disconnect", () => { this.connected = false; this.peripheral = undefined; });
+      this.connectionHandler?.(true);
+      peripheral.on("disconnect", () => { this.connected = false; this.peripheral = undefined; this.characteristics.clear(); this.connectionHandler?.(false); });
     } catch (error) {
       await peripheral.disconnectAsync().catch(() => undefined);
       throw error;
@@ -70,7 +73,7 @@ export class NobleGattTransport implements GattTransport {
 
   async disconnect(): Promise<void> {
     const peripheral = this.peripheral;
-    this.connected = false; this.peripheral = undefined; this.characteristics.clear();
+    this.connected = false; this.peripheral = undefined; this.characteristics.clear(); this.connectionHandler?.(false);
     if (peripheral) await peripheral.disconnectAsync().catch(() => undefined);
   }
 

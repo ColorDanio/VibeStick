@@ -9,6 +9,7 @@ export interface BridgeHooks {
   onHid?(keycodes: number[], report: Uint8Array): void;
   onActions?(actions: RoutingAction[]): void | Promise<void>;
   onCommand?(command: DeviceCommand): void | Promise<void>;
+  onConnectionState?(connected: boolean): void;
   /** Surface serialized BLE side-effect failures instead of silently dropping them. */
   onEffectError?(error: Error): void | Promise<void>;
 }
@@ -17,10 +18,15 @@ export interface DeviceCommand { cmd: string; id?: string; mode?: unknown; fn?: 
 /** BLE protocol bridge shared by every platform adapter. */
 export class VibeBridge {
   private effects: Promise<void> = Promise.resolve();
+  private wired = false;
   constructor(private readonly transport: GattTransport, private readonly core: HostCore, private readonly hooks: BridgeHooks = {}) {}
 
   async connect(): Promise<void> {
-    this.transport.onNotification((characteristic, data) => this.notification(characteristic, data));
+    if (!this.wired) {
+      this.wired = true;
+      this.transport.onNotification((characteristic, data) => this.notification(characteristic, data));
+      this.transport.onConnectionState((connected) => this.hooks.onConnectionState?.(connected));
+    }
     await this.transport.connect();
     for (const characteristic of ["INPUT", "COMMAND", "AUDIO", "HID_INPUT"] as const) await this.transport.subscribe(characteristic);
     await this.sync();

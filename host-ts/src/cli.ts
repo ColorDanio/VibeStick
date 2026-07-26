@@ -79,6 +79,7 @@ async function main(): Promise<void> {
       helperExecutable: args.helper,
       helperArgs: [resolve(moduleDirectory, "../../host/tools/ble_gatt_helper.py")],
       onError: (error: Error) => { console.error(`capability error: ${error.message}`); runtime?.reportError(error); },
+      onConnectionState: (connected: boolean) => runtime?.onBleConnectionState(connected),
       onAsrAudio: (pcm: Uint8Array) => voice.feed(pcm),
       onRoutingActions: async (actions) => {
         for (const action of actions) {
@@ -152,6 +153,7 @@ async function main(): Promise<void> {
   } else if (args.nativeBle || process.platform !== "linux") {
     const focused = new PlatformFocusedInput();
     bridge = new VibeBridge(new NobleGattTransport(args.address ?? ""), core, {
+      onConnectionState: (connected) => runtime?.onBleConnectionState(connected),
       onAudio: (destination, pcm) => { if (destination === "asr") voice.feed(pcm); },
       onActions: async (actions) => {
         for (const action of actions) {

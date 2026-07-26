@@ -131,6 +131,7 @@ export function App(): ReactElement {
     finally { setLoginBusy(undefined); }
   };
   const runtime = data.environment.runtime;
+  const bleConnected = data.environment.owner === "active";
   const selected = data.sessions.list.find((session) => session.id === data.active_session) ?? data.sessions.list[0];
 
   return <main className="app-shell">
@@ -144,11 +145,11 @@ export function App(): ReactElement {
     <section className="workspace" id="overview">
       <header className="topbar">
         <div><p className="eyebrow">DEVICE CONTROL CENTER</p><h1>Good afternoon.</h1></div>
-        <div className="connection"><span className={`dot ${runtime === "ready" ? "green" : runtime === "degraded" ? "amber" : ""}`}></span><strong>{runtime === "ready" ? "Connected" : runtime === "degraded" ? "Needs attention" : "Not connected"}</strong><span className="owner">Host 2.0 {data.environment.owner === "active" ? "active" : "standby"}</span></div>
+        <div className="connection"><span className={`dot ${bleConnected ? "green" : runtime === "degraded" ? "amber" : ""}`}></span><strong>{bleConnected ? "BLE connected" : runtime === "degraded" ? "Needs attention" : "Not connected"}</strong><span className="owner">Host 2.0 {bleConnected ? "active" : "standby"}</span></div>
       </header>
       {notice && <div className="notice"><span>{notice}</span>{restartRequired && window.vibestickDesktop && <button onClick={() => void restartHost()} disabled={restarting}>{restarting ? "Restarting…" : "Restart Host 2.0"}</button>}</div>}
       <section className="device-row">
-        <div className="device-summary"><div className="stick-art"><i></i><i></i><b>V</b></div><div><p className="eyebrow">M5STICKC PLUS</p><h2>VibeStick</h2><p>{runtime === "ready" ? "BLE bridge connected and synchronized." : "Choose Host 2.0 as the BLE owner to connect."}</p></div></div>
+        <div className="device-summary"><div className="stick-art"><i></i><i></i><b>V</b></div><div><p className="eyebrow">M5STICKC PLUS</p><h2>VibeStick</h2><p>{bleConnected ? "BLE bridge connected and synchronized. Check capability cards for platform setup." : "Choose Host 2.0 as the BLE owner to connect."}</p></div></div>
         <div className="capabilities">{(["ble", "keyboard", "mic", "asr"] as const).map((key) => <div className="cap" key={key}><span className={`cap-icon ${data.environment.capabilities[key].available ? "on" : ""}`}>{data.environment.capabilities[key].available ? "✓" : "–"}</span><div><b>{key === "ble" ? "BLE bridge" : key === "keyboard" ? "HID keys" : key === "mic" ? "Vibe Mic" : "Agent ASR"}</b><small>{data.environment.capabilities[key].available ? "Available" : data.environment.capabilities[key].reason}</small></div></div>)}</div>
       </section>
       <section className="modes" id="voice"><div className="section-heading"><div><p className="eyebrow">INPUT MODES</p><h2>How the Stick speaks</h2></div><span className="current-route">Current route: {data.audio_route === "mic" ? "Vibe Mic" : "Agent CLI ASR"}</span></div>

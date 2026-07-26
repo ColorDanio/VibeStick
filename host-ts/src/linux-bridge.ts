@@ -36,6 +36,7 @@ export interface LinuxBridgeOptions {
   onRoutingActions?(actions: import("./routing.js").RoutingAction[]): void | Promise<void>;
   onCommand?(command: DeviceCommand): void | Promise<void>;
   onError?(error: Error): void;
+  onConnectionState?(connected: boolean): void;
 }
 
 /** Wire Linux-specific Vibe Mic and uinput fallback into the shared bridge. */
@@ -56,6 +57,7 @@ export function createLinuxBridge(core: HostCore, options: LinuxBridgeOptions): 
     },
     onInput: (text) => { void commands.deliver(text); },
     onHid: (_keycodes, report) => { void transport.invoke("hid.report", { data: Buffer.from(report).toString("base64") }).catch(reportError); },
+    ...(options.onConnectionState ? { onConnectionState: options.onConnectionState } : {}),
   });
   return { bridge, mic, commands };
 }

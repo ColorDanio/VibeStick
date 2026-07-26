@@ -407,10 +407,36 @@ test("runtime reports a post-connect delivery failure as degraded diagnostics", 
   await runtime.stop();
 });
 
+test("runtime reconnects an established BLE link, resyncs, and keeps one notification handler", async () => {
+  const core = new HostCore(normalizeConfig({ tools: [] }));
+  const transport = new MemoryGattTransport();
+  const commands: string[] = [];
+  let runtime: HostRuntime;
+  const bridge = new VibeBridge(transport, core, {
+    onConnectionState: (connected) => runtime.onBleConnectionState(connected),
+    onCommand: (command) => { commands.push(command.cmd); },
+  });
+  runtime = new HostRuntime(bridge, {
+    ble: { available: true }, keyboard: { available: true }, mic: { available: true }, asr: { available: true },
+  }, 1);
+  assert.equal(await runtime.start(), "ready");
+  transport.drop();
+  assert.equal(runtime.isBleOwner(), false);
+  assert.match(runtime.diagnostics().error ?? "", /reconnecting/);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(runtime.isBleOwner(), true);
+  assert.equal(runtime.state, "ready");
+  assert.equal(transport.subscriptions.length, 8);
+  transport.notify("COMMAND", new TextEncoder().encode('{"cmd":"yolo.enter"}'));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(commands, ["yolo.enter"]);
+  await runtime.stop();
+});
+
 test("runtime never claims BLE ownership when its transport connection fails", async () => {
   const core = new HostCore(normalizeConfig({ tools: [] }));
   const bridge = new VibeBridge({
-    onNotification() {}, isConnected: () => false,
+    onNotification() {}, onConnectionState() {}, isConnected: () => false,
     async connect() { throw new Error("other host owns the VibeStick"); }, async disconnect() {}, async subscribe() {}, async write() {},
   }, core);
   const runtime = new HostRuntime(bridge, {
