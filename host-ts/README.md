@@ -8,6 +8,7 @@ adapters added only after this core conforms to `../contracts/v1`.
 ```bash
 npm install
 npm test
+npm start -- --config ~/.vibestick/config.json
 ```
 
 The test suite reads the same versioned JSON fixtures as Python.  Do not copy
@@ -19,3 +20,13 @@ adapter. The TS app speaks JSON-lines to it; run it with the Python host
 environment so its existing `bleak` dependency is available. It is not yet a
 macOS/Windows release adapter, so those platforms correctly report BLE as
 unavailable instead of attempting a partial connection.
+
+For Linux TS-owner verification (stop the Python daemon first), supply its
+existing virtual environment as the helper executable:
+
+```bash
+npm start -- --linux-helper ../host/.venv/bin/python
+```
+
+The CLI dashboard remains useful without `--linux-helper`; it is explicitly
+degraded and does not claim to own the Stick.
