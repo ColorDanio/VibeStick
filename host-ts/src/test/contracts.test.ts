@@ -611,15 +611,16 @@ test("Linux command adapter keeps TS policy while delegating only safe system ac
   core.replaceSessions([{ id: "c1", raw: { tmux: "%7" }, status: { tool: "codex", model: "", session: "Work", state: "idle", ctx_pct: -1, cost_usd: -1, last: "", updated: 1 } }]);
   const calls: { command: string; values: Record<string, unknown> }[] = [];
   const adapter = new LinuxCommandAdapter({ invoke: async (command, values = {}) => {
-    calls.push({ command, values }); return { ok: true, result: { delivered: true } };
+    calls.push({ command, values }); return { ok: true, result: command === "focused.probe" ? { available: true } : { delivered: true } };
   }}, core, (error) => assert.fail(error.message));
   assert.equal(await adapter.deliver("continue"), true);
   assert.equal(await adapter.binding("escape"), true);
   assert.equal(await adapter.focusedText("global text"), true);
+  assert.equal(await adapter.focusedProbe(), true);
   assert.equal(await adapter.focusedEnter(), true);
   assert.equal(await adapter.focusedEscape(), true);
   assert.equal(await adapter.newSession({ tool: "codex", name: "Codex", command: "codex", launcher: "auto" }), true);
-  assert.deepEqual(calls.map((call) => call.command), ["delivery.text", "delivery.binding", "focused.text", "focused.enter", "focused.escape", "session.new"]);
+  assert.deepEqual(calls.map((call) => call.command), ["delivery.text", "delivery.binding", "focused.text", "focused.probe", "focused.enter", "focused.escape", "session.new"]);
   assert.deepEqual(calls[0]?.values.record, { tmux: "%7" });
 });
 

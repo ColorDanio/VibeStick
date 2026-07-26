@@ -13,7 +13,16 @@ let hostStatus: { state: "starting" | "running" | "exited" | "missing"; detail?:
 let hostGeneration = 0;
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
-if (!app.requestSingleInstanceLock()) app.quit();
+// Keep VibeConn's single-instance lock and persisted desktop state isolated
+// from any other Electron product (including an Electron-based IDE).  Without
+// this explicit identity a development Electron runtime may route startup to
+// the wrong app and silently quit before HostCore starts.
+app.setName("VibeConn 2.0");
+app.setPath("userData", join(homedir(), ".config", "VibeConn 2.0"));
+if (!app.requestSingleInstanceLock()) {
+  console.error("VibeConn 2.0 is already running; forwarding focus to its existing window.");
+  app.quit();
+}
 else app.on("second-instance", () => {
   showWindow();
 });

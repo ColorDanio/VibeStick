@@ -13,6 +13,15 @@ export class LinuxCommandAdapter {
   async deliver(text: string): Promise<boolean> { return this.invoke("delivery.text", { record: this.core.activeSessionRaw(), text }); }
   async binding(binding: string): Promise<boolean> { return this.invoke("delivery.binding", { record: this.core.activeSessionRaw(), binding }); }
   async focusedText(text: string): Promise<boolean> { return this.invoke("focused.text", { text }); }
+  async focusedProbe(): Promise<boolean> {
+    try {
+      const reply = await this.helper.invoke("focused.probe");
+      return reply.result?.available === true;
+    } catch (error) {
+      this.reportError(error instanceof Error ? error : new Error(String(error)));
+      return false;
+    }
+  }
   async focusedEnter(): Promise<boolean> { return this.invoke("focused.enter"); }
   async focusedEscape(): Promise<boolean> { return this.invoke("focused.escape"); }
   async newSession(input: { tool: string; name: string; command: string; cwd?: string; launcher: "auto" | "tmux" | "zellij" }): Promise<boolean> {

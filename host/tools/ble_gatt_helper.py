@@ -180,6 +180,12 @@ async def main() -> None:
                 result = {"delivered": await delivery.send_binding(raw if isinstance(raw, dict) else None, str(request.get("binding") or ""))}
             elif command == "focused.text":
                 result = {"delivered": await helper.focused.text(str(request.get("text") or ""))}
+            elif command == "focused.probe":
+                # This is deliberately a side-effect-free capability check.
+                # The TypeScript owner calls it only after it owns the BLE
+                # link, so standby Host 2.0 never advertises a false-ready
+                # YOLO route while Python 1.x owns the device.
+                result = {"available": helper.focused.available}
             elif command == "focused.enter":
                 result = {"delivered": await helper.focused.enter()}
             elif command == "focused.escape":

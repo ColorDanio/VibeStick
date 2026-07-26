@@ -54,7 +54,7 @@ async function main(): Promise<void> {
         asr: { available: false, reason: "Configure an ASR provider for Host 2.0" },
         yolo: { available: false, reason: "Start the Host 2.0 runtime" },
       },
-      config: { path: args.config, asr_engine: config.asr.engine, asr_api_base: config.asr.online.api_base, asr_model: config.asr.online.model, online_asr_configured: config.asr.engine === "online" && Boolean(config.asr.online.api_key), session_launcher: config.session_launcher, tools: config.tools.map((tool) => ({ id: tool.id, name: tool.name, cwd: tool.cwd ?? "" })) },
+      config: { path: args.config, asr_engine: config.asr.engine, asr_api_base: config.asr.online.api_base, asr_model: config.asr.engine === "online" ? config.asr.online.model : config.asr.model, online_asr_configured: config.asr.engine === "online" && Boolean(config.asr.online.api_key), session_launcher: config.session_launcher, tools: config.tools.map((tool) => ({ id: tool.id, name: tool.name, cwd: tool.cwd ?? "" })) },
       ...(diagnostics?.error ? { error: diagnostics.error } : {}),
     };
   };
@@ -84,6 +84,8 @@ async function main(): Promise<void> {
 
   let bridge: VibeBridge | undefined;
   let commands: ReturnType<typeof createLinuxBridge>["commands"] | undefined;
+  let refreshOwnedCapabilities: (() => Promise<void>) | undefined;
+  let helperCapabilitiesProbed = false;
   let voiceMode: "agent" | "yolo" = "agent";
   const ownerPermission = async () => {
     traditionalOwner = await probeTraditionalOwner();
@@ -103,7 +105,10 @@ async function main(): Promise<void> {
       helperExecutable: args.helper,
       helperArgs: [resolve(moduleDirectory, "../../host/tools/ble_gatt_helper.py")],
       onError: (error: Error) => { console.error(`capability error: ${error.message}`); runtime?.reportError(error); },
-      onConnectionState: (connected: boolean) => runtime?.onBleConnectionState(connected),
+      onConnectionState: (connected: boolean) => {
+        if (!connected) helperCapabilitiesProbed = false;
+        runtime?.onBleConnectionState(connected);
+      },
       onAsrAudio: (pcm: Uint8Array) => voice.feed(pcm),
       onRoutingActions: async (actions) => {
         for (const action of actions) {
@@ -166,15 +171,28 @@ async function main(): Promise<void> {
     commands = linux.commands;
     const { mic } = linux;
     const capabilities: Capabilities = {
-      ble: { available: true }, keyboard: { available: true }, mic: { available: false, reason: "PipeWire probe pending" },
+      ble: { available: true },
+      keyboard: { available: false, reason: "VibeConn 2.0 will initialize keyboard fallback after BLE handoff" },
+      mic: { available: false, reason: "VibeConn 2.0 will probe PipeWire after BLE handoff" },
       asr: asrReady
         ? { available: true, ...(localAsr ? { reason: `Local ${config.asr.engine} via model adapter` } : {}) }
         : { available: false, reason: "Configure local ASR or an OpenAI-compatible online ASR provider" },
-      yolo: { available: false, reason: "YOLO needs ydotool or wtype focused-input setup on Linux" },
+      yolo: { available: false, reason: "VibeConn 2.0 will probe focused input after BLE handoff" },
     };
     runtime = new HostRuntime(bridge, capabilities, 2_000, ownerPermission);
     await runtime.start();
-    capabilities.mic = (await mic.warmup().catch(() => false)) ? { available: true } : { available: false, reason: "PipeWire Vibe Mic unavailable" };
+    refreshOwnedCapabilities = async () => {
+      if (!runtime?.isBleOwner() || helperCapabilitiesProbed) return;
+      helperCapabilitiesProbed = true;
+      capabilities.keyboard = { available: true };
+      capabilities.mic = (await mic.warmup().catch(() => false))
+        ? { available: true } : { available: false, reason: "PipeWire Vibe Mic unavailable" };
+      capabilities.yolo = await commands?.focusedProbe()
+        ? { available: true, reason: "Focused-input capability ready" }
+        : { available: false, reason: "YOLO needs ydotool or wtype focused-input setup on Linux" };
+      runtime.reconcile();
+    };
+    await refreshOwnedCapabilities();
     console.log(`VibeStick TS runtime: ${runtime.reconcile()}`);
   } else if (args.nativeBle || process.platform !== "linux") {
     const focused = process.platform === "linux" ? new LinuxFocusedInput() : new PlatformFocusedInput();
@@ -290,7 +308,13 @@ async function main(): Promise<void> {
   }
   const refresh = async (): Promise<void> => {
     await loadSessions();
-    await bridge?.sync();
+    // While VibeConn 1.x owns BLE, the 2.0 bridge is intentionally never
+    // started. Keep its loopback dashboard fresh without asking a missing
+    // helper transport to write characteristics every second.
+    if (runtime?.isBleOwner()) {
+      await bridge?.sync();
+      await refreshOwnedCapabilities?.();
+    }
   };
   const refreshTimer = setInterval(() => { void refresh().catch((error) => console.error(`session refresh failed: ${String(error)}`)); }, 1000);
   const ownerTimer = setInterval(() => { void probeTraditionalOwner().then((next) => { traditionalOwner = next; }); }, 5000);
