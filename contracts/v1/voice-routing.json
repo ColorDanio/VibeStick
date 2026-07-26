@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "kind": "voice-routing",
+  "initial_route": "asr",
+  "events": [
+    {"command": "voice.start", "mode": "mic", "expected": {"route": "mic", "actions": ["relay.start"], "audio_destination": "mic"}},
+    {"command": "voice.start", "expected": {"route": "asr", "actions": ["relay.stop", "asr.start"], "audio_destination": "asr"}},
+    {"command": "voice.stop", "expected": {"route": "asr", "actions": ["asr.stop"], "audio_destination": "asr"}},
+    {"command": "voice.start", "mode": "mic", "expected": {"route": "mic", "actions": ["relay.start"], "audio_destination": "mic"}},
+    {"command": "voice.cancel", "expected": {"route": "asr", "actions": ["asr.cancel", "relay.stop"], "audio_destination": "asr"}}
+  ]
+}

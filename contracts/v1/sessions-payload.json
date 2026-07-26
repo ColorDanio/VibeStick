@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "kind": "sessions-payload",
+  "input": {
+    "active": 1,
+    "list": [
+      {"id": "s-claude", "tool": "claude-code", "name": "Fix BLE route", "state": "running", "fg": true},
+      {"id": "s-open", "tool": "opencode", "name": "Package Windows", "state": "idle", "fg": false}
+    ]
+  },
+  "expected": {
+    "active": 1,
+    "list": [
+      {"id": "s-claude", "tool": "claude-code", "name": "Fix BLE route", "state": "running", "fg": true},
+      {"id": "s-open", "tool": "opencode", "name": "Package Windows", "state": "idle", "fg": false}
+    ]
+  }
+}

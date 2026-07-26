@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "kind": "status-payload",
+  "input": {
+    "tool": "opencode",
+    "model": "gpt-5",
+    "session": "ship-vibe-mic",
+    "state": "waiting",
+    "ctx_pct": 37,
+    "cost_usd": 0.42,
+    "last": "Awaiting user confirmation",
+    "updated": 1721650000,
+    "tail": ["Need confirmation", "No active tool call"],
+    "queued": 2
+  },
+  "expected": {
+    "tool": "opencode",
+    "model": "gpt-5",
+    "session": "ship-vibe-mic",
+    "state": "waiting",
+    "ctx_pct": 37,
+    "cost_usd": 0.42,
+    "last": "Awaiting user confirmation",
+    "updated": 1721650000,
+    "tail": ["Need confirmation", "No active tool call"],
+    "queued": 2
+  }
+}

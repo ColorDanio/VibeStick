@@ -15,7 +15,7 @@ from collections import deque
 from pathlib import Path
 
 from . import config as config_mod
-from . import delivery, discover, mic as mic_mod, procwatch, protocol, setupui, voice
+from . import delivery, discover, mic as mic_mod, procwatch, protocol, routing, setupui, voice
 from .bridge import BleakTransport, Bridge, Transport
 from .hid import VirtualKeyboard
 from .store import POLL_INTERVAL_SEC, SessionStore
@@ -263,13 +263,13 @@ async def run_daemon(
         transcription_log=voice.TranscriptionLog(),
     )
     relay = mic_mod.MicRelay(enabled=cfg.mic.enabled)
-    holder["audio_route"] = None  # "mic" during a PTT mic session, else None
+    holder["audio_route"] = routing.ASR
     spawn(relay.warmup())  # register "Vibe Mic" up-front
 
     def on_audio(data: bytes) -> None:
         # MIC-mode frames go to the virtual microphone only; ASR frames
         # go to the transcription pipeline only.
-        if holder["audio_route"] == "mic":
+        if holder["audio_route"] == routing.MIC:
             relay.feed(data)
         else:
             pipeline.feed(data)
@@ -358,31 +358,22 @@ async def run_daemon(
             on_inference_cancel()
         elif cmd == protocol.CMD_SESSION_NEW:
             on_session_new()
-        elif cmd == protocol.CMD_VOICE_START:
-            if payload.get("mode") == "mic":
-                holder["audio_route"] = "mic"
-                spawn(relay.start())
-            else:
-                # A lost BLE link can drop Vibe Mic's matching voice.stop.
-                # A normal Agent CLI recording must always reclaim AUDIO for
-                # ASR instead of inheriting that stale PipeWire route.
-                if holder["audio_route"] == "mic":
+        elif cmd in (protocol.CMD_VOICE_START, protocol.CMD_VOICE_STOP, protocol.CMD_VOICE_CANCEL):
+            route_change = routing.transition(holder["audio_route"], cmd, payload.get("mode"))
+            holder["audio_route"] = route_change.route
+            for action in route_change.actions:
+                if action == "relay.start":
+                    spawn(relay.start())
+                elif action == "relay.stop":
                     spawn(relay.stop())
-                holder["audio_route"] = None
-                pipeline.start()
-        elif cmd == protocol.CMD_VOICE_STOP:
-            if holder["audio_route"] == "mic":
-                holder["audio_route"] = None
-                spawn(relay.stop())
-            else:
-                spawn(pipeline.stop())
+                elif action == "asr.start":
+                    pipeline.start()
+                elif action == "asr.stop":
+                    spawn(pipeline.stop())
+                elif action == "asr.cancel":
+                    pipeline.cancel()
         elif cmd == protocol.CMD_VOICE_CONFIRM:
             pipeline.confirm()
-        elif cmd == protocol.CMD_VOICE_CANCEL:
-            pipeline.cancel()
-            if holder["audio_route"] == "mic":
-                holder["audio_route"] = None
-                spawn(relay.stop())
         else:
             changed = store.apply_command(payload)
             if changed or cmd == protocol.CMD_REFRESH:

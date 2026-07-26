@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "kind": "hid-reports",
+  "reports": [
+    {"name": "A press is F15", "hex": "00006a0000000000", "expected_keycodes": [185]},
+    {"name": "B press is F14", "hex": "0000690000000000", "expected_keycodes": [184]},
+    {"name": "Report Reference ID is tolerated", "hex": "0100006a0000000000", "expected_keycodes": [185]},
+    {"name": "release", "hex": "0000000000000000", "expected_keycodes": []},
+    {"name": "malformed", "hex": "006a", "expected_keycodes": null}
+  ]
+}

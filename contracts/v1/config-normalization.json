@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "kind": "config-normalization",
+  "input": {
+    "tools": [
+      {
+        "id": "opencode",
+        "name": "OpenCode",
+        "adapter": "unknown-adapter",
+        "bindings": {"enter": "Enter", "cancel": "Escape", "bad": 1},
+        "delivery": "serial",
+        "aliases": ["open-code", ""]
+      },
+      {"id": "opencode", "name": "duplicate"},
+      {"name": "missing-id"}
+    ],
+    "asr": {"engine": "online", "model": "large", "language": "auto", "online": {"api_key": "test-key"}},
+    "features": {"process_watcher": false},
+    "mic": {"enabled": false},
+    "session_launcher": "screen"
+  },
+  "expected": {
+    "tools": [
+      {
+        "id": "opencode",
+        "name": "OpenCode",
+        "adapter": "wrapper",
+        "bindings": {"enter": "Enter", "cancel": "Escape"},
+        "process": "opencode",
+        "aliases": ["open-code"]
+      }
+    ],
+    "asr": {
+      "engine": "online",
+      "model": "small",
+      "device": "cpu",
+      "language": null,
+      "command": "",
+      "online": {
+        "api_base": "https://api.groq.com/openai/v1",
+        "api_key": "test-key",
+        "model": "whisper-large-v3-turbo",
+        "language": null
+      }
+    },
+    "features": {"process_watcher": false, "voice_enabled": true},
+    "mic": {"enabled": false},
+    "session_launcher": "auto"
+  }
+}

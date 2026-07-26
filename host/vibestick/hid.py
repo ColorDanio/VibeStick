@@ -20,6 +20,21 @@ HID_USAGE_F15 = 0x6A
 USAGE_TO_KEYCODE = {HID_USAGE_F15: KEY_F15, HID_USAGE_F14: KEY_F14}
 
 
+def keycodes_from_report(data: bytes) -> frozenset[int] | None:
+    """Decode the VibeStick boot-keyboard report into Linux key codes.
+
+    BlueZ may expose the Report Reference ID as a leading byte; the firmware
+    itself sends the standard eight-byte body.  This deliberately accepts
+    both forms so the fallback's semantics are portable and fixture-testable.
+    """
+    if len(data) == 9 and data[0] == 1:
+        data = data[1:]
+    if len(data) != 8:
+        return None
+    return frozenset(USAGE_TO_KEYCODE[usage] for usage in data[2:]
+                     if usage in USAGE_TO_KEYCODE)
+
+
 def _ioc(direction: int, kind: int, number: int, size: int) -> int:
     return (direction << 30) | (size << 16) | (kind << 8) | number
 
@@ -94,14 +109,12 @@ class VirtualKeyboard:
 
     def report(self, data: bytes) -> None:
         """Translate a standard keyboard report (with or without ID 1)."""
-        if len(data) == 9 and data[0] == 1:
-            data = data[1:]
-        if len(data) != 8:
+        keys = keycodes_from_report(data)
+        if keys is None:
             log.debug("ignored malformed HID report: %s", data.hex())
             return
         # Keyboard reports carry USB HID usages (F14=0x69, F15=0x6A), while
         # uinput expects Linux input-event keycodes (184/185).
-        keys = {USAGE_TO_KEYCODE[usage] for usage in data[2:] if usage in USAGE_TO_KEYCODE}
         if keys == self._pressed:
             return
         if not self._open():

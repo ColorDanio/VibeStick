@@ -4,6 +4,10 @@ __pycache__/
 *.egg-info/
 .venv/
 
+# TypeScript host build artifacts
+host-ts/node_modules/
+host-ts/dist/
+
 # PlatformIO
 .pio/
 .pioenvs/
