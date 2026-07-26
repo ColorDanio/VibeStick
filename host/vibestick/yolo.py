@@ -17,7 +17,11 @@ class FocusedInput:
     async def text(self, text: str) -> bool:
         return await self._run([self.bin, "type", "--", text] if self.bin and self.bin.endswith("ydotool") else [self.bin or "", text])
     async def enter(self) -> bool:
-        return await self._run([self.bin, "key", "28:1"] if self.bin and self.bin.endswith("ydotool") else [self.bin or "", "-k", "Return"])
+        # ydotool key events are stateful.  Sending only ``:1`` leaves the
+        # key held down, which can make the next physical/virtual key appear
+        # as a modified shortcut.  Every synthetic press must include its
+        # matching release in the same invocation.
+        return await self._run([self.bin, "key", "28:1", "28:0"] if self.bin and self.bin.endswith("ydotool") else [self.bin or "", "-k", "Return"])
     async def escape_twice(self) -> bool:
-        one = [self.bin, "key", "1:1"] if self.bin and self.bin.endswith("ydotool") else [self.bin or "", "-k", "Escape"]
+        one = [self.bin, "key", "1:1", "1:0"] if self.bin and self.bin.endswith("ydotool") else [self.bin or "", "-k", "Escape"]
         return await self._run(one) and await self._run(one)

@@ -27,9 +27,9 @@ def test_focused_input_uses_ydotool_argv(monkeypatch):
     assert asyncio.run(focused.escape_twice()) is True
     assert calls == [
         ("/usr/bin/ydotool", "type", "--", "你好 world"),
-        ("/usr/bin/ydotool", "key", "28:1"),
-        ("/usr/bin/ydotool", "key", "1:1"),
-        ("/usr/bin/ydotool", "key", "1:1"),
+        ("/usr/bin/ydotool", "key", "28:1", "28:0"),
+        ("/usr/bin/ydotool", "key", "1:1", "1:0"),
+        ("/usr/bin/ydotool", "key", "1:1", "1:0"),
     ]
 
 

@@ -442,6 +442,11 @@ async def run_daemon(
             pending[sid] = pending.get(sid, 0) + 1
         return {
             **bridge.state(),
+            # Expose the active implementation explicitly.  The TypeScript
+            # desktop app is named "VibeStick Host 2.0"; this daemon remains
+            # the supported Python 1.x implementation during the migration.
+            "host_name": "VibeStick Host 1.x",
+            "implementation": "python-1",
             "sessions": [
                 {
                     "id": rec.id,

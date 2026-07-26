@@ -134,6 +134,7 @@ function renderStatus() {
   $("conn-title").style.color = on ? "var(--green)" : "var(--dim)";
   $("conn-sub").textContent = on ? (st.device_address || "VibeStick") : "scanning for VibeStick…";
   $("conn-meta").innerHTML = [
+    ["host", st.host_name || "VibeStick Host 1.x"],
     ["connected since", fmtTime(st.connected_since)],
     ["last sync", fmtTime(st.last_sync)],
     ["uptime", (st.uptime_sec ?? 0) + "s"],
