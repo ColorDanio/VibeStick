@@ -15,6 +15,7 @@
 #define COL_FAINT 0x4208       // dark grey
 #define COL_GREEN 0x07E0       // terminal green
 #define COL_AMBER 0xFBE0       // terminal amber
+#define COL_LIME 0xAFE5        // lime, used for the recording signal ring
 
 static int sW = 240;  // cached screen size, updated by uiSetOrientation
 static int sH = 135;
@@ -578,6 +579,52 @@ static const uint16_t* entryLogo(int idx) {
   return toolLogo(gTools.list[idx].id);
 }
 
+// Local modes are product surfaces rather than host tools.  Their selected
+// home state follows the square-card language: dark field, thin frame,
+// coloured corner brackets and one deliberately large symbol.
+static void homeCardCorner(int x, int y, int dx, int dy, uint16_t color) {
+  if (dx > 0) M5Lcd.drawFastHLine(x, y, 8, color);
+  else M5Lcd.drawFastHLine(x - 7, y, 8, color);
+  if (dy > 0) M5Lcd.drawFastVLine(x, y, 8, color);
+  else M5Lcd.drawFastVLine(x, y - 7, 8, color);
+}
+
+static void drawLocalHomeCard(int x, int y, bool yolo) {
+  const uint16_t accent = yolo ? 0x781F : COL_ACCENT;
+  const int cx = x + 28, cy = y + 28;
+  M5Lcd.fillRoundRect(x, y, 56, 56, 6, TFT_BLACK);
+  M5Lcd.drawRoundRect(x, y, 56, 56, 6, COL_DIM);
+  homeCardCorner(x + 6, y + 6, 1, 1, accent);
+  homeCardCorner(x + 49, y + 6, -1, 1, accent);
+  homeCardCorner(x + 6, y + 49, 1, -1, accent);
+  homeCardCorner(x + 49, y + 49, -1, -1, accent);
+  if (!yolo) {
+    // Vibe Mic: central cyan capsule with two broken sensing arcs.
+    M5Lcd.fillRoundRect(cx - 5, cy - 11, 10, 19, 5, COL_ACCENT);
+    M5Lcd.drawFastVLine(cx - 9, cy + 2, 7, COL_ACCENT);
+    M5Lcd.drawFastVLine(cx + 9, cy + 2, 7, COL_ACCENT);
+    M5Lcd.drawFastHLine(cx - 6, cy + 10, 13, COL_ACCENT);
+    M5Lcd.drawFastVLine(cx, cy + 10, 6, COL_ACCENT);
+    M5Lcd.drawFastHLine(cx - 6, cy + 16, 13, COL_ACCENT);
+    M5Lcd.drawLine(cx - 18, cy - 4, cx - 15, cy - 10, COL_ACCENT);
+    M5Lcd.drawLine(cx - 15, cy - 10, cx - 9, cy - 14, COL_ACCENT);
+    M5Lcd.drawLine(cx + 18, cy - 4, cx + 15, cy - 10, COL_ACCENT);
+    M5Lcd.drawLine(cx + 15, cy - 10, cx + 9, cy - 14, COL_ACCENT);
+    M5Lcd.drawLine(cx - 18, cy + 7, cx - 15, cy + 13, COL_ACCENT);
+    M5Lcd.drawLine(cx + 18, cy + 7, cx + 15, cy + 13, COL_ACCENT);
+  } else {
+    // YOLO: large pointer taking speech directly to the focused cursor,
+    // followed by three compact cyan audio bars.
+    M5Lcd.fillTriangle(cx - 13, cy - 14, cx - 13, cy + 12, cx + 4, cy + 2,
+                       accent);
+    M5Lcd.fillTriangle(cx - 7, cy + 7, cx + 2, cy + 16, cx + 7, cy + 11,
+                       accent);
+    M5Lcd.fillRect(cx + 10, cy + 3, 3, 6, COL_ACCENT);
+    M5Lcd.fillRect(cx + 16, cy, 3, 12, COL_ACCENT);
+    M5Lcd.fillRect(cx + 22, cy + 4, 3, 4, COL_ACCENT);
+  }
+}
+
 void uiShowHome(int selTool) {
   M5Lcd.fillScreen(TFT_BLACK);
   drawStatusBar(nullptr);
@@ -615,10 +662,14 @@ void uiShowHome(int selTool) {
       M5Lcd.pushImage(cx + 62, cy - 12, 24, 24, entryLogo(next),
                        ICON_TRANSPARENT);
     }
-    M5Lcd.fillRoundRect(cx - 28, cy - 26, 56, 56, 8, COL_HL);
-    M5Lcd.drawRoundRect(cx - 28, cy - 26, 56, 56, 8, COL_ACCENT);
-    M5Lcd.pushImage(cx - 12, cy - 10, 24, 24, entryLogo(selTool),
-                     ICON_TRANSPARENT);
+    if (isMicEntry(selTool)) {
+      drawLocalHomeCard(cx - 28, cy - 26, isYoloEntry(selTool));
+    } else {
+      M5Lcd.fillRoundRect(cx - 28, cy - 26, 56, 56, 8, COL_HL);
+      M5Lcd.drawRoundRect(cx - 28, cy - 26, 56, 56, 8, COL_ACCENT);
+      M5Lcd.pushImage(cx - 12, cy - 10, 24, 24, entryLogo(selTool),
+                       ICON_TRANSPARENT);
+    }
     nameY = cy + 38;
     stateY = cy + 62;
     dotsY = sH - 5;
@@ -636,10 +687,14 @@ void uiShowHome(int selTool) {
       M5Lcd.pushImage(cx - 12, 168, 24, 24, entryLogo(next),
                        ICON_TRANSPARENT);
     }
-    M5Lcd.fillRoundRect(cx - 28, 68, 56, 56, 8, COL_HL);
-    M5Lcd.drawRoundRect(cx - 28, 68, 56, 56, 8, COL_ACCENT);
-    M5Lcd.pushImage(cx - 12, 84, 24, 24, entryLogo(selTool),
-                     ICON_TRANSPARENT);
+    if (isMicEntry(selTool)) {
+      drawLocalHomeCard(cx - 28, 68, isYoloEntry(selTool));
+    } else {
+      M5Lcd.fillRoundRect(cx - 28, 68, 56, 56, 8, COL_HL);
+      M5Lcd.drawRoundRect(cx - 28, 68, 56, 56, 8, COL_ACCENT);
+      M5Lcd.pushImage(cx - 12, 84, 24, 24, entryLogo(selTool),
+                       ICON_TRANSPARENT);
+    }
     nameY = 132;
     stateY = 154;
     dotsY = 212;
@@ -918,33 +973,24 @@ static bool sRcInit = false;
 static bool sRcBlink = false;
 static int sRcSec = -1, sRcLevel = -1;
 
-// Green (0,255,0) -> yellow (255,255,0) -> red (255,0,0), RGB565.
-static uint16_t levelColor(int pct) {
-  int r, g;
-  if (pct < 50) {
-    r = (pct * 255) / 50;
-    g = 255;
-  } else {
-    r = 255;
-    g = 255 - ((pct - 50) * 255) / 50;
-  }
-  return (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3));
-}
-
 static void recDrawPulse(int levelPct) {
   int cx = sW / 2;
   int cy = landscape() ? 73 : 86;
   // Clear only the visualizer band: timer, status and footer remain stable.
   M5Lcd.fillRect(cx - 52, cy - 45, 104, 90, TFT_BLACK);
-  int energy = 12 + (levelPct * 22) / 100;
-  uint16_t outer = levelColor(levelPct);
-  M5Lcd.drawCircle(cx, cy, energy + 13, COL_FAINT);
-  M5Lcd.drawCircle(cx, cy, energy + 5, COL_DIM);
-  M5Lcd.drawCircle(cx, cy, energy, outer);
-  // Minimal microphone core: a filled capsule, stem and base.
-  M5Lcd.fillRoundRect(cx - 6, cy - 15, 12, 25, 6, TFT_WHITE);
-  M5Lcd.fillRect(cx - 2, cy + 10, 4, 9, TFT_WHITE);
-  M5Lcd.fillRoundRect(cx - 11, cy + 18, 22, 4, 2, TFT_WHITE);
+  // Three discrete, concentric signal rings keep the screen in the same
+  // visual family as the home cards.  Their breathing radius reflects input
+  // level without falling back to a utilitarian horizontal meter.
+  int inner = 16 + (levelPct * 5) / 100;
+  int middle = 27 + (levelPct * 7) / 100;
+  int outer = 37 + (levelPct * 9) / 100;
+  M5Lcd.drawCircle(cx, cy, outer, COL_AMBER);
+  M5Lcd.drawCircle(cx, cy, middle, COL_LIME);
+  M5Lcd.drawCircle(cx, cy, inner, COL_ACCENT);
+  // Warm microphone core, stem and base.
+  M5Lcd.fillRoundRect(cx - 6, cy - 15, 12, 25, 6, COL_AMBER);
+  M5Lcd.fillRect(cx - 2, cy + 10, 4, 9, COL_AMBER);
+  M5Lcd.fillRoundRect(cx - 11, cy + 18, 22, 4, 2, COL_AMBER);
 }
 
 void uiTickRecording(int levelPct, uint32_t elapsedMs) {
