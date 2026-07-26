@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     env,
     fs,
@@ -16,6 +16,13 @@ struct HostProcess(Mutex<Option<Child>>);
 #[derive(Serialize)]
 struct CommandResult {
     ok: bool,
+    detail: String,
+}
+
+#[derive(Deserialize, Serialize)]
+struct StartupResult {
+    ok: bool,
+    enabled: bool,
     detail: String,
 }
 
@@ -56,6 +63,15 @@ fn resource_path(app: &AppHandle, development_relative: &str, packaged_relative:
     }
 }
 
+fn node_runtime(app: &AppHandle) -> Result<PathBuf, String> {
+    if cfg!(debug_assertions) {
+        Ok(PathBuf::from(env::var("VIBECONN_NODE").unwrap_or_else(|_| "node".to_string())))
+    } else {
+        let runtime = if cfg!(target_os = "windows") { "runtime/vibeconn-node.exe" } else { "runtime/vibeconn-node" };
+        resource_path(app, "", runtime)
+    }
+}
+
 fn start_host(app: &AppHandle, state: &HostProcess) -> Result<(), String> {
     let mut current = state.0.lock().map_err(|_| "Host process state is unavailable")?;
     if current.as_ref().is_some_and(|child| child.id() > 0) {
@@ -65,12 +81,7 @@ fn start_host(app: &AppHandle, state: &HostProcess) -> Result<(), String> {
     if !cli.exists() {
         return Err(format!("HostCore executable is missing: {}", cli.display()));
     }
-    let node = if cfg!(debug_assertions) {
-        PathBuf::from(env::var("VIBECONN_NODE").unwrap_or_else(|_| "node".to_string()))
-    } else {
-        let runtime = if cfg!(target_os = "windows") { "runtime/vibeconn-node.exe" } else { "runtime/vibeconn-node" };
-        resource_path(app, "", runtime)?
-    };
+    let node = node_runtime(app)?;
     let mut command = Command::new(node);
     command.arg(cli).arg("--port").arg("7861");
     if cfg!(target_os = "linux") {
@@ -115,6 +126,27 @@ fn release_python_owner() -> Result<CommandResult, String> {
 }
 
 #[tauri::command]
+fn login_startup(app: AppHandle, action: String) -> Result<StartupResult, String> {
+    if !["install", "uninstall", "status"].contains(&action.as_str()) {
+        return Err("Unsupported startup action.".to_string());
+    }
+    let lifecycle = resource_path(&app, "../../dist/desktop-lifecycle-cli.js", "host-core/desktop-lifecycle-cli.js")?;
+    let executable = env::current_exe().map_err(|error| error.to_string())?;
+    let output = Command::new(node_runtime(&app)?)
+        .arg(lifecycle)
+        .arg("--action")
+        .arg(&action)
+        .arg("--app")
+        .arg(executable)
+        .output()
+        .map_err(|error| format!("Could not update startup registration: {error}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let parsed = serde_json::from_str::<StartupResult>(stdout.trim())
+        .map_err(|error| format!("Startup registration returned invalid data: {error}"))?;
+    if output.status.success() { Ok(parsed) } else { Err(parsed.detail) }
+}
+
+#[tauri::command]
 fn restart_host(app: AppHandle, state: State<'_, HostProcess>) -> Result<CommandResult, String> {
     if let Some(mut child) = state.0.lock().map_err(|_| "Host process state is unavailable")?.take() {
         let _ = child.kill();
@@ -131,7 +163,7 @@ fn main() {
             start_host(&app.handle(), app.state::<HostProcess>()).map_err(std::io::Error::other)?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![release_python_owner, restart_host])
+        .invoke_handler(tauri::generate_handler![release_python_owner, restart_host, login_startup])
         .run(tauri::generate_context!())
         .expect("error while running VibeConn");
 }
