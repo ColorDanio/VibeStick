@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactElement } from "react";
 
-declare global { interface Window { vibestickDesktop?: { hostStatus(): Promise<{ state: string; detail?: string }> }; } }
+declare global { interface Window { vibestickDesktop?: { hostStatus(): Promise<{ state: string; detail?: string }>; restartHost(): Promise<{ state: string; detail?: string }> }; } }
 
 type Capability = { available: boolean; reason?: string };
 type Session = { id: string; state: "idle" | "running" | "waiting"; session: string; model: string; last: string; tool: string };
@@ -39,6 +39,8 @@ export function App(): ReactElement {
   const [model, setModel] = useState(demo.environment.config.asr_model);
   const [apiKey, setApiKey] = useState("");
   const [saving, setSaving] = useState(false);
+  const [restartRequired, setRestartRequired] = useState(false);
+  const [restarting, setRestarting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -76,9 +78,16 @@ export function App(): ReactElement {
       const response = await fetch("http://127.0.0.1:7861/api/settings/asr", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ api_base: apiBase, model, ...(apiKey ? { api_key: apiKey } : {}) }) });
       const result: unknown = await response.json();
       if (!response.ok) throw new Error(typeof result === "object" && result !== null && typeof (result as { error?: unknown }).error === "string" ? (result as { error: string }).error : "settings save failed");
-      setApiKey(""); setNotice("Online ASR settings saved. Restart Host 2.0 to apply them.");
+      setApiKey(""); setRestartRequired(true); setNotice("Online ASR settings saved. Restart Host 2.0 to apply them.");
     } catch (error) { setNotice(`Could not save ASR settings: ${error instanceof Error ? error.message : String(error)}`); }
     finally { setSaving(false); }
+  };
+  const restartHost = async (): Promise<void> => {
+    if (!window.vibestickDesktop) return;
+    setRestarting(true);
+    try { await window.vibestickDesktop.restartHost(); setRestartRequired(false); setNotice("Restarting Host 2.0…"); }
+    catch (error) { setNotice(`Could not restart Host 2.0: ${error instanceof Error ? error.message : String(error)}`); }
+    finally { setRestarting(false); }
   };
   const runtime = data.environment.runtime;
   const selected = data.sessions.list.find((session) => session.id === data.active_session) ?? data.sessions.list[0];
@@ -96,7 +105,7 @@ export function App(): ReactElement {
         <div><p className="eyebrow">DEVICE CONTROL CENTER</p><h1>Good afternoon.</h1></div>
         <div className="connection"><span className={`dot ${runtime === "ready" ? "green" : runtime === "degraded" ? "amber" : ""}`}></span><strong>{runtime === "ready" ? "Connected" : runtime === "degraded" ? "Needs attention" : "Not connected"}</strong><span className="owner">Host 2.0 {data.environment.owner === "active" ? "active" : "standby"}</span></div>
       </header>
-      {notice && <div className="notice">{notice}</div>}
+      {notice && <div className="notice"><span>{notice}</span>{restartRequired && window.vibestickDesktop && <button onClick={() => void restartHost()} disabled={restarting}>{restarting ? "Restarting…" : "Restart Host 2.0"}</button>}</div>}
       <section className="device-row">
         <div className="device-summary"><div className="stick-art"><i></i><i></i><b>V</b></div><div><p className="eyebrow">M5STICKC PLUS</p><h2>VibeStick</h2><p>{runtime === "ready" ? "BLE bridge connected and synchronized." : "Choose Host 2.0 as the BLE owner to connect."}</p></div></div>
         <div className="capabilities">{(["ble", "keyboard", "mic", "asr"] as const).map((key) => <div className="cap" key={key}><span className={`cap-icon ${data.environment.capabilities[key].available ? "on" : ""}`}>{data.environment.capabilities[key].available ? "✓" : "–"}</span><div><b>{key === "ble" ? "BLE bridge" : key === "keyboard" ? "HID keys" : key === "mic" ? "Vibe Mic" : "Agent ASR"}</b><small>{data.environment.capabilities[key].available ? "Available" : data.environment.capabilities[key].reason}</small></div></div>)}</div>

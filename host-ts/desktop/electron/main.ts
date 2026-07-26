@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 let windowRef: BrowserWindow | undefined;
 let host: ChildProcess | undefined;
 let hostStatus: { state: "starting" | "running" | "exited" | "missing"; detail?: string } = { state: "starting" };
+let hostGeneration = 0;
 const currentDir = dirname(fileURLToPath(import.meta.url));
 
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -18,6 +19,7 @@ else app.on("second-instance", () => {
 
 /** Electron is deliberately a thin, cross-platform native shell; HostCore stays shared TypeScript. */
 function startHostCore(): void {
+  const generation = ++hostGeneration;
   if (process.env.VIBESTICK_NO_CORE === "1") { hostStatus = { state: "missing", detail: "HostCore startup disabled" }; return; }
   const cli = app.isPackaged ? join(process.resourcesPath, "host-core", "cli.js") : resolve(currentDir, "../../dist/cli.js");
   if (!existsSync(cli)) { hostStatus = { state: "missing", detail: "HostCore executable is missing" }; return; }
@@ -30,9 +32,18 @@ function startHostCore(): void {
   });
   let stderr = "";
   host.stderr?.on("data", (data) => { stderr = (stderr + String(data)).slice(-500); });
-  host.once("spawn", () => { hostStatus = { state: "running" }; });
-  host.once("error", (error) => { hostStatus = { state: "exited", detail: error.message }; });
-  host.once("exit", (code) => { hostStatus = { state: "exited", detail: (stderr.trim() || `HostCore exited (${code ?? "unknown"})`).slice(-240) }; });
+  host.once("spawn", () => { if (generation === hostGeneration) hostStatus = { state: "running" }; });
+  host.once("error", (error) => { if (generation === hostGeneration) hostStatus = { state: "exited", detail: error.message }; });
+  host.once("exit", (code) => { if (generation === hostGeneration) hostStatus = { state: "exited", detail: (stderr.trim() || `HostCore exited (${code ?? "unknown"})`).slice(-240) }; });
+}
+
+async function restartHostCore(): Promise<typeof hostStatus> {
+  const prior = host;
+  host = undefined;
+  if (prior && !prior.killed) {
+    await new Promise<void>((resolve) => { prior.once("exit", () => resolve()); prior.kill(); setTimeout(resolve, 3000); });
+  }
+  hostStatus = { state: "starting" }; startHostCore(); return hostStatus;
 }
 
 function createWindow(): void {
@@ -52,5 +63,6 @@ void app.whenReady().then(() => {
   app.on("activate", () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });
 ipcMain.handle("vibestick:host-status", () => hostStatus);
+ipcMain.handle("vibestick:restart-host", () => restartHostCore());
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
 app.on("before-quit", () => { host?.kill(); host = undefined; });
