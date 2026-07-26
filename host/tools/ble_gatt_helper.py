@@ -9,13 +9,16 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import fcntl
 import json
+import os
 import sys
 from pathlib import Path
 
 from vibestick import protocol
 
 CACHE = Path.home() / ".vibestick" / "device-address"
+LOCK = Path.home() / ".vibestick" / "daemon.lock"
 NOTIFY = {
     "INPUT": protocol.INPUT_UUID,
     "COMMAND": protocol.COMMAND_UUID,
@@ -37,9 +40,11 @@ def emit(payload: dict) -> None:
 class Helper:
     def __init__(self) -> None:
         self.client = None
+        self.lock_fd: int | None = None
 
     async def connect(self, address: str = "") -> str:
         from bleak import BleakClient, BleakScanner
+        self._acquire_owner()
         target = address or self._cached()
         client = None
         if target:
@@ -48,12 +53,16 @@ class Helper:
                 await client.connect()
             except Exception:
                 client = None
-        if client is None:
-            device = await BleakScanner.find_device_by_name(protocol.DEVICE_NAME, timeout=15.0)
-            if device is None:
-                raise ConnectionError("VibeStick not found")
-            client = BleakClient(device, disconnected_callback=self._disconnected)
-            await client.connect()
+        try:
+            if client is None:
+                device = await BleakScanner.find_device_by_name(protocol.DEVICE_NAME, timeout=15.0)
+                if device is None:
+                    raise ConnectionError("VibeStick not found")
+                client = BleakClient(device, disconnected_callback=self._disconnected)
+                await client.connect()
+        except Exception:
+            self._release_owner()
+            raise
         self.client = client
         actual = str(client.address)
         CACHE.parent.mkdir(parents=True, exist_ok=True)
@@ -63,9 +72,29 @@ class Helper:
         return actual
 
     async def disconnect(self) -> None:
-        if self.client is not None:
-            await self.client.disconnect()
-        self.client = None
+        try:
+            if self.client is not None:
+                await self.client.disconnect()
+        finally:
+            self.client = None
+            self._release_owner()
+
+    def _acquire_owner(self) -> None:
+        if self.lock_fd is not None:
+            return
+        LOCK.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(LOCK, os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            os.close(fd)
+            raise RuntimeError("VibeStick already owned by vibestickd; stop it before TS host") from exc
+        self.lock_fd = fd
+
+    def _release_owner(self) -> None:
+        if self.lock_fd is not None:
+            os.close(self.lock_fd)
+            self.lock_fd = None
 
     async def write(self, name: str, data: str) -> None:
         if self.client is None:
@@ -86,6 +115,7 @@ class Helper:
 
     def _disconnected(self, _client) -> None:
         self.client = None
+        self._release_owner()
         emit({"event": "disconnected"})
 
 
