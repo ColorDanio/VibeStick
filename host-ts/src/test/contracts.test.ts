@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import test from "node:test";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { configToWire, normalizeConfig } from "../config.js";
 import { keycodesFromReport } from "../hid.js";
 import { sessionsToWire, statusToWire } from "../protocol.js";
@@ -10,6 +12,7 @@ import { SessionSelection } from "../session.js";
 import { HostSessionStore } from "../store.js";
 import { HostCore } from "../core.js";
 import { dashboardRequest } from "../dashboard.js";
+import { loadConfigFile, loadSessionDirectory, saveConfigFile } from "../files.js";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
   const path = new URL(`../../../contracts/v1/${name}`, import.meta.url);
@@ -94,4 +97,16 @@ test("dashboard contract returns snapshots and routes commands through one core"
   const micBody = mic.body as { actions: string[]; audio_route: string };
   assert.deepEqual([mic.status, micBody.actions, micBody.audio_route], [200, ["relay.start"], "mic"]);
   assert.equal(dashboardRequest(core, "POST", "/api/command", { cmd: "tool.select", id: "nope" }).status, 400);
+});
+
+test("file repository atomically persists config and defensively loads fresh sessions", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "vibestick-ts-"));
+  const configPath = join(directory, "config.json");
+  const config = normalizeConfig({ tools: [{ id: "codex", name: "Codex" }] });
+  await saveConfigFile(configPath, config);
+  assert.deepEqual(configToWire(await loadConfigFile(configPath)), configToWire(config));
+  await writeFile(join(directory, "good.json"), JSON.stringify({ id: "good", tool: "codex", session: "Task", state: "idle", updated: Math.floor(Date.now() / 1000) }));
+  await writeFile(join(directory, "bad.json"), "not json");
+  assert.deepEqual((await loadSessionDirectory(directory)).map((record) => record.id), ["good"]);
+  assert.match(await readFile(configPath, "utf8"), /"session_launcher"/);
 });
