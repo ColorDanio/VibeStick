@@ -3,7 +3,7 @@ export type Characteristic = "INPUT" | "COMMAND" | "AUDIO" | "HID_INPUT";
 export type NotificationHandler = (characteristic: Characteristic, data: Uint8Array) => void;
 
 export interface GattTransport {
-  readonly address?: string;
+  readonly address?: string | undefined;
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   isConnected(): boolean;
