@@ -1306,6 +1306,20 @@ void uiShowConvo(bool sendMarked, bool sentBusy, const char* errorText) {
 // Idle view below; while held, the shared full-screen recording view
 // (uiShowRecording) takes over. No transcript/confirm states.
 
+static void drawModeMicrophone(int cx, int cy) {
+  // Native primitives stay smooth at the physical LCD scale.  This replaces
+  // the enlarged 16 px bitmap, whose 3x blocks made the idle YOLO mic look
+  // needlessly retro/pixelated.
+  M5Lcd.fillRoundRect(cx - 7, cy - 17, 14, 27, 7, TFT_WHITE);
+  M5Lcd.drawFastVLine(cx - 11, cy - 1, 8, TFT_WHITE);
+  M5Lcd.drawFastVLine(cx + 11, cy - 1, 8, TFT_WHITE);
+  M5Lcd.drawLine(cx - 11, cy + 7, cx - 7, cy + 12, TFT_WHITE);
+  M5Lcd.drawLine(cx + 11, cy + 7, cx + 7, cy + 12, TFT_WHITE);
+  M5Lcd.drawFastHLine(cx - 7, cy + 12, 15, TFT_WHITE);
+  M5Lcd.drawFastVLine(cx, cy + 12, 7, TFT_WHITE);
+  M5Lcd.fillRoundRect(cx - 9, cy + 19, 19, 4, 2, TFT_WHITE);
+}
+
 void uiShowMic(const char* errorText, bool yolo) {
   // Minimal microphone screen: big mic glyph in a ring, one status line,
   // one hint line. Recording switches to the full-screen RMS view.
@@ -1321,15 +1335,7 @@ void uiShowMic(const char* errorText, bool yolo) {
   // Both local mode idle screens start from the familiar microphone glyph.
   // YOLO differs through its title and focused-input controls, not by making
   // the device look like an unrelated cursor before recording begins.
-  for (int gy = 0; gy < 16; ++gy) {
-    for (int gx = 0; gx < 16; ++gx) {
-      const uint16_t* modeIcon = icon_voice;
-      uint16_t px = pgm_read_word(modeIcon + gy * 16 + gx);
-      if (px != ICON_TRANSPARENT) {
-        M5Lcd.fillRect(cx - 24 + gx * 3, cy - 24 + gy * 3, 3, 3, TFT_WHITE);
-      }
-    }
-  }
+  drawModeMicrophone(cx, cy);
 
   // "Vibe Mic" (16 px rich text) + connection state below it.
   const char* title = yolo ? "YOLO" : "Vibe Mic";
