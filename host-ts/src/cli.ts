@@ -12,6 +12,7 @@ import { VibeBridge } from "./bridge.js";
 import type { DashboardEnvironment } from "./dashboard.js";
 import { VoicePipeline, onlineTranscriber } from "./asr.js";
 import { pythonLocalTranscriber } from "./local-asr.js";
+import { pythonSessionDiscovery } from "./session-discovery.js";
 import { NodeProcessInspector, discoverProcessSessions, mergeSessions } from "./process-discovery.js";
 import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher, updateToolCwd, verifyOnlineAsr } from "./settings.js";
 import { probeTraditionalOwner, type TraditionalOwner } from "./ownership.js";
@@ -32,8 +33,24 @@ async function main(): Promise<void> {
   const core = new HostCore(config);
   let traditionalOwner: TraditionalOwner = await probeTraditionalOwner();
   const processes = new NodeProcessInspector();
+  const compatibilityExecutable = process.env.VIBECONN_PYTHON || process.env.VIBESTICK_LINUX_HELPER || "python3";
+  const compatibilityDiscoveryHelper = process.env.VIBECONN_SESSION_DISCOVERY_HELPER || resolve(moduleDirectory, "../../host/tools/session_discovery_helper.py");
+  let compatibilitySessions: import("./store.js").SessionRecord[] = [];
+  let nextCompatibilityDiscovery = 0;
   const loadSessions = async (): Promise<void> => {
     const files = await loadSessionDirectory(args.sessions);
+    if (args.helper) {
+      if (Date.now() >= nextCompatibilityDiscovery) {
+        nextCompatibilityDiscovery = Date.now() + 4_000;
+        compatibilitySessions = await pythonSessionDiscovery(compatibilityExecutable, compatibilityDiscoveryHelper, config)
+          .catch((error) => { console.error(`session discovery failed: ${error instanceof Error ? error.message : String(error)}`); return compatibilitySessions; });
+      }
+      // Adapter status files remain authoritative for their tool. The helper
+      // contributes only process/discovered records for tools without one.
+      const adapterTools = new Set(files.map((record) => record.status.tool));
+      core.replaceSessions([...files, ...compatibilitySessions.filter((record) => !adapterTools.has(record.status.tool))]);
+      return;
+    }
     const live = await processes.list().then((items) => discoverProcessSessions(config, items)).catch(() => []);
     core.replaceSessions(mergeSessions(files, live));
   };
@@ -95,7 +112,7 @@ async function main(): Promise<void> {
   };
   const localAsr = config.asr.engine === "faster-whisper" || (config.asr.engine === "command" && Boolean(config.asr.command.trim()));
   const asrReady = localAsr || (config.asr.engine === "online" && Boolean(config.asr.online.api_key));
-  const localAsrExecutable = process.env.VIBECONN_PYTHON || process.env.VIBESTICK_LINUX_HELPER || "python3";
+  const localAsrExecutable = compatibilityExecutable;
   const localAsrHelper = process.env.VIBECONN_LOCAL_ASR_HELPER || resolve(moduleDirectory, "../../host/tools/asr_helper.py");
   const transcriber = config.asr.engine === "online"
     ? onlineTranscriber : pythonLocalTranscriber(localAsrExecutable, localAsrHelper);
@@ -103,7 +120,7 @@ async function main(): Promise<void> {
   if (args.helper) {
     const bridgeOptions: LinuxBridgeOptions = {
       helperExecutable: args.helper,
-      helperArgs: [resolve(moduleDirectory, "../../host/tools/ble_gatt_helper.py")],
+      helperArgs: [process.env.VIBECONN_LINUX_HELPER_SCRIPT || resolve(moduleDirectory, "../../host/tools/ble_gatt_helper.py")],
       onError: (error: Error) => { console.error(`capability error: ${error.message}`); runtime?.reportError(error); },
       onConnectionState: (connected: boolean) => {
         if (!connected) helperCapabilitiesProbed = false;

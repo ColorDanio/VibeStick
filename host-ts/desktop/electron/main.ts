@@ -38,8 +38,15 @@ function startHostCore(): void {
   if (helper) args.push("--linux-helper", helper);
   else if (process.platform !== "linux" || process.env.VIBESTICK_NATIVE_BLE === "1") args.push("--native-ble");
   if (process.env.VIBESTICK_DEVICE_ADDRESS) args.push("--address", process.env.VIBESTICK_DEVICE_ADDRESS);
+  const compatibilityDirectory = app.isPackaged ? join(process.resourcesPath, "vibeconn-compat") : resolve(currentDir, "../../../host/tools");
   host = spawn(process.execPath, args, {
-    cwd: dirname(cli), env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, stdio: "pipe", windowsHide: true,
+    cwd: dirname(cli), env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: "1",
+      VIBECONN_LINUX_HELPER_SCRIPT: process.env.VIBECONN_LINUX_HELPER_SCRIPT || join(compatibilityDirectory, "ble_gatt_helper.py"),
+      VIBECONN_LOCAL_ASR_HELPER: process.env.VIBECONN_LOCAL_ASR_HELPER || join(compatibilityDirectory, "asr_helper.py"),
+      VIBECONN_SESSION_DISCOVERY_HELPER: process.env.VIBECONN_SESSION_DISCOVERY_HELPER || join(compatibilityDirectory, "session_discovery_helper.py"),
+    }, stdio: "pipe", windowsHide: true,
   });
   let stderr = "";
   host.stderr?.on("data", (data) => { stderr = (stderr + String(data)).slice(-500); });

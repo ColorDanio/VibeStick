@@ -34,7 +34,7 @@ required for either direction.
 
 | Capability | Python 1.x | Host 2.0 with Linux helper | Host 2.0 native macOS/Windows |
 |---|---|---|---|
-| BLE sessions/status | supported | verified | adapter implemented; hardware validation pending |
+| BLE sessions/status and local CLI discovery | supported | verified (Claude/Codex/OpenCode/Kimi read-only compatibility adapter) | adapter implemented; hardware validation pending |
 | Agent CLI voice delivery | supported | verified | Linux/macOS native TS supports selected tmux/zellij; Windows not implemented |
 | Vibe Mic virtual input | supported | helper verified; Linux native BLE TS adapter smoke-tested | not implemented |
 | System HID fallback | supported | verified | not implemented |

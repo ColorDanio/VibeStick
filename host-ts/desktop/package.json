@@ -61,6 +61,15 @@
           "node-addon-api/**",
           "node-gyp-build/**"
         ]
+      },
+      {
+        "from": "../../host/tools",
+        "to": "vibeconn-compat",
+        "filter": [
+          "ble_gatt_helper.py",
+          "asr_helper.py",
+          "session_discovery_helper.py"
+        ]
       }
     ],
     "linux": {

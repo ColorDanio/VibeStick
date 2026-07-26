@@ -24,6 +24,7 @@ import { PipeWireVibeMicSink, applyGain } from "../pipewire-mic.js";
 import { startDashboardServer } from "../server.js";
 import { VoicePipeline, wav, type AsrTranscriber } from "../asr.js";
 import { pythonLocalTranscriber } from "../local-asr.js";
+import { pythonSessionDiscovery } from "../session-discovery.js";
 import { discoverProcessSessions, mergeSessions } from "../process-discovery.js";
 import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher, updateToolCwd, verifyOnlineAsr } from "../settings.js";
 import { probeTraditionalOwner } from "../ownership.js";
@@ -659,4 +660,17 @@ test("local ASR model adapter preserves the 1.x faster-whisper configuration", a
     executable: "/venv/bin/python", helper: "/repo/host/tools/asr_helper.py", bytes: 3,
     engine: "faster-whisper", model: "small", device: "cpu", language: "zh",
   });
+});
+
+test("Linux compatibility discovery preserves TS configuration and safe terminal metadata", async () => {
+  const config = normalizeConfig({ tools: [{ id: "opencode", name: "OpenCode", process: "opencode" }] });
+  let received: unknown;
+  const records = await pythonSessionDiscovery("python", "/opt/session-discovery-helper.py", config, async (request) => {
+    received = request;
+    return [{ id: "proc:42", fg: true, raw: { pid: 42, zellij: "work", zellij_pane: "3" }, status: { tool: "opencode", model: "", session: "VibeConn", state: "idle", ctx_pct: -1, cost_usd: -1, last: "Ready", updated: 1 } }];
+  });
+  assert.equal((received as { executable: string }).executable, "python");
+  assert.equal((received as { helper: string }).helper, "/opt/session-discovery-helper.py");
+  assert.equal((received as { config: typeof config }).config.tools[0]?.id, "opencode");
+  assert.deepEqual(records[0]?.raw, { pid: 42, zellij: "work", zellij_pane: "3" });
 });

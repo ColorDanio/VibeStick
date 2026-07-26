@@ -22,7 +22,10 @@ through a contract fixture first.
 
 On Linux, `host/tools/ble_gatt_helper.py` remains the verified full-capability
 adapter: it supplies GATT, keyboard fallback, focused input, and session
-delivery. The TS app speaks JSON-lines to it. Host 2.0 also has a native Noble
+delivery. A separate one-shot read-only compatibility adapter supplies the
+same Claude/Codex/OpenCode/Kimi session discovery and terminal metadata as
+1.x; TS still owns selection, BLE synchronization and command policy. The TS
+app speaks JSON-lines to these helpers. Host 2.0 also has a native Noble
 GATT transport for macOS/Windows (and opt-in Linux via `--native-ble`), so
 those platforms can connect and synchronize the Stick without the Python
 daemon. The Linux native route now owns its PipeWire **Vibe Mic** source and
@@ -57,6 +60,12 @@ mode: systemd receives an `Environment` entry, LaunchAgent receives
 `EnvironmentVariables`, and Windows receives a user-local wrapper consumed by
 Task Scheduler. Registration itself remains an explicit user action; Host 2.0
 never silently installs a service or replaces Python 1.x.
+
+Packaged Linux builds include only the small compatibility entry scripts. They
+use the user's installed VibeConn 1.x Python environment (selected by
+`VIBESTICK_LINUX_HELPER` / `VIBECONN_PYTHON`) for its already-installed
+Bleak, PipeWire, local-model and session-reader dependencies; they do not ship
+or start a second Python daemon.
 
 For support, `GET /api/diagnostics` downloads a versioned JSON diagnostic
 report from the loopback host. It contains platform/runtime and capability
