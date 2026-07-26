@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from vibestick import protocol
+from vibestick.mic import MicRelay
 
 CACHE = Path.home() / ".vibestick" / "device-address"
 LOCK = Path.home() / ".vibestick" / "daemon.lock"
@@ -41,6 +42,7 @@ class Helper:
     def __init__(self) -> None:
         self.client = None
         self.lock_fd: int | None = None
+        self.mic = MicRelay()
 
     async def connect(self, address: str = "") -> str:
         from bleak import BleakClient, BleakScanner
@@ -77,6 +79,7 @@ class Helper:
                 await self.client.disconnect()
         finally:
             self.client = None
+            await self.mic.stop()
             self._release_owner()
 
     def _acquire_owner(self) -> None:
@@ -131,6 +134,14 @@ async def main() -> None:
                 await helper.disconnect(); result = {}
             elif command == "write":
                 await helper.write(str(request["characteristic"]), str(request["data"])); result = {}
+            elif command == "mic.warmup":
+                result = {"available": await helper.mic.warmup()}
+            elif command == "mic.start":
+                result = {"available": await helper.mic.start()}
+            elif command == "mic.feed":
+                helper.mic.feed(base64.b64decode(str(request["data"]))); result = {}
+            elif command == "mic.stop":
+                await helper.mic.stop(); result = {}
             else:
                 raise ValueError("unknown command")
             emit({"id": ident, "ok": True, "result": result})

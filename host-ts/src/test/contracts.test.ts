@@ -17,6 +17,7 @@ import { lifecyclePlan } from "../lifecycle.js";
 import { VibeBridge } from "../bridge.js";
 import { MemoryGattTransport } from "../transport.js";
 import { HostRuntime } from "../runtime.js";
+import { LinuxVibeMicSink } from "../mic-sink.js";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
   const path = new URL(`../../../contracts/v1/${name}`, import.meta.url);
@@ -153,4 +154,20 @@ test("runtime reports a missing Vibe Mic capability as degraded instead of ready
   assert.deepEqual(runtime.diagnostics().capabilities.mic, { available: false, reason: "driver missing" });
   await runtime.stop();
   assert.equal(runtime.state, "stopped");
+});
+
+test("Linux Vibe Mic sink only forwards frames during a mic route", async () => {
+  const calls: string[] = [];
+  const helper = { invoke: async (command: string, values: Record<string, unknown> = {}) => {
+    calls.push(command + (typeof values.data === "string" ? `:${values.data}` : ""));
+    return { ok: true, result: { available: true } };
+  }};
+  const sink = new LinuxVibeMicSink(helper);
+  assert.equal(await sink.warmup(), true);
+  await sink.feed(new Uint8Array([128]));
+  await sink.apply(["relay.start"]);
+  await sink.feed(new Uint8Array([128]));
+  await sink.apply(["relay.stop"]);
+  await sink.feed(new Uint8Array([128]));
+  assert.deepEqual(calls, ["mic.warmup", "mic.start", "mic.feed:gA==", "mic.stop"]);
 });

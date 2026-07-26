@@ -2,14 +2,14 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
 import type { Characteristic, GattTransport, NotificationHandler } from "./transport.js";
 
-type Reply = { id?: number; ok?: boolean; result?: { address?: string }; error?: string; event?: string; characteristic?: Characteristic; data?: string };
+export type HelperReply = { id?: number; ok?: boolean; result?: { address?: string; available?: boolean }; error?: string; event?: string; characteristic?: Characteristic; data?: string };
 
 /** GattTransport backed by a signed/platform-specific JSON-lines helper. */
 export class HelperGattTransport implements GattTransport {
   private child: ChildProcessWithoutNullStreams | undefined;
   private handler: NotificationHandler | undefined;
   private nextId = 1;
-  private readonly pending = new Map<number, { resolve: (reply: Reply) => void; reject: (error: Error) => void }>();
+  private readonly pending = new Map<number, { resolve: (reply: HelperReply) => void; reject: (error: Error) => void }>();
   private connected = false;
   address: string | undefined;
 
@@ -32,6 +32,9 @@ export class HelperGattTransport implements GattTransport {
   async write(characteristic: "STATUS" | "SESSIONS" | "TOOLS" | "VOICE", data: Uint8Array): Promise<void> {
     await this.request({ cmd: "write", characteristic, data: Buffer.from(data).toString("base64") });
   }
+  async invoke(command: string, values: Record<string, unknown> = {}): Promise<HelperReply> {
+    return this.request({ cmd: command, ...values });
+  }
 
   private start(): void {
     const child = spawn(this.executable, this.args, { stdio: "pipe" });
@@ -39,14 +42,14 @@ export class HelperGattTransport implements GattTransport {
     createInterface({ input: child.stdout }).on("line", (line) => this.line(line));
     child.once("exit", () => { this.connected = false; this.child = undefined; for (const item of this.pending.values()) item.reject(new Error("BLE helper exited")); this.pending.clear(); });
   }
-  private request(command: Record<string, unknown>): Promise<Reply> {
+  private request(command: Record<string, unknown>): Promise<HelperReply> {
     if (!this.child) return Promise.reject(new Error("BLE helper unavailable"));
     const id = this.nextId++;
     this.child.stdin.write(`${JSON.stringify({ id, ...command })}\n`);
     return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
   }
   private line(line: string): void {
-    let reply: Reply; try { reply = JSON.parse(line) as Reply; } catch { return; }
+    let reply: HelperReply; try { reply = JSON.parse(line) as HelperReply; } catch { return; }
     if (reply.event === "notify" && reply.characteristic && reply.data) this.handler?.(reply.characteristic, Buffer.from(reply.data, "base64"));
     if (reply.event === "disconnected") this.connected = false;
     if (typeof reply.id === "number") {
