@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactElement } from "react";
 
-declare global { interface Window { vibestickDesktop?: { hostStatus(): Promise<{ state: string; detail?: string }>; restartHost(): Promise<{ state: string; detail?: string }>; loginStartup(action: "install" | "uninstall"): Promise<{ ok: boolean; detail: string }> }; } }
+declare global { interface Window { vibestickDesktop?: { hostStatus(): Promise<{ state: string; detail?: string }>; restartHost(): Promise<{ state: string; detail?: string }>; loginStartup(action: "install" | "uninstall"): Promise<{ ok: boolean; detail: string }>; loginStartupStatus(): Promise<{ enabled: boolean; detail?: string }> }; } }
 
 type Capability = { available: boolean; reason?: string };
 type Session = { id: string; state: "idle" | "running" | "waiting"; session: string; model: string; last: string; tool: string };
@@ -48,6 +48,7 @@ export function App(): ReactElement {
   const [restartRequired, setRestartRequired] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const [loginBusy, setLoginBusy] = useState<"install" | "uninstall" | undefined>();
+  const [loginStartupEnabled, setLoginStartupEnabled] = useState<boolean | undefined>();
 
   useEffect(() => {
     let active = true;
@@ -69,6 +70,12 @@ export function App(): ReactElement {
     };
     void refresh(); const timer = window.setInterval(() => void refresh(), 1200);
     return () => { active = false; window.clearInterval(timer); };
+  }, []);
+  useEffect(() => {
+    let active = true;
+    if (!window.vibestickDesktop) return () => { active = false; };
+    void window.vibestickDesktop.loginStartupStatus().then((result) => { if (active) setLoginStartupEnabled(result.enabled); }).catch(() => { if (active) setLoginStartupEnabled(undefined); });
+    return () => { active = false; };
   }, []);
 
   useEffect(() => { setApiBase(data.environment.config.asr_api_base); setModel(data.environment.config.asr_model); setLauncher(data.environment.config.session_launcher); }, [data.environment.config.asr_api_base, data.environment.config.asr_model, data.environment.config.session_launcher]);
@@ -126,7 +133,11 @@ export function App(): ReactElement {
   const manageLoginStartup = async (action: "install" | "uninstall"): Promise<void> => {
     if (!window.vibestickDesktop) return;
     setLoginBusy(action);
-    try { setNotice((await window.vibestickDesktop.loginStartup(action)).detail); }
+    try {
+      const result = await window.vibestickDesktop.loginStartup(action);
+      setNotice(result.detail);
+      if (result.ok) setLoginStartupEnabled(action === "install");
+    }
     catch (error) { setNotice(`Could not update login startup: ${error instanceof Error ? error.message : String(error)}`); }
     finally { setLoginBusy(undefined); }
   };
@@ -166,7 +177,7 @@ export function App(): ReactElement {
         <form className="asr-form" onSubmit={(event) => void saveAsr(event)}><label>OpenAI-compatible API base<input value={apiBase} onChange={(event) => setApiBase(event.target.value)} inputMode="url" required /></label><label>Model<input value={model} onChange={(event) => setModel(event.target.value)} required /></label><label>API key <small>Leave empty to keep existing key.</small><input value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" autoComplete="new-password" /></label><button type="submit" disabled={saving || !connected}>{saving ? "Saving…" : "Save and restart later"}</button></form>
         <form className="launcher-form" onSubmit={(event) => void saveLauncher(event)}><label>New-session launcher<select value={launcher} onChange={(event) => setLauncher(event.target.value as "auto" | "tmux" | "zellij")}><option value="auto">Auto (tmux → zellij → managed tmux)</option><option value="tmux">tmux only</option><option value="zellij">zellij only</option></select></label><small>Controls where Stick <code>session.new</code> opens the selected Agent CLI. A forced zellij launch needs an existing zellij session.</small><button type="submit" disabled={savingLauncher || !connected}>{savingLauncher ? "Saving…" : "Save launcher"}</button></form>
         <form className="cwd-form" onSubmit={(event) => void saveCwd(event)}><label>Agent CLI<select value={cwdTool} onChange={(event) => { const id = event.target.value; const tool = data.environment.config.tools.find((item) => item.id === id); setCwdTool(id); setCwd(tool?.cwd ?? ""); }}>{data.environment.config.tools.map((tool) => <option key={tool.id} value={tool.id}>{tool.name}</option>)}</select></label><label>Working directory<input value={cwd} onChange={(event) => setCwd(event.target.value)} placeholder="Empty: inherit pane / home" /></label><small>Used only when Stick creates a new session. Existing tmux/zellij panes keep their directory if this is empty.</small><button type="submit" disabled={savingCwd || !connected || !cwdTool}>{savingCwd ? "Saving…" : "Save directory"}</button></form>
-        {window.vibestickDesktop && <div className="login-startup"><div><b>Start at login</b><p>Registers this desktop app for your user only. It never stops Python 1.x or takes the Stick automatically.</p></div><div><button onClick={() => void manageLoginStartup("install")} disabled={loginBusy !== undefined}>{loginBusy === "install" ? "Enabling…" : "Enable"}</button><button className="text-button" onClick={() => void manageLoginStartup("uninstall")} disabled={loginBusy !== undefined}>{loginBusy === "uninstall" ? "Removing…" : "Remove"}</button></div></div>}
+        {window.vibestickDesktop && <div className="login-startup"><div><b>Start at login <span className={loginStartupEnabled ? "settings-good" : "settings-warn"}>{loginStartupEnabled === undefined ? "Checking…" : loginStartupEnabled ? "Enabled" : "Not enabled"}</span></b><p>Registers this desktop app for your user only. It never stops Python 1.x or takes the Stick automatically.</p></div><div><button onClick={() => void manageLoginStartup("install")} disabled={loginBusy !== undefined || loginStartupEnabled === true}>{loginBusy === "install" ? "Enabling…" : "Enable"}</button><button className="text-button" onClick={() => void manageLoginStartup("uninstall")} disabled={loginBusy !== undefined || loginStartupEnabled === false}>{loginBusy === "uninstall" ? "Removing…" : "Remove"}</button></div></div>}
       </section>
     </section>
   </main>;

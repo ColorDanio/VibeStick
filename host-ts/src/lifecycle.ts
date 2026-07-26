@@ -46,6 +46,13 @@ export function lifecyclePlan(platform: HostPlatform, options: LifecycleOptions)
   return { files: [{ path, contents }], install: [{ command: "schtasks", args: ["/Create", "/TN", task, "/SC", "ONLOGON", "/TR", run, "/F"] }], uninstall: [{ command: "schtasks", args: ["/Delete", "/TN", task, "/F"] }] };
 }
 
+/** Read-only command whose zero exit status means the per-user registration exists. */
+export function lifecycleStatusInvocation(platform: HostPlatform, uid: number): Invocation {
+  if (platform === "linux") return { command: "systemctl", args: ["--user", "is-enabled", `${serviceName}.service`] };
+  if (platform === "darwin") return { command: "launchctl", args: ["print", `gui/${uid}/io.vibestick.host`] };
+  return { command: "schtasks", args: ["/Query", "/TN", "VibeStick Host"] };
+}
+
 function systemdEscape(value: string): string { return value.replace(/([\\\s"'])/g, "\\$1"); }
 function xml(value: string): string { return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 function plist(label: string, executable: string, args: string[], environment: [string, string][]): string {

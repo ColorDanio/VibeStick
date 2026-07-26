@@ -102,4 +102,18 @@ ipcMain.handle("vibestick:login-startup", async (_event, action: unknown): Promi
     return { ok: false, detail: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240) };
   }
 });
+ipcMain.handle("vibestick:login-startup-status", async (): Promise<{ enabled: boolean; detail?: string }> => {
+  try {
+    const coreDirectory = app.isPackaged ? join(process.resourcesPath, "host-core") : resolve(currentDir, "../../dist");
+    const [{ lifecycleStatusInvocation }, { nodeRunner }] = await Promise.all([
+      import(pathToFileURL(join(coreDirectory, "lifecycle.js")).href),
+      import(pathToFileURL(join(coreDirectory, "lifecycle-runner.js")).href),
+    ]);
+    const platform = process.platform === "darwin" || process.platform === "win32" ? process.platform : "linux";
+    const result = await nodeRunner.run(lifecycleStatusInvocation(platform, typeof process.getuid === "function" ? process.getuid() : 0));
+    return result.code === 0 ? { enabled: true } : { enabled: false };
+  } catch (error) {
+    return { enabled: false, detail: error instanceof Error ? error.message.slice(0, 180) : String(error).slice(0, 180) };
+  }
+});
 app.on("before-quit", () => { quitting = true; host?.kill(); host = undefined; tray?.destroy(); tray = undefined; });

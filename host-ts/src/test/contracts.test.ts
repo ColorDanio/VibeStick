@@ -13,7 +13,7 @@ import { HostSessionStore } from "../store.js";
 import { HostCore } from "../core.js";
 import { dashboardRequest } from "../dashboard.js";
 import { loadConfigFile, loadSessionDirectory, saveConfigFile } from "../files.js";
-import { lifecyclePlan } from "../lifecycle.js";
+import { lifecyclePlan, lifecycleStatusInvocation } from "../lifecycle.js";
 import { executeLifecycle, type CommandRunner, type FileSystem } from "../lifecycle-runner.js";
 import { VibeBridge } from "../bridge.js";
 import { MemoryGattTransport } from "../transport.js";
@@ -256,6 +256,9 @@ test("lifecycle plans are per-user and contain idempotent unregister operations"
   const windows = lifecyclePlan("win32", common);
   assert.deepEqual(windows.files, []);
   assert.deepEqual(windows.uninstall[0]?.args, ["/Delete", "/TN", "VibeStick Host", "/F"]);
+  assert.deepEqual(lifecycleStatusInvocation("linux", 1000), { command: "systemctl", args: ["--user", "is-enabled", "vibestick-ts.service"] });
+  assert.deepEqual(lifecycleStatusInvocation("darwin", 501), { command: "launchctl", args: ["print", "gui/501/io.vibestick.host"] });
+  assert.deepEqual(lifecycleStatusInvocation("win32", 1), { command: "schtasks", args: ["/Query", "/TN", "VibeStick Host"] });
 });
 
 test("packaged lifecycle plans preserve required runtime environment on every platform", () => {
