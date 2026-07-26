@@ -16,6 +16,7 @@ import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher, updateToolCw
 import { probeTraditionalOwner, type TraditionalOwner } from "./ownership.js";
 import { diagnosticsReport } from "./diagnostics.js";
 import { NobleGattTransport } from "./noble-transport.js";
+import { PlatformFocusedInput } from "./focused-input.js";
 
 type Args = { config: string; sessions: string; port: number; helper?: string; address?: string; nativeBle: boolean };
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
@@ -149,12 +150,51 @@ async function main(): Promise<void> {
     capabilities.mic = (await mic.warmup().catch(() => false)) ? { available: true } : { available: false, reason: "PipeWire Vibe Mic unavailable" };
     console.log(`VibeStick TS runtime: ${runtime.reconcile()}`);
   } else if (args.nativeBle || process.platform !== "linux") {
-    bridge = new VibeBridge(new NobleGattTransport(args.address ?? ""), core);
+    const focused = new PlatformFocusedInput();
+    bridge = new VibeBridge(new NobleGattTransport(args.address ?? ""), core, {
+      onAudio: (destination, pcm) => { if (destination === "asr") voice.feed(pcm); },
+      onActions: async (actions) => {
+        for (const action of actions) {
+          if (action === "asr.start") {
+            if (config.asr.engine !== "online" || !config.asr.online.api_key) await bridge?.publishVoice({ state: "error", text: "YOLO needs online ASR configured" });
+            else voice.start();
+          }
+          if (action === "asr.stop") await voice.stop();
+          if (action === "asr.cancel") voice.cancel();
+          if (action === "relay.start" || action === "relay.stop") runtime?.reportError("Vibe Mic is unavailable for the native BLE adapter");
+        }
+      },
+      onCommand: async (command) => {
+        if (command.cmd === "voice.start") { voiceMode = command.mode === "yolo" ? "yolo" : "agent"; return; }
+        if (command.cmd === "voice.cancel") { voiceMode = "agent"; return; }
+        if (command.cmd === "voice.stop" && voiceMode === "yolo") {
+          const text = voice.confirm(); voiceMode = "agent";
+          if (text && !(await focused.text(text))) throw new Error("YOLO focused delivery failed");
+          return;
+        }
+        if (command.cmd === "yolo.enter") {
+          if (!(await focused.enter())) throw new Error("YOLO Enter failed");
+          return;
+        }
+        if (command.cmd === "yolo.escape") {
+          if (!(await focused.escapeTwice())) throw new Error("YOLO Escape failed");
+          return;
+        }
+        if (command.cmd === "voice.confirm") {
+          if (voice.confirm()) throw new Error("Agent CLI delivery is unavailable for the native BLE adapter");
+        }
+      },
+      onEffectError: (error) => {
+        console.error(`native BLE action failed: ${error.message}`);
+        runtime?.reportError(error);
+        void bridge?.publishVoice({ state: "error", text: error.message.slice(0, 96) });
+      },
+    });
     const capabilities: Capabilities = {
       ble: { available: true },
-      keyboard: { available: false, reason: "Platform keyboard delivery is not implemented yet" },
+      keyboard: { available: false, reason: "Vibe Mic HID/system key fallback is not implemented yet" },
       mic: { available: false, reason: "Platform virtual microphone is not implemented yet" },
-      asr: { available: false, reason: "Session/focused delivery is not implemented for the native BLE adapter" },
+      asr: { available: false, reason: "Agent CLI session delivery is not implemented; YOLO supports online ASR only" },
     };
     runtime = new HostRuntime(bridge, capabilities);
     await runtime.start();

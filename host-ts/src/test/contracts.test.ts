@@ -28,6 +28,7 @@ import { probeTraditionalOwner } from "../ownership.js";
 import { diagnosticsReport } from "../diagnostics.js";
 import { NobleGattTransport, type NobleAdapter } from "../noble-transport.js";
 import { EventEmitter } from "node:events";
+import { PlatformFocusedInput, type ProcessInvocation } from "../focused-input.js";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
   const path = new URL(`../../../contracts/v1/${name}`, import.meta.url);
@@ -189,6 +190,25 @@ test("native Noble transport discovers VibeStick, maps GATT and preserves notifi
   await transport.disconnect();
 });
 
+test("cross-platform YOLO focused input uses safe argv/environment boundaries", async () => {
+  const calls: ProcessInvocation[] = [];
+  const runner = async (input: ProcessInvocation): Promise<boolean> => { calls.push(input); return true; };
+  const mac = new PlatformFocusedInput("darwin", runner);
+  assert.equal(await mac.text('hi "quoted"\nnext'), true);
+  assert.equal(await mac.enter(), true);
+  assert.equal(await mac.escapeTwice(), true);
+  assert.match(calls[0]?.args[1] ?? "", /keystroke "hi \\"quoted\\" next"/);
+  assert.equal(calls.filter((item) => item.command === "osascript").length, 4);
+  calls.length = 0;
+  const windows = new PlatformFocusedInput("win32", runner);
+  await windows.text("你好 & not shell"); await windows.enter(); await windows.escapeTwice();
+  assert.equal(calls.every((item) => item.command === "powershell.exe" && item.args.includes("-EncodedCommand")), true);
+  assert.equal(calls.some((item) => item.args.join(" ").includes("你好")), false);
+  assert.equal(Buffer.from(calls[0]?.env?.VIBESTICK_INPUT_TEXT_B64 ?? "", "base64").toString("utf8"), "你好 & not shell");
+  const linux = new PlatformFocusedInput("linux", runner);
+  assert.equal(await linux.text("no"), false);
+});
+
 test("online ASR settings validate provider data and never return API keys", () => {
   const updated = updateOnlineAsr(normalizeConfig({}), { api_base: "https://api.example.test/v1", model: "whisper", api_key: "secret-key" });
   assert.equal(updated.asr.engine, "online");
@@ -330,6 +350,22 @@ test("BLE bridge preserves a device custom-function identifier for platform deli
   transport.notify("COMMAND", new TextEncoder().encode('{"cmd":"fn.activate","fn":"format"}'));
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(received, "format");
+});
+
+test("BLE bridge reports a serialized side-effect failure and continues handling later input", async () => {
+  const transport = new MemoryGattTransport();
+  const core = new HostCore(normalizeConfig({}));
+  const errors: string[] = [];
+  const bridge = new VibeBridge(transport, core, {
+    onCommand: async () => { throw new Error("focused input denied"); },
+    onEffectError: (error) => { errors.push(error.message); },
+  });
+  await bridge.connect();
+  transport.notify("COMMAND", new TextEncoder().encode('{"cmd":"yolo.enter"}'));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  transport.notify("COMMAND", new TextEncoder().encode('{"cmd":"yolo.escape"}'));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(errors, ["focused input denied", "focused input denied"]);
 });
 
 test("runtime reports a missing Vibe Mic capability as degraded instead of ready", async () => {

@@ -9,6 +9,8 @@ export interface BridgeHooks {
   onHid?(keycodes: number[], report: Uint8Array): void;
   onActions?(actions: RoutingAction[]): void | Promise<void>;
   onCommand?(command: DeviceCommand): void | Promise<void>;
+  /** Surface serialized BLE side-effect failures instead of silently dropping them. */
+  onEffectError?(error: Error): void | Promise<void>;
 }
 export interface DeviceCommand { cmd: string; id?: string; mode?: unknown; fn?: string; }
 
@@ -42,8 +44,7 @@ export class VibeBridge {
       const destination = this.core.snapshot().audio_route;
       // A PTT start and its first AUDIO notify can arrive back-to-back. Queue
       // frames behind relay.start/relay.stop so Vibe Mic never drops frame 1.
-      this.effects = this.effects.catch(() => undefined).then(() => Promise.resolve(this.hooks.onAudio?.(destination, data)));
-      void this.effects.catch(() => undefined);
+      this.queue(() => Promise.resolve(this.hooks.onAudio?.(destination, data)));
       return;
     }
     if (characteristic === "HID_INPUT") {
@@ -63,13 +64,19 @@ export class VibeBridge {
       if ("mode" in payload) command.mode = payload.mode;
       if (typeof payload.fn === "string") command.fn = payload.fn;
       const result = this.core.command(command);
-      this.effects = this.effects.catch(() => undefined).then(async () => {
+      this.queue(async () => {
         await this.hooks.onActions?.(result.actions);
         await this.hooks.onCommand?.(command);
         await this.sync();
       });
-      void this.effects.catch(() => undefined);
     }
+  }
+
+  private queue(effect: () => Promise<void>): void {
+    this.effects = this.effects.catch(() => undefined).then(effect).catch(async (value: unknown) => {
+      const error = value instanceof Error ? value : new Error(String(value));
+      await this.hooks.onEffectError?.(error);
+    });
   }
 }
 
