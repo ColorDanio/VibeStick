@@ -5,13 +5,14 @@ import type { Characteristic, GattTransport } from "./transport.js";
 
 export interface BridgeHooks {
   onInput?(text: string): void;
-  onAudio?(destination: "asr" | "mic", pcm: Uint8Array): void;
+  onAudio?(destination: "asr" | "mic", pcm: Uint8Array): void | Promise<void>;
   onHid?(keycodes: number[], report: Uint8Array): void;
-  onActions?(actions: RoutingAction[]): void;
+  onActions?(actions: RoutingAction[]): void | Promise<void>;
 }
 
 /** BLE protocol bridge shared by every platform adapter. */
 export class VibeBridge {
+  private effects: Promise<void> = Promise.resolve();
   constructor(private readonly transport: GattTransport, private readonly core: HostCore, private readonly hooks: BridgeHooks = {}) {}
 
   async connect(): Promise<void> {
@@ -35,7 +36,11 @@ export class VibeBridge {
 
   private notification(characteristic: Characteristic, data: Uint8Array): void {
     if (characteristic === "AUDIO") {
-      this.hooks.onAudio?.(this.core.snapshot().audio_route, data);
+      const destination = this.core.snapshot().audio_route;
+      // A PTT start and its first AUDIO notify can arrive back-to-back. Queue
+      // frames behind relay.start/relay.stop so Vibe Mic never drops frame 1.
+      this.effects = this.effects.catch(() => undefined).then(() => Promise.resolve(this.hooks.onAudio?.(destination, data)));
+      void this.effects.catch(() => undefined);
       return;
     }
     if (characteristic === "HID_INPUT") {
@@ -54,8 +59,11 @@ export class VibeBridge {
       if (typeof payload.id === "string") command.id = payload.id;
       if ("mode" in payload) command.mode = payload.mode;
       const result = this.core.command(command);
-      this.hooks.onActions?.(result.actions);
-      void this.sync();
+      this.effects = this.effects.catch(() => undefined).then(async () => {
+        await this.hooks.onActions?.(result.actions);
+        await this.sync();
+      });
+      void this.effects.catch(() => undefined);
     }
   }
 }

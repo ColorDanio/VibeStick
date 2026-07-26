@@ -17,9 +17,9 @@ export function createLinuxBridge(core: HostCore, options: LinuxBridgeOptions): 
   const mic = new LinuxVibeMicSink(transport);
   const reportError = (error: unknown): void => options.onError?.(error instanceof Error ? error : new Error(String(error)));
   const bridge = new VibeBridge(transport, core, {
-    onActions: (actions) => { void mic.apply(actions).catch(reportError); },
-    onAudio: (destination, pcm) => {
-      if (destination === "mic") void mic.feed(pcm).catch(reportError);
+    onActions: async (actions) => { try { await mic.apply(actions); } catch (error) { reportError(error); throw error; } },
+    onAudio: async (destination, pcm) => {
+      if (destination === "mic") { try { await mic.feed(pcm); } catch (error) { reportError(error); throw error; } }
       else options.onAsrAudio?.(pcm);
     },
     onHid: (_keycodes, report) => { void transport.invoke("hid.report", { data: Buffer.from(report).toString("base64") }).catch(reportError); },

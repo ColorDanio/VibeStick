@@ -133,7 +133,7 @@ test("BLE bridge subscribes, syncs and keeps Vibe Mic audio separate from ASR", 
   const core = new HostCore(normalizeConfig({ tools: [{ id: "codex", name: "Codex" }] }));
   const transport = new MemoryGattTransport();
   const audio: string[] = [];
-  const bridge = new VibeBridge(transport, core, { onAudio: (destination) => audio.push(destination) });
+  const bridge = new VibeBridge(transport, core, { onAudio: (destination) => { audio.push(destination); } });
   await bridge.connect();
   assert.deepEqual(transport.subscriptions, ["INPUT", "COMMAND", "AUDIO", "HID_INPUT"]);
   assert.deepEqual(transport.writes.map((item) => item.characteristic), ["STATUS", "SESSIONS", "TOOLS"]);
@@ -141,6 +141,7 @@ test("BLE bridge subscribes, syncs and keeps Vibe Mic audio separate from ASR", 
   transport.notify("AUDIO", new Uint8Array([128, 129]));
   transport.notify("COMMAND", new TextEncoder().encode('{"cmd":"voice.start"}'));
   transport.notify("AUDIO", new Uint8Array([130]));
+  await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(audio, ["mic", "asr"]);
 });
 
