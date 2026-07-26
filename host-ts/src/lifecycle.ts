@@ -14,7 +14,10 @@ export interface ManagedFile { path: string; contents: string; }
 export interface Invocation { command: string; args: string[]; }
 export interface LifecyclePlan { files: ManagedFile[]; install: Invocation[]; uninstall: Invocation[]; }
 
-const serviceName = "vibestick-ts";
+/** Product-specific registration identity; keep it separate from VibeConn 1.x. */
+const serviceName = "vibeconn-2";
+const launchAgentLabel = "io.vibeconn.host2";
+const windowsTaskName = "VibeConn 2.0";
 
 /**
  * Produce idempotent per-user registration instructions.  The Electron
@@ -26,21 +29,20 @@ export function lifecyclePlan(platform: HostPlatform, options: LifecycleOptions)
   if (platform === "linux") {
     const path = `${options.home}/.config/systemd/user/${serviceName}.service`;
     const variables = environment.map(([key, value]) => `Environment="${systemdEscape(`${key}=${value}`)}"\n`).join("");
-    const contents = `[Unit]\nDescription=VibeStick TypeScript Host\nAfter=graphical-session.target\n\n[Service]\nType=simple\n${variables}ExecStart=${[options.executable, ...args].map(systemdEscape).join(" ")}\nRestart=on-failure\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n`;
+    const contents = `[Unit]\nDescription=VibeConn 2.0 desktop host\nAfter=graphical-session.target\n\n[Service]\nType=simple\n${variables}ExecStart=${[options.executable, ...args].map(systemdEscape).join(" ")}\nRestart=on-failure\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n`;
     return { files: [{ path, contents }], install: [{ command: "systemctl", args: ["--user", "daemon-reload"] }, { command: "systemctl", args: ["--user", "enable", "--now", `${serviceName}.service`] }], uninstall: [{ command: "systemctl", args: ["--user", "disable", "--now", `${serviceName}.service`] }] };
   }
   if (platform === "darwin") {
-    const label = "io.vibestick.host";
-    const path = `${options.home}/Library/LaunchAgents/${label}.plist`;
-    const contents = plist(label, options.executable, args, environment);
-    return { files: [{ path, contents }], install: [{ command: "launchctl", args: ["bootstrap", `gui/${options.uid}`, path] }], uninstall: [{ command: "launchctl", args: ["bootout", `gui/${options.uid}/${label}`] }] };
+    const path = `${options.home}/Library/LaunchAgents/${launchAgentLabel}.plist`;
+    const contents = plist(launchAgentLabel, options.executable, args, environment);
+    return { files: [{ path, contents }], install: [{ command: "launchctl", args: ["bootstrap", `gui/${options.uid}`, path] }], uninstall: [{ command: "launchctl", args: ["bootout", `gui/${options.uid}/${launchAgentLabel}`] }] };
   }
-  const task = "VibeStick Host";
+  const task = windowsTaskName;
   if (!environment.length) {
     const run = windowsQuote([options.executable, ...args]);
     return { files: [], install: [{ command: "schtasks", args: ["/Create", "/TN", task, "/SC", "ONLOGON", "/TR", run, "/F"] }], uninstall: [{ command: "schtasks", args: ["/Delete", "/TN", task, "/F"] }] };
   }
-  const path = `${options.home}/AppData/Local/VibeStick/${serviceName}.cmd`;
+  const path = `${options.home}/AppData/Local/VibeConn/${serviceName}.cmd`;
   const contents = `@echo off\r\n${environment.map(([key, value]) => `set "${key}=${value.replace(/"/g, "\\\"")}"\r\n`).join("")}${windowsQuote([options.executable, ...args])}\r\n`;
   const run = windowsQuote(["cmd.exe", "/d", "/s", "/c", path]);
   return { files: [{ path, contents }], install: [{ command: "schtasks", args: ["/Create", "/TN", task, "/SC", "ONLOGON", "/TR", run, "/F"] }], uninstall: [{ command: "schtasks", args: ["/Delete", "/TN", task, "/F"] }] };
@@ -49,8 +51,8 @@ export function lifecyclePlan(platform: HostPlatform, options: LifecycleOptions)
 /** Read-only command whose zero exit status means the per-user registration exists. */
 export function lifecycleStatusInvocation(platform: HostPlatform, uid: number): Invocation {
   if (platform === "linux") return { command: "systemctl", args: ["--user", "is-enabled", `${serviceName}.service`] };
-  if (platform === "darwin") return { command: "launchctl", args: ["print", `gui/${uid}/io.vibestick.host`] };
-  return { command: "schtasks", args: ["/Query", "/TN", "VibeStick Host"] };
+  if (platform === "darwin") return { command: "launchctl", args: ["print", `gui/${uid}/${launchAgentLabel}`] };
+  return { command: "schtasks", args: ["/Query", "/TN", windowsTaskName] };
 }
 
 function systemdEscape(value: string): string { return value.replace(/([\\\s"'])/g, "\\$1"); }

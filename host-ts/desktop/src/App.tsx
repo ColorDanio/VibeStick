@@ -60,7 +60,7 @@ export function App(): ReactElement {
         const snapshot = await api("/api/desktop");
         if (active) {
           setData(snapshot); setConnected(true);
-          setNotice(snapshot.environment.error ? `Host 2.0 needs attention: ${snapshot.environment.error}` : snapshot.environment.traditional_owner.state === "running" && snapshot.environment.owner === "inactive" ? `${snapshot.environment.traditional_owner.detail} Stop Python 1.x using the way you started it, then restart Host 2.0 here to hand off BLE safely.` : "");
+          setNotice(snapshot.environment.error ? `VibeConn 2.0 needs attention: ${snapshot.environment.error}` : snapshot.environment.traditional_owner.state === "running" && snapshot.environment.owner === "inactive" ? `${snapshot.environment.traditional_owner.detail} Choose Release to Host 2.0, or stop Python 1.x yourself. VibeConn will retry safely.` : "");
         }
       }
       catch {
@@ -183,7 +183,7 @@ export function App(): ReactElement {
 
   return <main className="app-shell">
     <aside className="sidebar">
-      <div className="brand"><span className="brand-mark">V</span><span>VibeStick</span><small>HOST 2.0</small></div>
+      <div className="brand"><span className="brand-mark">V</span><span>VibeConn</span><small>2.0</small></div>
       <nav aria-label="Primary navigation">
         <a className="active" href="#overview">Overview</a><a href="#sessions">Sessions</a><a href="#voice">Voice &amp; modes</a><a href="#settings">Settings</a>
       </nav>

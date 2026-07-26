@@ -36,8 +36,9 @@ uses `ydotool` then `wtype` with argv-only calls; macOS uses System Events and
 Windows uses SendInput. Each platform requires online ASR and a successful
 explicit focused-input probe, and never targets a selected Agent CLI session.
 
-For Linux TS-owner verification (stop the Python daemon first), supply its
-existing virtual environment as the helper executable:
+For Linux TS-owner verification, use the app's explicit **Release to Host 2.0**
+handoff, or stop Python 1.x first. Supply its existing virtual environment as
+the helper executable:
 
 ```bash
 npm start -- --linux-helper ../host/.venv/bin/python

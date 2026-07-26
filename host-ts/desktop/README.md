@@ -1,6 +1,6 @@
-# VibeStick Host 2.0 desktop
+# VibeConn 2.0 desktop
 
-This is the cross-platform React + Electron control center for the TypeScript Host 2.0 runtime. It remains separate from the Python 1.x dashboard: only one implementation may own the Stick BLE link at a time.
+This is the cross-platform React + Electron control center for the TypeScript VibeConn 2.0 runtime. It remains separate from the Python 1.x dashboard: only one implementation may own the Stick BLE link at a time.
 
 ```bash
 npm install

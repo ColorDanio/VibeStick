@@ -80,7 +80,7 @@ async function main(): Promise<void> {
       config = candidate; await saveConfigFile(args.config, config); return { id: changed.id, cwd: changed.cwd ?? "" };
     },
   }, () => diagnosticsReport(core, environment(), { platform: process.platform, arch: process.arch, runtime: `node ${process.version}` }));
-  console.log(`VibeStick TS dashboard: http://127.0.0.1:${dashboard.port}`);
+  console.log(`VibeConn 2.0 dashboard: http://127.0.0.1:${dashboard.port}`);
 
   let bridge: VibeBridge | undefined;
   let commands: ReturnType<typeof createLinuxBridge>["commands"] | undefined;
@@ -193,7 +193,7 @@ async function main(): Promise<void> {
       runtime.reconcile();
     };
     await refreshOwnedCapabilities();
-    console.log(`VibeStick TS runtime: ${runtime.reconcile()}`);
+    console.log(`VibeConn 2.0 runtime: ${runtime.reconcile()}`);
   } else if (args.nativeBle || process.platform !== "linux") {
     const focused = process.platform === "linux" ? new LinuxFocusedInput() : new PlatformFocusedInput();
     const nativeMic = process.platform === "linux" ? new PipeWireVibeMicSink(config.mic.enabled) : undefined;
@@ -302,9 +302,9 @@ async function main(): Promise<void> {
         ? { available: true } : { available: false, reason: "ydotool Vibe Mic HID fallback unavailable" };
       runtime.reconcile();
     }
-    console.log(`VibeStick TS native BLE runtime: ${runtime.reconcile()}`);
+    console.log(`VibeConn 2.0 native BLE runtime: ${runtime.reconcile()}`);
   } else {
-    console.log("VibeStick TS runtime: degraded (no Linux BLE helper; Python traditional daemon remains available)");
+    console.log("VibeConn 2.0 runtime: degraded (no Linux BLE helper; Python 1.x remains available)");
   }
   const refresh = async (): Promise<void> => {
     await loadSessions();

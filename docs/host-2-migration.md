@@ -11,7 +11,7 @@ Start with Python 1.x unless you are deliberately validating Host 2.0.
 
 To hand the Stick to Host 2.0:
 
-1. Start VibeStick Host 2.0. If Python 1.x is running, the Electron desktop
+1. Start VibeConn 2.0. If Python 1.x is running, the Electron desktop
    shows **Release to Host 2.0**. This is an explicit user action: it sends
    Python's loopback `owner.release` command, which gracefully disconnects BLE,
    cancels daemon-owned work, and releases the shared lock. It does not delete
@@ -25,7 +25,7 @@ To hand the Stick to Host 2.0:
 5. Pair or authorize Bluetooth when the operating system asks. The Host 2.0
    Overview must say **BLE connected** before treating the Stick as controlled.
 
-To return to Python 1.x, quit VibeStick Host 2.0 from its tray menu (not merely
+To return to Python 1.x, quit VibeConn 2.0 from its tray menu (not merely
 close its window), optionally remove **Start at login** in Settings, then start
 the Python daemon again. No firmware change or configuration conversion is
 required for either direction.
@@ -40,7 +40,7 @@ required for either direction.
 | System HID fallback | supported | verified | not implemented |
 | YOLO voice to focused app | Linux focused injector | verified | Linux native BLE TS adapter (`ydotool`/`wtype`) smoke-tested; macOS/Windows implemented, hardware validation pending |
 | YOLO A=Enter, B=Escape×2 | supported | verified | Linux TS adapter covered; macOS/Windows implemented with focused-input permission |
-| Local faster-whisper | supported | not in TS | not in TS |
+| Local faster-whisper | supported | TS-owned voice flow + existing local model adapter | TS-owned voice flow; packaged local-model distribution pending |
 | Online ASR | optional | supported | YOLO-only while session delivery is unavailable |
 
 “Implemented” does not mean a platform has passed physical pairing, permission,
@@ -79,7 +79,7 @@ speech transcription. Restart Host 2.0 after changing ASR settings.
 
 For macOS YOLO, grant the desktop app Accessibility permission. For Windows,
 the target app must be the foreground window and must not run at a higher
-integrity level than VibeStick Host. If focused input is refused, the Stick and
+integrity level than VibeConn 2.0. If focused input is refused, the Stick and
 desktop diagnostics show an error; no text is silently redirected to a session.
 Before the capability becomes ready, select **Settings → Test permission**.
 This is an explicit non-injecting probe: it checks only the current foreground

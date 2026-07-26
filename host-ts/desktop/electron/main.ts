@@ -118,7 +118,7 @@ ipcMain.handle("vibestick:login-startup", async (_event, action: unknown): Promi
     const appArguments = app.isPackaged ? [] : [app.getAppPath()];
     const plan = desktopLifecyclePlan({ platform, executable: process.execPath, appArguments, home: homedir(), uid: typeof process.getuid === "function" ? process.getuid() : 0, environment: process.env });
     await executeLifecycle(plan, action, nodeRunner);
-    return { ok: true, detail: action === "install" ? "VibeStick Host will start at your next login." : "Login startup was removed." };
+    return { ok: true, detail: action === "install" ? "VibeConn 2.0 will start at your next login." : "Login startup was removed." };
   } catch (error) {
     return { ok: false, detail: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240) };
   }

@@ -352,25 +352,26 @@ test("file repository atomically persists config and defensively loads fresh ses
 });
 
 test("lifecycle plans are per-user and contain idempotent unregister operations", () => {
-  const common = { executable: "/Applications/VibeStick Host", configPath: "/tmp/config.json", home: "/home/alice", uid: 501 };
+  const common = { executable: "/Applications/VibeConn 2.0", configPath: "/tmp/config.json", home: "/home/alice", uid: 501 };
   const linux = lifecyclePlan("linux", common);
-  assert.match(linux.files[0]?.contents ?? "", /ExecStart=.*VibeStick\\ Host/);
-  assert.deepEqual(linux.uninstall[0]?.args, ["--user", "disable", "--now", "vibestick-ts.service"]);
+  assert.match(linux.files[0]?.contents ?? "", /Description=VibeConn 2\.0 desktop host/);
+  assert.match(linux.files[0]?.contents ?? "", /ExecStart=.*VibeConn\\ 2\.0/);
+  assert.deepEqual(linux.uninstall[0]?.args, ["--user", "disable", "--now", "vibeconn-2.service"]);
   const mac = lifecyclePlan("darwin", common);
-  assert.match(mac.files[0]?.path ?? "", /LaunchAgents\/io\.vibestick\.host\.plist$/);
+  assert.match(mac.files[0]?.path ?? "", /LaunchAgents\/io\.vibeconn\.host2\.plist$/);
   assert.match(mac.files[0]?.contents ?? "", /RunAtLoad/);
   const windows = lifecyclePlan("win32", common);
   assert.deepEqual(windows.files, []);
-  assert.deepEqual(windows.uninstall[0]?.args, ["/Delete", "/TN", "VibeStick Host", "/F"]);
-  assert.deepEqual(lifecycleStatusInvocation("linux", 1000), { command: "systemctl", args: ["--user", "is-enabled", "vibestick-ts.service"] });
-  assert.deepEqual(lifecycleStatusInvocation("darwin", 501), { command: "launchctl", args: ["print", "gui/501/io.vibestick.host"] });
-  assert.deepEqual(lifecycleStatusInvocation("win32", 1), { command: "schtasks", args: ["/Query", "/TN", "VibeStick Host"] });
+  assert.deepEqual(windows.uninstall[0]?.args, ["/Delete", "/TN", "VibeConn 2.0", "/F"]);
+  assert.deepEqual(lifecycleStatusInvocation("linux", 1000), { command: "systemctl", args: ["--user", "is-enabled", "vibeconn-2.service"] });
+  assert.deepEqual(lifecycleStatusInvocation("darwin", 501), { command: "launchctl", args: ["print", "gui/501/io.vibeconn.host2"] });
+  assert.deepEqual(lifecycleStatusInvocation("win32", 1), { command: "schtasks", args: ["/Query", "/TN", "VibeConn 2.0"] });
 });
 
 test("packaged lifecycle plans preserve required runtime environment on every platform", () => {
   const options = {
-    executable: "/Applications/VibeStick Host", configPath: "/tmp/config.json", home: "/Users/alice", uid: 501,
-    arguments: ["/Applications/VibeStick Host.app/Contents/Resources/host-core/cli.js", "--config", "/tmp/config.json"],
+    executable: "/Applications/VibeConn 2.0", configPath: "/tmp/config.json", home: "/Users/alice", uid: 501,
+    arguments: ["/Applications/VibeConn 2.0.app/Contents/Resources/host-core/cli.js", "--config", "/tmp/config.json"],
     environment: { ELECTRON_RUN_AS_NODE: "1" },
   };
   const linux = lifecyclePlan("linux", options);
@@ -380,7 +381,7 @@ test("packaged lifecycle plans preserve required runtime environment on every pl
   assert.match(mac.files[0]?.contents ?? "", /<key>EnvironmentVariables<\/key>/);
   assert.match(mac.files[0]?.contents ?? "", /ELECTRON_RUN_AS_NODE/);
   const windows = lifecyclePlan("win32", options);
-  assert.match(windows.files[0]?.path ?? "", /AppData\/Local\/VibeStick\/vibestick-ts\.cmd$/);
+  assert.match(windows.files[0]?.path ?? "", /AppData\/Local\/VibeConn\/vibeconn-2\.cmd$/);
   assert.match(windows.files[0]?.contents ?? "", /set "ELECTRON_RUN_AS_NODE=1"/);
   assert.match(windows.install[0]?.args.join(" ") ?? "", /cmd\.exe/);
 });
@@ -389,12 +390,12 @@ test("desktop login registration launches the shell and keeps only Linux session
   const source = { DISPLAY: ":1", WAYLAND_DISPLAY: "wayland-1", XDG_RUNTIME_DIR: "/run/user/1000", DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/1000/bus", SECRET: "must-not-persist" };
   assert.deepEqual(desktopEnvironment("linux", source), { DISPLAY: ":1", WAYLAND_DISPLAY: "wayland-1", XDG_RUNTIME_DIR: "/run/user/1000", DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/1000/bus" });
   assert.deepEqual(desktopEnvironment("darwin", source), {});
-  const linux = desktopLifecyclePlan({ platform: "linux", executable: "/opt/VibeStick Host", appArguments: [], home: "/home/alice", uid: 1000, environment: source });
-  assert.match(linux.files[0]?.contents ?? "", /ExecStart=\/opt\/VibeStick\\ Host/);
+  const linux = desktopLifecyclePlan({ platform: "linux", executable: "/opt/VibeConn 2.0", appArguments: [], home: "/home/alice", uid: 1000, environment: source });
+  assert.match(linux.files[0]?.contents ?? "", /ExecStart=\/opt\/VibeConn\\ 2\.0/);
   assert.doesNotMatch(linux.files[0]?.contents ?? "", /must-not-persist/);
-  const windows = desktopLifecyclePlan({ platform: "win32", executable: "C:\\Program Files\\VibeStick\\VibeStick Host.exe", appArguments: [], home: "C:\\Users\\Alice", uid: 1, environment: source });
+  const windows = desktopLifecyclePlan({ platform: "win32", executable: "C:\\Program Files\\VibeConn\\VibeConn 2.0.exe", appArguments: [], home: "C:\\Users\\Alice", uid: 1, environment: source });
   assert.equal(windows.files.length, 0);
-  assert.match(windows.install[0]?.args.join(" ") ?? "", /VibeStick Host\.exe/);
+  assert.match(windows.install[0]?.args.join(" ") ?? "", /VibeConn 2\.0\.exe/);
 });
 
 test("lifecycle executor writes before install, removes only after a successful uninstall", async () => {

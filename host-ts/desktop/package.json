@@ -32,7 +32,7 @@
     "vite": "^6.1.0"
   },
   "build": {
-    "appId": "io.vibestick.host",
+    "appId": "io.vibeconn.host2",
     "productName": "VibeConn 2.0",
     "executableName": "vibeconn-2",
     "asar": true,
