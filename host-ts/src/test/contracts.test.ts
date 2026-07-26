@@ -7,6 +7,7 @@ import { sessionsToWire, statusToWire } from "../protocol.js";
 import { transition, type AudioRoute } from "../routing.js";
 import { SendQueue } from "../queue.js";
 import { SessionSelection } from "../session.js";
+import { HostSessionStore } from "../store.js";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
   const path = new URL(`../../../contracts/v1/${name}`, import.meta.url);
@@ -65,4 +66,20 @@ test("send queue retains FIFO order and drops its oldest item at capacity", () =
   assert.deepEqual(queue.enqueue({ sessionId: "a", text: "three" }), { sessionId: "a", text: "one" });
   assert.deepEqual(queue.drain("running"), []);
   assert.deepEqual(queue.drain("idle"), [{ sessionId: "a", text: "two" }, { sessionId: "a", text: "three" }]);
+});
+
+test("domain store derives ready/running tool states and selected payloads", () => {
+  const store = new HostSessionStore(normalizeConfig({ tools: [
+    { id: "claude-code", name: "Claude", bindings: { enter: "Enter" } },
+    { id: "codex", name: "Codex", bindings: { cancel: "Escape" } },
+  ] }));
+  store.replace([
+    { id: "claude-1", status: { tool: "claude-code", model: "", session: "Fix BLE", state: "running", ctx_pct: -1, cost_usd: -1, last: "", updated: 20 } },
+    { id: "codex-1", status: { tool: "codex", model: "", session: "Package", state: "idle", ctx_pct: -1, cost_usd: -1, last: "", updated: 10 } },
+  ]);
+  assert.deepEqual(store.toolsPayload().list.map((tool) => [tool.id, tool.state]), [["claude-code", "running"], ["codex", "ready"]]);
+  assert.equal(store.statusPayload().session, "Fix BLE");
+  store.apply({ cmd: "tool.next" });
+  assert.deepEqual(store.sessionsPayload().list.map((session) => session.id), ["codex-1"]);
+  assert.deepEqual(store.toolsPayload().list[1]?.fns, ["status", "sessions", "voice"]);
 });
