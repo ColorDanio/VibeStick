@@ -23,8 +23,10 @@ those platforms can connect and synchronize the Stick without the Python
 daemon. The Linux native route now owns its PipeWire **Vibe Mic** source and
 `pw-cat` feeder in TypeScript; it does not invoke the Python helper for that
 capability. It deliberately still reports keyboard delivery and Agent CLI
-session delivery as unavailable until their platform adapters are implemented
-and tested. Native YOLO focused input is another explicit exception: Linux
+session delivery as unavailable on Windows. Linux/macOS native BLE now deliver
+Agent CLI text, bindings, and new panes to the **selected managed tmux/zellij
+session** through a TS adapter; a plain PID/tty has no safe native injection
+fallback and is rejected rather than redirected globally. Native YOLO focused input is another explicit exception: Linux
 uses `ydotool` then `wtype` with argv-only calls; macOS uses System Events and
 Windows uses SendInput. Each platform requires online ASR and a successful
 explicit focused-input probe, and never targets a selected Agent CLI session.

@@ -31,6 +31,7 @@ import { NobleGattTransport, type NobleAdapter } from "../noble-transport.js";
 import { EventEmitter } from "node:events";
 import { PlatformFocusedInput, type ProcessInvocation } from "../focused-input.js";
 import { LinuxFocusedInput, type LinuxInvocation } from "../linux-focused-input.js";
+import { TerminalSessionAdapter, type TerminalInvocation } from "../terminal-session.js";
 import { desktopEnvironment, desktopLifecyclePlan } from "../desktop-lifecycle.js";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
@@ -245,6 +246,23 @@ test("Linux native YOLO focused input probes then uses ydotool or wtype argv", a
     { command: "ydotool", args: ["--help"] }, { command: "wtype", args: ["--help"] },
     { command: "wtype", args: ["-k", "ESC", "-k", "ESC"] },
   ]);
+});
+
+test("native terminal adapter delivers only to selected tmux or zellij sessions", async () => {
+  const core = new HostCore(normalizeConfig({ tools: [{ id: "codex", name: "Codex" }] }));
+  core.replaceSessions([{ id: "tmux", status: { tool: "codex", model: "", session: "Task", state: "idle", ctx_pct: -1, cost_usd: -1, last: "", updated: 1 }, fg: true, raw: { tmux: "%7" } }]);
+  const calls: TerminalInvocation[] = [];
+  const adapter = new TerminalSessionAdapter(core, async (input) => { calls.push(input); return true; });
+  assert.equal(await adapter.deliver("continue"), true);
+  assert.equal(await adapter.binding("ctrl-c"), true);
+  assert.equal(await adapter.newSession({ tool: "codex", name: "Codex", command: "codex", cwd: "/work", launcher: "auto" }), true);
+  assert.deepEqual(calls, [
+    { command: "tmux", args: ["send-keys", "-t", "%7", "--", "continue", "Enter"] },
+    { command: "tmux", args: ["send-keys", "-t", "%7", "--", "C-c"] },
+    { command: "tmux", args: ["new-window", "-t", "%7", "-n", "Codex", "-c", "/work", "--", "codex"] },
+  ]);
+  core.replaceSessions([{ id: "plain", status: { tool: "codex", model: "", session: "Task", state: "idle", ctx_pct: -1, cost_usd: -1, last: "", updated: 1 }, fg: true, raw: { pid: 1 } }]);
+  assert.equal(await adapter.deliver("never global"), false);
 });
 
 test("online ASR settings validate provider data and never return API keys", async () => {

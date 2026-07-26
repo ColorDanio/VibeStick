@@ -19,6 +19,7 @@ import { NobleGattTransport } from "./noble-transport.js";
 import { PlatformFocusedInput } from "./focused-input.js";
 import { PipeWireVibeMicSink } from "./pipewire-mic.js";
 import { LinuxFocusedInput } from "./linux-focused-input.js";
+import { TerminalSessionAdapter } from "./terminal-session.js";
 
 type Args = { config: string; sessions: string; port: number; helper?: string; address?: string; nativeBle: boolean };
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
@@ -169,6 +170,7 @@ async function main(): Promise<void> {
   } else if (args.nativeBle || process.platform !== "linux") {
     const focused = process.platform === "linux" ? new LinuxFocusedInput() : new PlatformFocusedInput();
     const nativeMic = process.platform === "linux" ? new PipeWireVibeMicSink(config.mic.enabled) : undefined;
+    const terminals = process.platform === "win32" ? undefined : new TerminalSessionAdapter(core);
     bridge = new VibeBridge(new NobleGattTransport(args.address ?? ""), core, {
       onConnectionState: (connected) => runtime?.onBleConnectionState(connected),
       onAudio: (destination, pcm) => {
@@ -206,7 +208,26 @@ async function main(): Promise<void> {
           return;
         }
         if (command.cmd === "voice.confirm") {
-          if (voice.confirm()) throw new Error("Agent CLI delivery is unavailable for the native BLE adapter");
+          const text = voice.confirm();
+          if (text && (!terminals || !(await terminals.deliver(text)))) throw new Error("Agent CLI delivery failed: select a tmux or zellij session");
+          return;
+        }
+        if (command.cmd === "inference.cancel") {
+          const tool = config.tools.find((item) => item.id === core.snapshot().selected_tool);
+          if (!terminals || !(await terminals.binding(tool?.bindings.cancel || "escape"))) throw new Error("Agent CLI cancel failed");
+          return;
+        }
+        if (command.cmd === "fn.activate") {
+          const tool = config.tools.find((item) => item.id === core.snapshot().selected_tool);
+          const binding = command.fn ? tool?.bindings[command.fn] : undefined;
+          if (!binding || !terminals || !(await terminals.binding(binding))) throw new Error("Agent CLI custom function failed");
+          return;
+        }
+        if (command.cmd === "session.new") {
+          const tool = config.tools.find((item) => item.id === core.snapshot().selected_tool);
+          const ok = Boolean(tool && terminals && await terminals.newSession({ tool: tool.id, name: tool.name, command: tool.command || tool.process || "", ...(tool.cwd ? { cwd: tool.cwd } : {}), launcher: config.session_launcher }));
+          if (!ok) throw new Error("New session requires an existing tmux or zellij session");
+          core.store.requestNewSession();
         }
       },
       onEffectError: (error) => {
@@ -219,7 +240,9 @@ async function main(): Promise<void> {
       ble: { available: true },
       keyboard: { available: false, reason: "Vibe Mic HID/system key fallback is not implemented yet" },
       mic: nativeMic ? { available: false, reason: "PipeWire Vibe Mic probe pending" } : { available: false, reason: "Platform virtual microphone is not implemented yet" },
-      asr: { available: false, reason: "Agent CLI session delivery is not implemented; YOLO supports online ASR only" },
+      asr: terminals && config.asr.engine === "online" && Boolean(config.asr.online.api_key)
+        ? { available: true, reason: "Delivery requires the selected session to be tmux or zellij" }
+        : { available: false, reason: terminals ? "Configure online ASR for Agent CLI delivery" : "Agent CLI session delivery is not implemented on Windows" },
       yolo: process.platform === "darwin" || process.platform === "win32" || process.platform === "linux"
         ? config.asr.engine === "online" && Boolean(config.asr.online.api_key)
           ? { available: false, reason: "Run the focused-input permission test in Settings", testable: true }
