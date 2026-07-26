@@ -116,7 +116,7 @@ fn start_host(app: &AppHandle, state: &HostProcess) -> Result<(), String> {
         command.arg("--native-ble");
     }
     let compatibility = if cfg!(debug_assertions) {
-        development_path("../../host/tools")
+        development_path("../../../host/tools")
     } else {
         app.path()
             .resource_dir()
