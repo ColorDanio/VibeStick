@@ -34,6 +34,14 @@ degraded and does not claim to own the Stick.
 The desktop shell remains in preview until Host 2.0 owns the BLE link; it
 never presents unavailable BLE, HID, or Vibe Mic capabilities as usable.
 
+The cross-platform login lifecycle model also carries the executable's
+arguments and non-secret runtime environment. This is needed when an Electron
+package launches the bundled HostCore through Electron's Node compatibility
+mode: systemd receives an `Environment` entry, LaunchAgent receives
+`EnvironmentVariables`, and Windows receives a user-local wrapper consumed by
+Task Scheduler. Registration itself remains an explicit user action; Host 2.0
+never silently installs a service or replaces Python 1.x.
+
 Host 2.0 currently implements its own OpenAI-compatible online ASR path. Set
 `asr.engine` to `"online"` and provide `asr.online.api_key` in the shared
 configuration before it will advertise Agent ASR as available. The existing

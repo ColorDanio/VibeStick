@@ -191,6 +191,24 @@ test("lifecycle plans are per-user and contain idempotent unregister operations"
   assert.deepEqual(windows.uninstall[0]?.args, ["/Delete", "/TN", "VibeStick Host", "/F"]);
 });
 
+test("packaged lifecycle plans preserve required runtime environment on every platform", () => {
+  const options = {
+    executable: "/Applications/VibeStick Host", configPath: "/tmp/config.json", home: "/Users/alice", uid: 501,
+    arguments: ["/Applications/VibeStick Host.app/Contents/Resources/host-core/cli.js", "--config", "/tmp/config.json"],
+    environment: { ELECTRON_RUN_AS_NODE: "1" },
+  };
+  const linux = lifecyclePlan("linux", options);
+  assert.match(linux.files[0]?.contents ?? "", /Environment="ELECTRON_RUN_AS_NODE=1"/);
+  assert.match(linux.files[0]?.contents ?? "", /host-core\/cli\.js --config/);
+  const mac = lifecyclePlan("darwin", options);
+  assert.match(mac.files[0]?.contents ?? "", /<key>EnvironmentVariables<\/key>/);
+  assert.match(mac.files[0]?.contents ?? "", /ELECTRON_RUN_AS_NODE/);
+  const windows = lifecyclePlan("win32", options);
+  assert.match(windows.files[0]?.path ?? "", /AppData\/Local\/VibeStick\/vibestick-ts\.cmd$/);
+  assert.match(windows.files[0]?.contents ?? "", /set "ELECTRON_RUN_AS_NODE=1"/);
+  assert.match(windows.install[0]?.args.join(" ") ?? "", /cmd\.exe/);
+});
+
 test("lifecycle executor writes before install, removes only after a successful uninstall", async () => {
   const plan = lifecyclePlan("linux", { executable: "/opt/vibestick", configPath: "/tmp/config.json", home: "/home/alice", uid: 1 });
   const calls: string[] = [];
