@@ -1,11 +1,11 @@
 import { createServer, type Server } from "node:http";
 import type { HostCore } from "./core.js";
-import { dashboardRequest } from "./dashboard.js";
+import { dashboardRequest, type DashboardEnvironment } from "./dashboard.js";
 
 export interface DashboardServer { readonly port: number; close(): Promise<void>; }
 
 /** Minimal loopback-only HTTP adapter; Electron or a browser may consume it. */
-export async function startDashboardServer(core: HostCore, port = 7861): Promise<DashboardServer> {
+export async function startDashboardServer(core: HostCore, port = 7861, environment?: () => DashboardEnvironment): Promise<DashboardServer> {
   const server = createServer(async (request, response) => {
     const chunks: Buffer[] = [];
     for await (const chunk of request) {
@@ -15,7 +15,7 @@ export async function startDashboardServer(core: HostCore, port = 7861): Promise
     let body: unknown;
     try { body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : undefined; }
     catch { response.writeHead(400, { "content-type": "application/json" }).end('{"error":"invalid json"}'); return; }
-    const result = dashboardRequest(core, request.method ?? "GET", request.url ?? "/", body);
+    const result = dashboardRequest(core, request.method ?? "GET", request.url ?? "/", body, environment?.());
     response.writeHead(result.status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
     response.end(JSON.stringify(result.body));
   });

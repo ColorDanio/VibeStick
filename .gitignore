@@ -7,6 +7,11 @@ __pycache__/
 # TypeScript host build artifacts
 host-ts/node_modules/
 host-ts/dist/
+host-ts/desktop/node_modules/
+host-ts/desktop/dist/
+host-ts/desktop/electron-dist/
+host-ts/desktop/.playwright-cli/
+host-ts/desktop/output/
 
 # PlatformIO
 .pio/

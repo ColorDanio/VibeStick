@@ -6,6 +6,7 @@ import { createLinuxBridge } from "./linux-bridge.js";
 import { HostRuntime, type Capabilities } from "./runtime.js";
 import { startDashboardServer } from "./server.js";
 import type { VibeBridge } from "./bridge.js";
+import type { DashboardEnvironment } from "./dashboard.js";
 
 type Args = { config: string; sessions: string; port: number; helper?: string; address?: string };
 
@@ -14,10 +15,24 @@ async function main(): Promise<void> {
   const config = await loadConfigFile(args.config);
   const core = new HostCore(config);
   core.replaceSessions(await loadSessionDirectory(args.sessions));
-  const dashboard = await startDashboardServer(core, args.port);
+  let runtime: HostRuntime | undefined;
+  const environment = (): DashboardEnvironment => {
+    const diagnostics = runtime?.diagnostics();
+    return {
+      implementation: "host-2",
+      owner: runtime ? "active" : "inactive",
+      runtime: diagnostics?.state ?? "stopped",
+      capabilities: diagnostics?.capabilities ?? {
+        ble: { available: false, reason: "Start Host 2.0 with the Linux BLE helper" },
+        keyboard: { available: false, reason: "Start Host 2.0 with the Linux BLE helper" },
+        mic: { available: false, reason: "Start Host 2.0 with the Linux BLE helper" },
+      },
+      ...(diagnostics?.error ? { error: diagnostics.error } : {}),
+    };
+  };
+  const dashboard = await startDashboardServer(core, args.port, environment);
   console.log(`VibeStick TS dashboard: http://127.0.0.1:${dashboard.port}`);
 
-  let runtime: HostRuntime | undefined;
   let bridge: VibeBridge | undefined;
   if (args.helper) {
     const bridgeOptions = {

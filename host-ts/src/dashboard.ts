@@ -1,10 +1,29 @@
 import type { HostCore } from "./core.js";
+import type { Capabilities, RuntimeState } from "./runtime.js";
 
 export interface DashboardResponse { status: number; body: object; }
+export interface DashboardEnvironment {
+  implementation: "host-2";
+  owner: "active" | "inactive";
+  runtime: RuntimeState;
+  capabilities: Capabilities;
+  error?: string;
+}
+
+const unavailable: Capabilities = {
+  ble: { available: false, reason: "Host 2.0 is not connected" },
+  keyboard: { available: false, reason: "Host 2.0 is not connected" },
+  mic: { available: false, reason: "Host 2.0 is not connected" },
+};
 
 /** HTTP/IPC contract; a Node HTTP server or Electron IPC adapter can call this. */
-export function dashboardRequest(core: HostCore, method: string, path: string, body?: unknown): DashboardResponse {
+export function dashboardRequest(core: HostCore, method: string, path: string, body?: unknown, environment?: DashboardEnvironment): DashboardResponse {
   if (method === "GET" && path === "/api/status") return { status: 200, body: core.snapshot() };
+  if (method === "GET" && path === "/api/desktop") {
+    return { status: 200, body: { ...core.snapshot(), environment: environment ?? {
+      implementation: "host-2", owner: "inactive", runtime: "stopped", capabilities: unavailable,
+    } } };
+  }
   if (method === "POST" && path === "/api/command" && isRecord(body) && typeof body.cmd === "string") {
     const command: { cmd: string; id?: string; mode?: unknown } = { cmd: body.cmd };
     if (typeof body.id === "string") command.id = body.id;

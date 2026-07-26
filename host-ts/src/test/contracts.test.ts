@@ -102,6 +102,11 @@ test("dashboard contract returns snapshots and routes commands through one core"
   const micBody = mic.body as { actions: string[]; audio_route: string };
   assert.deepEqual([mic.status, micBody.actions, micBody.audio_route], [200, ["relay.start"], "mic"]);
   assert.equal(dashboardRequest(core, "POST", "/api/command", { cmd: "tool.select", id: "nope" }).status, 400);
+  const desktop = dashboardRequest(core, "GET", "/api/desktop", undefined, {
+    implementation: "host-2", owner: "active", runtime: "ready",
+    capabilities: { ble: { available: true }, keyboard: { available: true }, mic: { available: true } },
+  });
+  assert.equal((desktop.body as { environment: { owner: string } }).environment.owner, "active");
 });
 
 test("file repository atomically persists config and defensively loads fresh sessions", async () => {

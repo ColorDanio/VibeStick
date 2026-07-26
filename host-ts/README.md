@@ -1,9 +1,9 @@
-# VibeStick TypeScript Host Core
+# VibeStick TypeScript Host 2.0
 
-This is the new cross-platform host domain core, developed alongside—not in
-place of—the supported Python traditional daemon.  It has no real BLE,
-keyboard, microphone, or lifecycle side effects yet.  Those are capability
-adapters added only after this core conforms to `../contracts/v1`.
+This is the new cross-platform TypeScript Host 2.0 runtime, developed
+alongside—not in place of—the supported Python 1.x daemon. Its React +
+Electron desktop control center lives in [`desktop/`](desktop/). Platform
+capabilities are added only after this core conforms to `../contracts/v1`.
 
 ```bash
 npm install
@@ -30,3 +30,6 @@ npm start -- --linux-helper ../host/.venv/bin/python
 
 The CLI dashboard remains useful without `--linux-helper`; it is explicitly
 degraded and does not claim to own the Stick.
+
+The desktop shell remains in preview until Host 2.0 owns the BLE link; it
+never presents unavailable BLE, HID, or Vibe Mic capabilities as usable.
