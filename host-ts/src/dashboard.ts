@@ -7,7 +7,7 @@ export interface DashboardEnvironment {
   owner: "active" | "inactive";
   runtime: RuntimeState;
   capabilities: Capabilities;
-  config: { path: string; asr_engine: string; asr_api_base: string; asr_model: string; online_asr_configured: boolean };
+  config: { path: string; asr_engine: string; asr_api_base: string; asr_model: string; online_asr_configured: boolean; session_launcher: "auto" | "tmux" | "zellij" };
   error?: string;
 }
 
@@ -24,7 +24,7 @@ export function dashboardRequest(core: HostCore, method: string, path: string, b
   if (method === "GET" && path === "/api/desktop") {
     return { status: 200, body: { ...core.snapshot(), environment: environment ?? {
       implementation: "host-2", owner: "inactive", runtime: "stopped", capabilities: unavailable,
-      config: { path: "", asr_engine: "", asr_api_base: "", asr_model: "", online_asr_configured: false },
+      config: { path: "", asr_engine: "", asr_api_base: "", asr_model: "", online_asr_configured: false, session_launcher: "auto" },
     } } };
   }
   if (method === "POST" && path === "/api/command" && isRecord(body) && typeof body.cmd === "string") {

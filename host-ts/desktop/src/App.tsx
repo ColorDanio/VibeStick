@@ -9,7 +9,7 @@ type Snapshot = {
   status: { state: string; session: string; tool: string; model: string };
   sessions: { list: Session[] };
   tools: { list: { id: string; name: string; state: string }[] };
-  environment: { owner: "active" | "inactive"; runtime: string; capabilities: { ble: Capability; keyboard: Capability; mic: Capability; asr: Capability }; config: { path: string; asr_engine: string; asr_api_base: string; asr_model: string; online_asr_configured: boolean }; error?: string };
+  environment: { owner: "active" | "inactive"; runtime: string; capabilities: { ble: Capability; keyboard: Capability; mic: Capability; asr: Capability }; config: { path: string; asr_engine: string; asr_api_base: string; asr_model: string; online_asr_configured: boolean; session_launcher: "auto" | "tmux" | "zellij" }; error?: string };
 };
 
 const api = async (path: string, init?: RequestInit): Promise<Snapshot> => {
@@ -28,7 +28,7 @@ const demo: Snapshot = {
   tools: { list: [{ id: "opencode", name: "OpenCode", state: "ready" }, { id: "codex", name: "Codex", state: "running" }] },
   environment: { owner: "inactive", runtime: "stopped", capabilities: {
     ble: { available: false, reason: "Start the Host 2.0 runtime" }, keyboard: { available: false, reason: "Start the Host 2.0 runtime" }, mic: { available: false, reason: "Start the Host 2.0 runtime" }, asr: { available: false, reason: "Configure online ASR" },
-  }, config: { path: "~/.vibestick/config.json", asr_engine: "faster-whisper", asr_api_base: "https://api.groq.com/openai/v1", asr_model: "whisper-large-v3-turbo", online_asr_configured: false } },
+  }, config: { path: "~/.vibestick/config.json", asr_engine: "faster-whisper", asr_api_base: "https://api.groq.com/openai/v1", asr_model: "whisper-large-v3-turbo", online_asr_configured: false, session_launcher: "auto" } },
 };
 
 export function App(): ReactElement {
@@ -39,6 +39,8 @@ export function App(): ReactElement {
   const [model, setModel] = useState(demo.environment.config.asr_model);
   const [apiKey, setApiKey] = useState("");
   const [saving, setSaving] = useState(false);
+  const [launcher, setLauncher] = useState<"auto" | "tmux" | "zellij">(demo.environment.config.session_launcher);
+  const [savingLauncher, setSavingLauncher] = useState(false);
   const [restartRequired, setRestartRequired] = useState(false);
   const [restarting, setRestarting] = useState(false);
 
@@ -64,7 +66,7 @@ export function App(): ReactElement {
     return () => { active = false; window.clearInterval(timer); };
   }, []);
 
-  useEffect(() => { setApiBase(data.environment.config.asr_api_base); setModel(data.environment.config.asr_model); }, [data.environment.config.asr_api_base, data.environment.config.asr_model]);
+  useEffect(() => { setApiBase(data.environment.config.asr_api_base); setModel(data.environment.config.asr_model); setLauncher(data.environment.config.session_launcher); }, [data.environment.config.asr_api_base, data.environment.config.asr_model, data.environment.config.session_launcher]);
 
   const send = async (cmd: string, id?: string): Promise<void> => {
     try {
@@ -81,6 +83,16 @@ export function App(): ReactElement {
       setApiKey(""); setRestartRequired(true); setNotice("Online ASR settings saved. Restart Host 2.0 to apply them.");
     } catch (error) { setNotice(`Could not save ASR settings: ${error instanceof Error ? error.message : String(error)}`); }
     finally { setSaving(false); }
+  };
+  const saveLauncher = async (event: FormEvent): Promise<void> => {
+    event.preventDefault(); setSavingLauncher(true);
+    try {
+      const response = await fetch("http://127.0.0.1:7861/api/settings/session-launcher", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session_launcher: launcher }) });
+      const result: unknown = await response.json();
+      if (!response.ok) throw new Error(typeof result === "object" && result !== null && typeof (result as { error?: unknown }).error === "string" ? (result as { error: string }).error : "settings save failed");
+      setRestartRequired(true); setNotice("Session launcher saved. Restart Host 2.0 to apply it.");
+    } catch (error) { setNotice(`Could not save session launcher: ${error instanceof Error ? error.message : String(error)}`); }
+    finally { setSavingLauncher(false); }
   };
   const restartHost = async (): Promise<void> => {
     if (!window.vibestickDesktop) return;
@@ -122,6 +134,7 @@ export function App(): ReactElement {
       <section className="settings" id="settings"><div className="section-heading"><div><p className="eyebrow">HOST SETUP</p><h2>Settings</h2></div><span className={data.environment.config.online_asr_configured ? "settings-good" : "settings-warn"}>{data.environment.config.online_asr_configured ? "Online ASR configured" : "Action required"}</span></div>
         <div className="settings-grid"><div><b>Agent ASR</b><p>{data.environment.config.online_asr_configured ? `Online · ${data.environment.config.asr_model}` : "Host 2.0 currently needs an OpenAI-compatible online ASR provider for Agent CLI and YOLO voice."}</p><small>Key is write-only: it is never read back into this application.</small></div><div><b>Shared configuration</b><p className="path">{data.environment.config.path || "Start Host 2.0 to locate configuration."}</p><small>Python 1.x local faster-whisper remains available independently.</small></div></div>
         <form className="asr-form" onSubmit={(event) => void saveAsr(event)}><label>OpenAI-compatible API base<input value={apiBase} onChange={(event) => setApiBase(event.target.value)} inputMode="url" required /></label><label>Model<input value={model} onChange={(event) => setModel(event.target.value)} required /></label><label>API key <small>Leave empty to keep existing key.</small><input value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" autoComplete="new-password" /></label><button type="submit" disabled={saving || !connected}>{saving ? "Saving…" : "Save and restart later"}</button></form>
+        <form className="launcher-form" onSubmit={(event) => void saveLauncher(event)}><label>New-session launcher<select value={launcher} onChange={(event) => setLauncher(event.target.value as "auto" | "tmux" | "zellij")}><option value="auto">Auto (tmux → zellij → managed tmux)</option><option value="tmux">tmux only</option><option value="zellij">zellij only</option></select></label><small>Controls where Stick <code>session.new</code> opens the selected Agent CLI. A forced zellij launch needs an existing zellij session.</small><button type="submit" disabled={savingLauncher || !connected}>{savingLauncher ? "Saving…" : "Save launcher"}</button></form>
       </section>
     </section>
   </main>;

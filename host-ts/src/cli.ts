@@ -10,7 +10,7 @@ import type { VibeBridge } from "./bridge.js";
 import type { DashboardEnvironment } from "./dashboard.js";
 import { VoicePipeline, onlineTranscriber } from "./asr.js";
 import { NodeProcessInspector, discoverProcessSessions, mergeSessions } from "./process-discovery.js";
-import { publicAsrSettings, updateOnlineAsr } from "./settings.js";
+import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher } from "./settings.js";
 
 type Args = { config: string; sessions: string; port: number; helper?: string; address?: string };
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
@@ -39,12 +39,13 @@ async function main(): Promise<void> {
         mic: { available: false, reason: "Start Host 2.0 with the Linux BLE helper" },
         asr: { available: false, reason: "Configure an ASR provider for Host 2.0" },
       },
-      config: { path: args.config, asr_engine: config.asr.engine, asr_api_base: config.asr.online.api_base, asr_model: config.asr.online.model, online_asr_configured: config.asr.engine === "online" && Boolean(config.asr.online.api_key) },
+      config: { path: args.config, asr_engine: config.asr.engine, asr_api_base: config.asr.online.api_base, asr_model: config.asr.online.model, online_asr_configured: config.asr.engine === "online" && Boolean(config.asr.online.api_key), session_launcher: config.session_launcher },
       ...(diagnostics?.error ? { error: diagnostics.error } : {}),
     };
   };
   const dashboard = await startDashboardServer(core, args.port, environment, {
     async updateOnlineAsr(body) { config = updateOnlineAsr(config, body); await saveConfigFile(args.config, config); return publicAsrSettings(config); },
+    async updateSessionLauncher(body) { config = updateSessionLauncher(config, body); await saveConfigFile(args.config, config); return { session_launcher: config.session_launcher }; },
   });
   console.log(`VibeStick TS dashboard: http://127.0.0.1:${dashboard.port}`);
 

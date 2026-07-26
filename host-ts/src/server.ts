@@ -2,7 +2,10 @@ import { createServer, type Server } from "node:http";
 import type { HostCore } from "./core.js";
 import { dashboardRequest, type DashboardEnvironment } from "./dashboard.js";
 
-export interface SettingsService { updateOnlineAsr(body: unknown): Promise<{ engine: string; api_base: string; model: string; configured: boolean }>; }
+export interface SettingsService {
+  updateOnlineAsr(body: unknown): Promise<{ engine: string; api_base: string; model: string; configured: boolean }>;
+  updateSessionLauncher(body: unknown): Promise<{ session_launcher: "auto" | "tmux" | "zellij" }>;
+}
 
 export interface DashboardServer { readonly port: number; close(): Promise<void>; }
 
@@ -30,6 +33,16 @@ export async function startDashboardServer(core: HostCore, port = 7861, environm
         const result = await settings.updateOnlineAsr(body);
         response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
         response.end(JSON.stringify({ ok: true, restart_required: true, asr: result })); return;
+      } catch (error) {
+        response.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) })); return;
+      }
+    }
+    if (request.method === "POST" && request.url === "/api/settings/session-launcher" && settings) {
+      try {
+        const result = await settings.updateSessionLauncher(body);
+        response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+        response.end(JSON.stringify({ ok: true, restart_required: true, ...result })); return;
       } catch (error) {
         response.writeHead(400, { "content-type": "application/json; charset=utf-8" });
         response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) })); return;

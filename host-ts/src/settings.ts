@@ -18,4 +18,10 @@ export function publicAsrSettings(config: Config): PublicAsrSettings {
   return { engine: config.asr.engine, api_base: config.asr.online.api_base, model: config.asr.online.model, configured: config.asr.engine === "online" && Boolean(config.asr.online.api_key) };
 }
 
+export function updateSessionLauncher(config: Config, input: unknown): Config {
+  const launcher = typeof input === "object" && input !== null && "session_launcher" in input ? (input as { session_launcher?: unknown }).session_launcher : undefined;
+  if (launcher !== "auto" && launcher !== "tmux" && launcher !== "zellij") throw new TypeError("Session launcher must be auto, tmux, or zellij");
+  return { ...config, session_launcher: launcher };
+}
+
 const string = (value: unknown, fallback: string): string => typeof value === "string" ? value : fallback;
