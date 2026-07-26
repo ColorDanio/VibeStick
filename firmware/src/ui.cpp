@@ -911,8 +911,8 @@ void uiTickConvo() {
 }
 
 // ---- Full-screen recording view (shared by conversation and mic) ----
-// Red dot + REC timer on top, one big RMS bar with a green->yellow->red
-// volume gradient. Timer/bar are partial redraws via uiTickRecording.
+// Red dot + REC timer on top, with a centered pulse visualizer. The rings
+// make voice level legible without the utilitarian horizontal RMS bar.
 
 static bool sRcInit = false;
 static bool sRcBlink = false;
@@ -931,35 +931,20 @@ static uint16_t levelColor(int pct) {
   return (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3));
 }
 
-static void recBarGeom(int* x, int* y, int* w, int* h, bool* vertical) {
-  *vertical = !landscape();
-  if (*vertical) {
-    *x = sW / 2 - 8;
-    *y = 48;
-    *w = 16;
-    *h = footDivY() - 12 - 48;
-  } else {
-    *x = 24;
-    *y = sH / 2 + 6;
-    *w = sW - 48;
-    *h = 14;
-  }
-}
-
-static void recDrawBar(int levelPct) {
-  int x, y, w, h;
-  bool vertical;
-  recBarGeom(&x, &y, &w, &h, &vertical);
-  uint16_t col = levelColor(levelPct);
-  if (vertical) {
-    M5Lcd.fillRect(x, y, w, h, TFT_BLACK);
-    int fh = (h * levelPct) / 100;
-    if (fh > 0) M5Lcd.fillRect(x, y + h - fh, w, fh, col);
-  } else {
-    M5Lcd.fillRect(x, y, w, h, TFT_BLACK);
-    int fw = (w * levelPct) / 100;
-    if (fw > 0) M5Lcd.fillRect(x, y, fw, h, col);
-  }
+static void recDrawPulse(int levelPct) {
+  int cx = sW / 2;
+  int cy = landscape() ? 73 : 86;
+  // Clear only the visualizer band: timer, status and footer remain stable.
+  M5Lcd.fillRect(cx - 52, cy - 45, 104, 90, TFT_BLACK);
+  int energy = 12 + (levelPct * 22) / 100;
+  uint16_t outer = levelColor(levelPct);
+  M5Lcd.drawCircle(cx, cy, energy + 13, COL_FAINT);
+  M5Lcd.drawCircle(cx, cy, energy + 5, COL_DIM);
+  M5Lcd.drawCircle(cx, cy, energy, outer);
+  // Minimal microphone core: a filled capsule, stem and base.
+  M5Lcd.fillRoundRect(cx - 6, cy - 15, 12, 25, 6, TFT_WHITE);
+  M5Lcd.fillRect(cx - 2, cy + 10, 4, 9, TFT_WHITE);
+  M5Lcd.fillRoundRect(cx - 11, cy + 18, 22, 4, 2, TFT_WHITE);
 }
 
 void uiTickRecording(int levelPct, uint32_t elapsedMs) {
@@ -981,7 +966,7 @@ void uiTickRecording(int levelPct, uint32_t elapsedMs) {
     sRcInit = true;
   }
   if (levelPct != sRcLevel) {
-    recDrawBar(levelPct);
+    recDrawPulse(levelPct);
     sRcLevel = levelPct;
   }
 }
@@ -989,10 +974,6 @@ void uiTickRecording(int levelPct, uint32_t elapsedMs) {
 void uiShowRecording(int levelPct, uint32_t elapsedMs) {
   M5Lcd.fillScreen(TFT_BLACK);
   drawStatusBar("rec");
-  int x, y, w, h;
-  bool vertical;
-  recBarGeom(&x, &y, &w, &h, &vertical);
-  M5Lcd.drawRect(x - 2, y - 2, w + 4, h + 4, COL_DIM);  // bar outline
   M5Lcd.drawFastHLine(0, footDivY(), sW, COL_FAINT);
   centerText("release: stop", footL1Y(), 1, COL_FAINT);
   sRcInit = false;
