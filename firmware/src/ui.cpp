@@ -573,7 +573,8 @@ static bool isYoloEntry(int idx) {
 }
 
 static const uint16_t* entryLogo(int idx) {
-  if (isMicEntry(idx)) return icon_mic24;
+  if (isYoloEntry(idx)) return icon_yolo24;
+  if (isMicEntry(idx)) return icon_vibe_mic24;
   return toolLogo(gTools.list[idx].id);
 }
 
@@ -1269,7 +1270,8 @@ void uiShowMic(const char* errorText, bool yolo) {
   // Mic glyph at 2x (per-pixel) inside the ring.
   for (int gy = 0; gy < 24; ++gy) {
     for (int gx = 0; gx < 24; ++gx) {
-      uint16_t px = pgm_read_word(icon_mic24 + gy * 24 + gx);
+      const uint16_t* modeIcon = yolo ? icon_yolo24 : icon_vibe_mic24;
+      uint16_t px = pgm_read_word(modeIcon + gy * 24 + gx);
       if (px != ICON_TRANSPARENT) {
         M5Lcd.fillRect(cx - 24 + gx * 2, cy - 24 + gy * 2, 2, 2, TFT_WHITE);
       }
