@@ -11,6 +11,7 @@ import { startDashboardServer } from "./server.js";
 import { VibeBridge } from "./bridge.js";
 import type { DashboardEnvironment } from "./dashboard.js";
 import { VoicePipeline, onlineTranscriber } from "./asr.js";
+import { pythonLocalTranscriber } from "./local-asr.js";
 import { NodeProcessInspector, discoverProcessSessions, mergeSessions } from "./process-discovery.js";
 import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher, updateToolCwd, verifyOnlineAsr } from "./settings.js";
 import { probeTraditionalOwner, type TraditionalOwner } from "./ownership.js";
@@ -90,7 +91,13 @@ async function main(): Promise<void> {
       ? { allowed: false, reason: `${traditionalOwner.detail ?? "Python 1.x is active."} Stop Python 1.x before Host 2.0 takes BLE.` }
       : { allowed: true, reason: "" };
   };
-  const voice = new VoicePipeline(config.asr, onlineTranscriber, (update) => { void bridge?.publishVoice(update); });
+  const localAsr = config.asr.engine === "faster-whisper" || (config.asr.engine === "command" && Boolean(config.asr.command.trim()));
+  const asrReady = localAsr || (config.asr.engine === "online" && Boolean(config.asr.online.api_key));
+  const localAsrExecutable = process.env.VIBECONN_PYTHON || process.env.VIBESTICK_LINUX_HELPER || "python3";
+  const localAsrHelper = process.env.VIBECONN_LOCAL_ASR_HELPER || resolve(moduleDirectory, "../../host/tools/asr_helper.py");
+  const transcriber = config.asr.engine === "online"
+    ? onlineTranscriber : pythonLocalTranscriber(localAsrExecutable, localAsrHelper);
+  const voice = new VoicePipeline(config.asr, transcriber, (update) => { void bridge?.publishVoice(update); });
   if (args.helper) {
     const bridgeOptions: LinuxBridgeOptions = {
       helperExecutable: args.helper,
@@ -101,7 +108,7 @@ async function main(): Promise<void> {
       onRoutingActions: async (actions) => {
         for (const action of actions) {
           if (action === "asr.start") {
-            if (config.asr.engine !== "online") { await bridge?.publishVoice({ state: "error", text: "Host 2.0 needs online ASR configured" }); continue; }
+            if (!asrReady) { await bridge?.publishVoice({ state: "error", text: "Host 2.0 ASR is not configured" }); continue; }
             voice.start();
           }
           if (action === "asr.stop") await voice.stop();
@@ -160,8 +167,9 @@ async function main(): Promise<void> {
     const { mic } = linux;
     const capabilities: Capabilities = {
       ble: { available: true }, keyboard: { available: true }, mic: { available: false, reason: "PipeWire probe pending" },
-      asr: config.asr.engine === "online" && Boolean(config.asr.online.api_key)
-        ? { available: true } : { available: false, reason: "Configure OpenAI-compatible online ASR for Host 2.0" },
+      asr: asrReady
+        ? { available: true, ...(localAsr ? { reason: `Local ${config.asr.engine} via model adapter` } : {}) }
+        : { available: false, reason: "Configure local ASR or an OpenAI-compatible online ASR provider" },
       yolo: { available: false, reason: "YOLO needs ydotool or wtype focused-input setup on Linux" },
     };
     runtime = new HostRuntime(bridge, capabilities, 2_000, ownerPermission);
@@ -183,7 +191,7 @@ async function main(): Promise<void> {
       onActions: async (actions) => {
         for (const action of actions) {
           if (action === "asr.start") {
-            if (config.asr.engine !== "online" || !config.asr.online.api_key) await bridge?.publishVoice({ state: "error", text: "YOLO needs online ASR configured" });
+            if (!asrReady) await bridge?.publishVoice({ state: "error", text: "YOLO ASR is not configured" });
             else voice.start();
           }
           if (action === "asr.stop") await voice.stop();
@@ -243,18 +251,18 @@ async function main(): Promise<void> {
       ble: { available: true },
       keyboard: nativeHid ? { available: false, reason: "Vibe Mic HID fallback probe pending" } : { available: false, reason: "Vibe Mic HID/system key fallback is not implemented yet" },
       mic: nativeMic ? { available: false, reason: "PipeWire Vibe Mic probe pending" } : { available: false, reason: "Platform virtual microphone is not implemented yet" },
-      asr: terminals && config.asr.engine === "online" && Boolean(config.asr.online.api_key)
+      asr: terminals && asrReady
         ? { available: true, reason: "Delivery requires the selected session to be tmux or zellij" }
-        : { available: false, reason: terminals ? "Configure online ASR for Agent CLI delivery" : "Agent CLI session delivery is not implemented on Windows" },
+        : { available: false, reason: terminals ? "Configure local or online ASR for Agent CLI delivery" : "Agent CLI session delivery is not implemented on Windows" },
       yolo: process.platform === "darwin" || process.platform === "win32" || process.platform === "linux"
-        ? config.asr.engine === "online" && Boolean(config.asr.online.api_key)
+        ? asrReady
           ? { available: false, reason: "Run the focused-input permission test in Settings", testable: true }
-          : { available: false, reason: "Configure online ASR before using YOLO" }
+          : { available: false, reason: "Configure local or online ASR before using YOLO" }
         : { available: false, reason: "Native YOLO focused input is unavailable on this platform" },
     };
     testYoloFocused = async () => {
-      if (config.asr.engine !== "online" || !config.asr.online.api_key) {
-        capabilities.yolo = { available: false, reason: "Configure online ASR before testing YOLO", testable: false };
+      if (!asrReady) {
+        capabilities.yolo = { available: false, reason: "Configure local or online ASR before testing YOLO", testable: false };
         return { available: false, detail: capabilities.yolo.reason ?? "" };
       }
       const available = await focused.probe();

@@ -62,11 +62,14 @@ report from the loopback host. It contains platform/runtime and capability
 summaries only. API keys, paths, commands, bindings, session names, transcript
 content, tails, and audio are deliberately omitted.
 
-Host 2.0 currently implements its own OpenAI-compatible online ASR path. Set
-`asr.engine` to `"online"` and provide `asr.online.api_key` in the shared
-configuration before it will advertise Agent ASR as available. The existing
-local faster-whisper path remains part of Python 1.x until a TS-native local
-provider is packaged.
+Host 2.0 implements its own OpenAI-compatible online ASR path. It also accepts
+the existing `faster-whisper` and `command` configuration through a one-shot
+local model adapter: recording state, BLE messages, mode routing and delivery
+remain TypeScript-owned, while the already-installed Python model runtime is
+used only to execute the model. The repository launcher supplies the matching
+Python executable and adapter automatically on Linux. Packaged cross-platform
+local-model distribution remains a later packaging task; use online ASR where
+that runtime is not present.
 
 See [the Host 2.0 migration guide](../docs/host-2-migration.md) for safe owner
 handoff, capability limits, online-ASR testing, login startup, rollback, and

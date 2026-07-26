@@ -56,6 +56,8 @@ case "$implementation" in
     if [[ "${VIBECONN_LINUX_BACKEND:-helper}" == "helper" && -z "${VIBESTICK_LINUX_HELPER:-}" ]]; then
       export VIBESTICK_LINUX_HELPER="$ROOT_DIR/host/.venv/bin/python"
     fi
+    export VIBECONN_PYTHON="${VIBECONN_PYTHON:-$ROOT_DIR/host/.venv/bin/python}"
+    export VIBECONN_LOCAL_ASR_HELPER="${VIBECONN_LOCAL_ASR_HELPER:-$ROOT_DIR/host/tools/asr_helper.py}"
     if [[ "${VIBECONN_LINUX_BACKEND:-helper}" != "helper" && "$(uname -s)" == "Linux" ]]; then
       export VIBESTICK_NATIVE_BLE=1
     fi

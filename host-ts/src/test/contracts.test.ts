@@ -23,6 +23,7 @@ import { LinuxVibeMicSink } from "../mic-sink.js";
 import { PipeWireVibeMicSink, applyGain } from "../pipewire-mic.js";
 import { startDashboardServer } from "../server.js";
 import { VoicePipeline, wav, type AsrTranscriber } from "../asr.js";
+import { pythonLocalTranscriber } from "../local-asr.js";
 import { discoverProcessSessions, mergeSessions } from "../process-discovery.js";
 import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher, updateToolCwd, verifyOnlineAsr } from "../settings.js";
 import { probeTraditionalOwner } from "../ownership.js";
@@ -638,4 +639,22 @@ test("TypeScript WAV encoding preserves the 8 kHz unsigned firmware format", () 
   assert.equal(new DataView(encoded.buffer).getUint32(24, true), 8000);
   assert.equal(new DataView(encoded.buffer).getUint16(34, true), 8);
   assert.deepEqual([...encoded.subarray(44)], [0, 128, 255]);
+});
+
+test("local ASR model adapter preserves the 1.x faster-whisper configuration", async () => {
+  let received: { executable: string; helper: string; bytes: number; engine: string; model: string; device: string; language: string | null } | undefined;
+  const transcriber = pythonLocalTranscriber("/venv/bin/python", "/repo/host/tools/asr_helper.py", async (request) => {
+    received = {
+      executable: request.executable, helper: request.helper, bytes: request.pcm.length,
+      engine: request.asr.engine, model: request.asr.model, device: request.asr.device,
+      language: request.asr.language,
+    };
+    return "本地转写";
+  });
+  const config = normalizeConfig({ asr: { engine: "faster-whisper", model: "small", device: "cpu", language: "zh" } });
+  assert.equal(await transcriber.transcribe(new Uint8Array([4, 5, 6]), config.asr), "本地转写");
+  assert.deepEqual(received, {
+    executable: "/venv/bin/python", helper: "/repo/host/tools/asr_helper.py", bytes: 3,
+    engine: "faster-whisper", model: "small", device: "cpu", language: "zh",
+  });
 });
