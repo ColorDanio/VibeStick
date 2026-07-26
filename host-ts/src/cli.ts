@@ -73,6 +73,12 @@ async function main(): Promise<void> {
   let bridge: VibeBridge | undefined;
   let commands: ReturnType<typeof createLinuxBridge>["commands"] | undefined;
   let voiceMode: "agent" | "yolo" = "agent";
+  const ownerPermission = async () => {
+    traditionalOwner = await probeTraditionalOwner();
+    return traditionalOwner.state === "running"
+      ? { allowed: false, reason: `${traditionalOwner.detail ?? "Python 1.x is active."} Stop Python 1.x before Host 2.0 takes BLE.` }
+      : { allowed: true, reason: "" };
+  };
   const voice = new VoicePipeline(config.asr, onlineTranscriber, (update) => { void bridge?.publishVoice(update); });
   if (args.helper) {
     const bridgeOptions: LinuxBridgeOptions = {
@@ -146,7 +152,7 @@ async function main(): Promise<void> {
       asr: config.asr.engine === "online" && Boolean(config.asr.online.api_key)
         ? { available: true } : { available: false, reason: "Configure OpenAI-compatible online ASR for Host 2.0" },
     };
-    runtime = new HostRuntime(bridge, capabilities);
+    runtime = new HostRuntime(bridge, capabilities, 2_000, ownerPermission);
     await runtime.start();
     capabilities.mic = (await mic.warmup().catch(() => false)) ? { available: true } : { available: false, reason: "PipeWire Vibe Mic unavailable" };
     console.log(`VibeStick TS runtime: ${runtime.reconcile()}`);
@@ -198,7 +204,7 @@ async function main(): Promise<void> {
       mic: { available: false, reason: "Platform virtual microphone is not implemented yet" },
       asr: { available: false, reason: "Agent CLI session delivery is not implemented; YOLO supports online ASR only" },
     };
-    runtime = new HostRuntime(bridge, capabilities);
+    runtime = new HostRuntime(bridge, capabilities, 2_000, ownerPermission);
     await runtime.start();
     console.log(`VibeStick TS native BLE runtime: ${runtime.reconcile()}`);
   } else {

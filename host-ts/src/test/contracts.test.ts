@@ -447,6 +447,23 @@ test("runtime never claims BLE ownership when its transport connection fails", a
   assert.match(runtime.diagnostics().error ?? "", /other host owns/);
 });
 
+test("runtime waits for the Python owner gate instead of probing BLE", async () => {
+  const core = new HostCore(normalizeConfig({ tools: [] }));
+  const transport = new MemoryGattTransport();
+  let pythonOwnsBle = true;
+  const runtime = new HostRuntime(new VibeBridge(transport, core), {
+    ble: { available: true }, keyboard: { available: true }, mic: { available: true }, asr: { available: true },
+  }, 1, async () => pythonOwnsBle ? { allowed: false, reason: "Python 1.x is connected to the Stick." } : { allowed: true, reason: "" });
+  assert.equal(await runtime.start(), "degraded");
+  assert.equal(transport.subscriptions.length, 0);
+  assert.match(runtime.diagnostics().error ?? "", /Python 1\.x/);
+  pythonOwnsBle = false;
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(runtime.isBleOwner(), true);
+  assert.equal(transport.subscriptions.length, 4);
+  await runtime.stop();
+});
+
 test("Linux Vibe Mic sink only forwards frames during a mic route", async () => {
   const calls: string[] = [];
   const helper = { invoke: async (command: string, values: Record<string, unknown> = {}) => {

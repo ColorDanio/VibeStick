@@ -3,6 +3,9 @@ import type { VibeBridge } from "./bridge.js";
 export type RuntimeState = "stopped" | "starting" | "ready" | "degraded" | "stopping";
 export interface Capability { available: boolean; reason?: string; }
 export interface Capabilities { ble: Capability; keyboard: Capability; mic: Capability; asr: Capability; }
+export interface ConnectionPermission { allowed: boolean; reason: string; }
+export type ConnectionGuard = () => Promise<ConnectionPermission>;
+const allowConnection: ConnectionGuard = async () => ({ allowed: true, reason: "" });
 
 /** Owns the host lifecycle state without hiding unavailable platform features. */
 export class HostRuntime {
@@ -13,13 +16,14 @@ export class HostRuntime {
   private reconnecting = false;
   private stopping = false;
 
-  constructor(readonly bridge: VibeBridge, readonly capabilities: Capabilities, private readonly reconnectDelayMs = 2_000) {}
+  constructor(readonly bridge: VibeBridge, readonly capabilities: Capabilities, private readonly reconnectDelayMs = 2_000, private readonly canConnect: ConnectionGuard = allowConnection) {}
 
   async start(): Promise<RuntimeState> {
     if (this.state !== "stopped") return this.state;
     this.stopping = false;
     this.state = "starting";
     try {
+      if (!(await this.permitted())) return this.state;
       await this.bridge.connect();
       this.ownsBleLink = true;
       this.state = this.capabilities.ble.available && this.capabilities.keyboard.available && this.capabilities.mic.available && this.capabilities.asr.available
@@ -97,6 +101,7 @@ export class HostRuntime {
     if (this.reconnecting || this.stopping || this.state === "stopped") return;
     this.reconnecting = true;
     try {
+      if (!(await this.permitted())) return;
       await this.bridge.connect();
       this.ownsBleLink = true;
       this.lastError = undefined;
@@ -106,6 +111,27 @@ export class HostRuntime {
       this.lastError = error instanceof Error ? error.message : String(error);
       this.state = "degraded";
       this.scheduleReconnect();
-    } finally { this.reconnecting = false; }
+    } finally {
+      this.reconnecting = false;
+      if (!this.ownsBleLink && !this.stopping) this.scheduleReconnect();
+    }
+  }
+
+  private async permitted(): Promise<boolean> {
+    try {
+      const permission = await this.canConnect();
+      if (permission.allowed) return true;
+      this.ownsBleLink = false;
+      this.lastError = permission.reason || "Another VibeStick owner is active";
+      this.state = "degraded";
+      this.scheduleReconnect();
+      return false;
+    } catch (error) {
+      this.ownsBleLink = false;
+      this.lastError = error instanceof Error ? `BLE owner check failed: ${error.message}` : `BLE owner check failed: ${String(error)}`;
+      this.state = "degraded";
+      this.scheduleReconnect();
+      return false;
+    }
   }
 }
