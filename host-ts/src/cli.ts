@@ -14,6 +14,7 @@ import { VoicePipeline, onlineTranscriber } from "./asr.js";
 import { NodeProcessInspector, discoverProcessSessions, mergeSessions } from "./process-discovery.js";
 import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher, updateToolCwd } from "./settings.js";
 import { probeTraditionalOwner, type TraditionalOwner } from "./ownership.js";
+import { diagnosticsReport } from "./diagnostics.js";
 
 type Args = { config: string; sessions: string; port: number; helper?: string; address?: string };
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
@@ -64,7 +65,7 @@ async function main(): Promise<void> {
       }
       config = candidate; await saveConfigFile(args.config, config); return { id: changed.id, cwd: changed.cwd ?? "" };
     },
-  });
+  }, () => diagnosticsReport(core, environment(), { platform: process.platform, arch: process.arch, runtime: `node ${process.version}` }));
   console.log(`VibeStick TS dashboard: http://127.0.0.1:${dashboard.port}`);
 
   let bridge: VibeBridge | undefined;

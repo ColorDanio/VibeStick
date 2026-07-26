@@ -25,6 +25,7 @@ import { VoicePipeline, wav, type AsrTranscriber } from "../asr.js";
 import { discoverProcessSessions, mergeSessions } from "../process-discovery.js";
 import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher, updateToolCwd } from "../settings.js";
 import { probeTraditionalOwner } from "../ownership.js";
+import { diagnosticsReport } from "../diagnostics.js";
 
 const fixture = async (name: string): Promise<Record<string, any>> => {
   const path = new URL(`../../../contracts/v1/${name}`, import.meta.url);
@@ -141,6 +142,19 @@ test("traditional Python owner probe is read-only and distinguishes connected st
   assert.equal(idle.state, "running");
   const unavailable = await probeTraditionalOwner(async () => { throw new Error("refused"); });
   assert.deepEqual(unavailable, { state: "unavailable" });
+});
+
+test("diagnostics export is useful while redacting secrets, paths, and conversation content", () => {
+  const core = new HostCore(normalizeConfig({ tools: [{ id: "codex", name: "Sensitive session", cwd: "/private/project", command: "codex --danger" }], asr: { online: { api_key: "do-not-export" } } }));
+  core.replaceSessions([{ id: "private-id", status: { tool: "codex", model: "", session: "Top secret", state: "running", ctx_pct: -1, cost_usd: -1, last: "private transcript", updated: 1 } }]);
+  const report = diagnosticsReport(core, {
+    implementation: "host-2", owner: "active", runtime: "ready", traditional_owner: { state: "unavailable" },
+    capabilities: { ble: { available: true }, keyboard: { available: true }, mic: { available: false, reason: "missing" }, asr: { available: true } },
+    config: { path: "/private/config.json", asr_engine: "online", asr_api_base: "https://example.test", asr_model: "whisper", online_asr_configured: true, session_launcher: "auto", tools: [{ id: "codex", name: "Codex", cwd: "/private/project" }] },
+  }, { platform: "linux", arch: "x64", runtime: "node test" });
+  const text = JSON.stringify(report);
+  assert.match(text, /vibestick-host-diagnostics\/v1/);
+  for (const secret of ["do-not-export", "/private", "codex --danger", "Top secret", "private transcript", "Sensitive session"]) assert.equal(text.includes(secret), false);
 });
 
 test("online ASR settings validate provider data and never return API keys", () => {

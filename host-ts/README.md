@@ -42,6 +42,11 @@ mode: systemd receives an `Environment` entry, LaunchAgent receives
 Task Scheduler. Registration itself remains an explicit user action; Host 2.0
 never silently installs a service or replaces Python 1.x.
 
+For support, `GET /api/diagnostics` downloads a versioned JSON diagnostic
+report from the loopback host. It contains platform/runtime and capability
+summaries only. API keys, paths, commands, bindings, session names, transcript
+content, tails, and audio are deliberately omitted.
+
 Host 2.0 currently implements its own OpenAI-compatible online ASR path. Set
 `asr.engine` to `"online"` and provide `asr.online.api_key` in the shared
 configuration before it will advertise Agent ASR as available. The existing

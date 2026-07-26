@@ -8,10 +8,12 @@ export interface SettingsService {
   updateToolCwd(body: unknown): Promise<{ id: string; cwd: string }>;
 }
 
+export type DiagnosticsService = () => Record<string, unknown>;
+
 export interface DashboardServer { readonly port: number; close(): Promise<void>; }
 
 /** Minimal loopback-only HTTP adapter; Electron or a browser may consume it. */
-export async function startDashboardServer(core: HostCore, port = 7861, environment?: () => DashboardEnvironment, settings?: SettingsService): Promise<DashboardServer> {
+export async function startDashboardServer(core: HostCore, port = 7861, environment?: () => DashboardEnvironment, settings?: SettingsService, diagnostics?: DiagnosticsService): Promise<DashboardServer> {
   const server = createServer(async (request, response) => {
     const origin = request.headers.origin;
     if (origin === "http://127.0.0.1:5174" || origin === "http://localhost:5174" || origin === "null") {
@@ -29,6 +31,10 @@ export async function startDashboardServer(core: HostCore, port = 7861, environm
     let body: unknown;
     try { body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : undefined; }
     catch { response.writeHead(400, { "content-type": "application/json" }).end('{"error":"invalid json"}'); return; }
+    if (request.method === "GET" && request.url === "/api/diagnostics" && diagnostics) {
+      response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "content-disposition": "attachment; filename=vibestick-diagnostics.json" });
+      response.end(JSON.stringify(diagnostics(), null, 2)); return;
+    }
     if (request.method === "POST" && request.url === "/api/settings/asr" && settings) {
       try {
         const result = await settings.updateOnlineAsr(body);

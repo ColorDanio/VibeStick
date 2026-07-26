@@ -116,6 +116,12 @@ export function App(): ReactElement {
     catch (error) { setNotice(`Could not restart Host 2.0: ${error instanceof Error ? error.message : String(error)}`); }
     finally { setRestarting(false); }
   };
+  const downloadDiagnostics = (): void => {
+    const anchor = document.createElement("a");
+    anchor.href = "http://127.0.0.1:7861/api/diagnostics";
+    anchor.download = "vibestick-diagnostics.json";
+    document.body.appendChild(anchor); anchor.click(); anchor.remove();
+  };
   const runtime = data.environment.runtime;
   const selected = data.sessions.list.find((session) => session.id === data.active_session) ?? data.sessions.list[0];
 
@@ -146,7 +152,7 @@ export function App(): ReactElement {
         </section>
         <aside className="activity"><p className="eyebrow">LIVE ACTIVITY</p><h2>{selected?.session ?? "No session selected"}</h2><div className="activity-line"><span className="dot green"></span><span>{selected?.last || "Waiting for a session"}</span></div><hr/><p className="eyebrow">YOLO SAFETY</p><p className="warning-copy">YOLO types into the focused app. VibeStick cannot inspect or choose that target.</p><div className="key-hints"><kbd>A</kbd><span>Enter</span><kbd>B</kbd><span>Escape ×2</span></div></aside>
       </div>
-      <section className="settings" id="settings"><div className="section-heading"><div><p className="eyebrow">HOST SETUP</p><h2>Settings</h2></div><span className={data.environment.config.online_asr_configured ? "settings-good" : "settings-warn"}>{data.environment.config.online_asr_configured ? "Online ASR configured" : "Action required"}</span></div>
+      <section className="settings" id="settings"><div className="section-heading"><div><p className="eyebrow">HOST SETUP</p><h2>Settings</h2></div><div className="settings-actions"><button className="diagnostics-button" onClick={downloadDiagnostics} disabled={!connected}>Download diagnostics</button><span className={data.environment.config.online_asr_configured ? "settings-good" : "settings-warn"}>{data.environment.config.online_asr_configured ? "Online ASR configured" : "Action required"}</span></div></div>
         <div className="settings-grid"><div><b>Agent ASR</b><p>{data.environment.config.online_asr_configured ? `Online · ${data.environment.config.asr_model}` : "Host 2.0 currently needs an OpenAI-compatible online ASR provider for Agent CLI and YOLO voice."}</p><small>Key is write-only: it is never read back into this application.</small></div><div><b>Shared configuration</b><p className="path">{data.environment.config.path || "Start Host 2.0 to locate configuration."}</p><small>Python 1.x local faster-whisper remains available independently.</small></div></div>
         <form className="asr-form" onSubmit={(event) => void saveAsr(event)}><label>OpenAI-compatible API base<input value={apiBase} onChange={(event) => setApiBase(event.target.value)} inputMode="url" required /></label><label>Model<input value={model} onChange={(event) => setModel(event.target.value)} required /></label><label>API key <small>Leave empty to keep existing key.</small><input value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" autoComplete="new-password" /></label><button type="submit" disabled={saving || !connected}>{saving ? "Saving…" : "Save and restart later"}</button></form>
         <form className="launcher-form" onSubmit={(event) => void saveLauncher(event)}><label>New-session launcher<select value={launcher} onChange={(event) => setLauncher(event.target.value as "auto" | "tmux" | "zellij")}><option value="auto">Auto (tmux → zellij → managed tmux)</option><option value="tmux">tmux only</option><option value="zellij">zellij only</option></select></label><small>Controls where Stick <code>session.new</code> opens the selected Agent CLI. A forced zellij launch needs an existing zellij session.</small><button type="submit" disabled={savingLauncher || !connected}>{savingLauncher ? "Saving…" : "Save launcher"}</button></form>
