@@ -19,6 +19,10 @@ on macOS, or a Task Scheduler entry on Windows. It starts the Electron shell,
 which in turn starts its own HostCore child. The action writes only the minimal
 Linux graphical-session environment needed for the shell, never persists secrets,
 and never stops Python 1.x or takes its BLE lock automatically.
+When enabled from the repository launcher, the registration also retains the
+non-secret Python compatibility-runtime path selected for Linux. It therefore
+starts with the same BLE, Vibe Mic, local ASR and session discovery adapters
+after login instead of falling back to a degraded native preview.
 
 For Linux development, opt into the existing audited BlueZ/PipeWire bridge with
 `VIBESTICK_LINUX_HELPER=/absolute/path/to/python npm run desktop`. This starts

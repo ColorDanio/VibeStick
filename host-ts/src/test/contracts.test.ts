@@ -387,12 +387,13 @@ test("packaged lifecycle plans preserve required runtime environment on every pl
   assert.match(windows.install[0]?.args.join(" ") ?? "", /cmd\.exe/);
 });
 
-test("desktop login registration launches the shell and keeps only Linux session variables", () => {
-  const source = { DISPLAY: ":1", WAYLAND_DISPLAY: "wayland-1", XDG_RUNTIME_DIR: "/run/user/1000", DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/1000/bus", SECRET: "must-not-persist" };
-  assert.deepEqual(desktopEnvironment("linux", source), { DISPLAY: ":1", WAYLAND_DISPLAY: "wayland-1", XDG_RUNTIME_DIR: "/run/user/1000", DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/1000/bus" });
+test("desktop login registration launches the shell and retains only graphical and compatibility runtime variables", () => {
+  const source = { DISPLAY: ":1", WAYLAND_DISPLAY: "wayland-1", XDG_RUNTIME_DIR: "/run/user/1000", DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/1000/bus", VIBESTICK_LINUX_HELPER: "/opt/vibeconn/bin/python", VIBECONN_PYTHON: "/opt/vibeconn/bin/python", VIBECONN_LINUX_BACKEND: "helper", SECRET: "must-not-persist" };
+  assert.deepEqual(desktopEnvironment("linux", source), { DISPLAY: ":1", WAYLAND_DISPLAY: "wayland-1", XDG_RUNTIME_DIR: "/run/user/1000", DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/1000/bus", VIBESTICK_LINUX_HELPER: "/opt/vibeconn/bin/python", VIBECONN_PYTHON: "/opt/vibeconn/bin/python", VIBECONN_LINUX_BACKEND: "helper" });
   assert.deepEqual(desktopEnvironment("darwin", source), {});
   const linux = desktopLifecyclePlan({ platform: "linux", executable: "/opt/VibeConn 2.0", appArguments: [], home: "/home/alice", uid: 1000, environment: source });
   assert.match(linux.files[0]?.contents ?? "", /ExecStart=\/opt\/VibeConn\\ 2\.0/);
+  assert.match(linux.files[0]?.contents ?? "", /VIBESTICK_LINUX_HELPER=\/opt\/vibeconn\/bin\/python/);
   assert.doesNotMatch(linux.files[0]?.contents ?? "", /must-not-persist/);
   const windows = desktopLifecyclePlan({ platform: "win32", executable: "C:\\Program Files\\VibeConn\\VibeConn 2.0.exe", appArguments: [], home: "C:\\Users\\Alice", uid: 1, environment: source });
   assert.equal(windows.files.length, 0);

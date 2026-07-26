@@ -22,9 +22,17 @@ export function desktopLifecyclePlan(options: DesktopLifecycleOptions): Lifecycl
   });
 }
 
-/** Preserve only session-discovery variables a Linux login service needs. */
+/**
+ * Preserve the graphical session plus the non-secret Linux compatibility
+ * runtime chosen when the user enabled login startup. Without these paths a
+ * VibeConn 2.0 app launched by systemd would silently lose its verified
+ * Python BLE/audio/session adapters after the next login.
+ */
 export function desktopEnvironment(platform: HostPlatform, source: NodeJS.ProcessEnv = process.env): Record<string, string> {
   if (platform !== "linux") return {};
-  const names = ["DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"];
+  const names = [
+    "DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS",
+    "VIBESTICK_LINUX_HELPER", "VIBECONN_PYTHON", "VIBECONN_LINUX_BACKEND",
+  ];
   return Object.fromEntries(names.flatMap((name) => typeof source[name] === "string" && source[name] ? [[name, source[name]]] : []));
 }
