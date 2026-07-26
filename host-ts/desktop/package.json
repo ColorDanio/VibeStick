@@ -10,17 +10,20 @@
     "dev": "vite",
     "build": "tsc -b && vite build && npm run build:electron",
     "build:electron": "tsc -p electron/tsconfig.json",
+    "rebuild:noble": "node scripts/rebuild-native.mjs",
     "preview": "vite preview",
     "desktop": "electron electron-dist/main.js",
-    "package:dir": "npm run build && electron-builder --dir",
-    "package": "npm run build && electron-builder"
+    "package:dir": "npm run rebuild:noble && npm run build && electron-builder --dir",
+    "package": "npm run rebuild:noble && npm run build && electron-builder"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@abandonware/noble": "^1.9.2-20"
+  },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.4.1",
+    "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@types/node": "^24.0.0",
+    "@vitejs/plugin-react": "^4.4.1",
     "electron": "^35.0.0",
     "electron-builder": "^26.0.0",
     "react": "^19.0.0",
@@ -33,13 +36,52 @@
     "productName": "VibeStick Host",
     "executableName": "vibestick-host",
     "asar": true,
-    "files": ["dist/**/*", "electron-dist/**/*", "package.json"],
-    "extraResources": [
-      { "from": "../dist", "to": "host-core", "filter": ["**/*"] },
-      { "from": "../node_modules", "to": "host-core/node_modules", "filter": ["@abandonware/**", "debug/**", "ms/**", "napi-thread-safe-callback/**", "node-addon-api/**", "node-gyp-build/**"] }
+    "npmRebuild": false,
+    "files": [
+      "dist/**/*",
+      "electron-dist/**/*",
+      "package.json"
     ],
-    "linux": { "target": ["AppImage", "deb"], "category": "Utility" },
-    "mac": { "target": ["dmg", "zip"], "category": "public.app-category.utilities" },
-    "win": { "target": ["nsis", "zip"] }
+    "extraResources": [
+      {
+        "from": "../dist",
+        "to": "host-core",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "node_modules",
+        "to": "host-core/node_modules",
+        "filter": [
+          "@abandonware/**",
+          "debug/**",
+          "ms/**",
+          "napi-thread-safe-callback/**",
+          "node-addon-api/**",
+          "node-gyp-build/**"
+        ]
+      }
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.utilities"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    }
   }
 }

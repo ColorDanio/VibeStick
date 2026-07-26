@@ -54,3 +54,9 @@ those native desktop artifacts alongside firmware and Python 1.x packages.
 This verifies packaging compatibility only; it is not evidence that BLE,
 virtual audio, permissions, notarization, or code signing have completed on a
 platform.
+
+Noble is a desktop production dependency so packaging can rebuild the active
+platform's binding for Electron rather than copying a normal-Node binary from
+HostCore. Linux rebuilds the HCI binding; macOS/Windows rebuild Noble's own
+binding. The Linux CI job also loads Noble from the final unpacked Electron
+resource without scanning or connecting BLE, which catches ABI mismatches.
