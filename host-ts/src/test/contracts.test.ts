@@ -14,6 +14,7 @@ import { HostCore } from "../core.js";
 import { dashboardRequest } from "../dashboard.js";
 import { loadConfigFile, loadSessionDirectory, saveConfigFile } from "../files.js";
 import { lifecyclePlan } from "../lifecycle.js";
+import { executeLifecycle, type CommandRunner, type FileSystem } from "../lifecycle-runner.js";
 import { VibeBridge } from "../bridge.js";
 import { MemoryGattTransport } from "../transport.js";
 import { HostRuntime } from "../runtime.js";
@@ -142,6 +143,32 @@ test("lifecycle plans are per-user and contain idempotent unregister operations"
   const windows = lifecyclePlan("win32", common);
   assert.deepEqual(windows.files, []);
   assert.deepEqual(windows.uninstall[0]?.args, ["/Delete", "/TN", "VibeStick Host", "/F"]);
+});
+
+test("lifecycle executor writes before install, removes only after a successful uninstall", async () => {
+  const plan = lifecyclePlan("linux", { executable: "/opt/vibestick", configPath: "/tmp/config.json", home: "/home/alice", uid: 1 });
+  const calls: string[] = [];
+  const files: FileSystem = {
+    async write(file) { calls.push(`write:${file.path}`); }, async remove(path) { calls.push(`remove:${path}`); },
+  };
+  const runner: CommandRunner = { async run(invocation) { calls.push(`run:${invocation.command}:${invocation.args.join(" ")}`); return { code: 0, stdout: "", stderr: "" }; } };
+  const installed = await executeLifecycle(plan, "install", runner, files);
+  assert.equal(installed.files.length, 1);
+  assert.match(calls[0] ?? "", /^write:/);
+  assert.match(calls[1] ?? "", /^run:systemctl:--user daemon-reload/);
+  calls.length = 0;
+  const removed = await executeLifecycle(plan, "uninstall", runner, files);
+  assert.equal(removed.files.length, 1);
+  assert.match(calls.at(-1) ?? "", /^remove:/);
+});
+
+test("lifecycle executor retains registration files when unregister fails", async () => {
+  const plan = lifecyclePlan("linux", { executable: "/opt/vibestick", configPath: "/tmp/config.json", home: "/home/alice", uid: 1 });
+  let removed = false;
+  const files: FileSystem = { async write() {}, async remove() { removed = true; } };
+  const runner: CommandRunner = { async run() { return { code: 1, stdout: "", stderr: "denied" }; } };
+  await assert.rejects(executeLifecycle(plan, "uninstall", runner, files), /denied/);
+  assert.equal(removed, false);
 });
 
 test("BLE bridge subscribes, syncs and keeps Vibe Mic audio separate from ASR", async () => {
