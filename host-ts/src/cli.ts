@@ -5,6 +5,7 @@ import { loadConfigFile, loadSessionDirectory } from "./files.js";
 import { createLinuxBridge } from "./linux-bridge.js";
 import { HostRuntime, type Capabilities } from "./runtime.js";
 import { startDashboardServer } from "./server.js";
+import type { VibeBridge } from "./bridge.js";
 
 type Args = { config: string; sessions: string; port: number; helper?: string; address?: string };
 
@@ -17,6 +18,7 @@ async function main(): Promise<void> {
   console.log(`VibeStick TS dashboard: http://127.0.0.1:${dashboard.port}`);
 
   let runtime: HostRuntime | undefined;
+  let bridge: VibeBridge | undefined;
   if (args.helper) {
     const bridgeOptions = {
       helperExecutable: args.helper,
@@ -24,7 +26,9 @@ async function main(): Promise<void> {
       onError: (error: Error) => console.error(`capability error: ${error.message}`),
       ...(args.address ? { address: args.address } : {}),
     };
-    const { bridge, mic } = createLinuxBridge(core, bridgeOptions);
+    const linux = createLinuxBridge(core, bridgeOptions);
+    bridge = linux.bridge;
+    const { mic } = linux;
     const capabilities: Capabilities = {
       ble: { available: true }, keyboard: { available: true }, mic: { available: false, reason: "PipeWire probe pending" },
     };
@@ -35,7 +39,12 @@ async function main(): Promise<void> {
   } else {
     console.log("VibeStick TS runtime: degraded (no Linux BLE helper; Python traditional daemon remains available)");
   }
-  const stop = async (): Promise<void> => { await runtime?.stop(); await dashboard.close(); };
+  const refresh = async (): Promise<void> => {
+    core.replaceSessions(await loadSessionDirectory(args.sessions));
+    await bridge?.sync();
+  };
+  const refreshTimer = setInterval(() => { void refresh().catch((error) => console.error(`session refresh failed: ${String(error)}`)); }, 1000);
+  const stop = async (): Promise<void> => { clearInterval(refreshTimer); await runtime?.stop(); await dashboard.close(); };
   process.once("SIGINT", () => { void stop().finally(() => process.exit(0)); });
   process.once("SIGTERM", () => { void stop().finally(() => process.exit(0)); });
 }
