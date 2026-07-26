@@ -38,6 +38,7 @@ async function main(): Promise<void> {
         mic: { available: false, reason: "Start Host 2.0 with the Linux BLE helper" },
         asr: { available: false, reason: "Configure an ASR provider for Host 2.0" },
       },
+      config: { path: args.config, asr_engine: config.asr.engine, asr_model: config.asr.online.model, online_asr_configured: config.asr.engine === "online" && Boolean(config.asr.online.api_key) },
       ...(diagnostics?.error ? { error: diagnostics.error } : {}),
     };
   };

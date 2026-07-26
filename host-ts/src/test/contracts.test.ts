@@ -126,6 +126,7 @@ test("dashboard contract returns snapshots and routes commands through one core"
   const desktop = dashboardRequest(core, "GET", "/api/desktop", undefined, {
     implementation: "host-2", owner: "active", runtime: "ready",
     capabilities: { ble: { available: true }, keyboard: { available: true }, mic: { available: true }, asr: { available: true } },
+    config: { path: "/tmp/config.json", asr_engine: "online", asr_model: "whisper", online_asr_configured: true },
   });
   assert.equal((desktop.body as { environment: { owner: string } }).environment.owner, "active");
 });
