@@ -1287,14 +1287,11 @@ void uiShowMic(const char* errorText, bool yolo) {
   if (yolo && strcmp(vst, "transcribing") == 0) {
     centerText("transcribing...", cy + ringR + 30, 1, COL_AMBER);
   } else if (hasLast) {
-    // Keep the last result visible between utterances.  It proves both ASR
-    // and focused-input delivery to the person holding the Stick without
-    // turning this compact mode into a conversation screen.
-    M5Lcd.setTextColor(COL_GREEN, TFT_BLACK);
-    M5Lcd.setCursor(4, cy + ringR + 30);
-    M5Lcd.print("last: ");
-    drawMarquee(MQ_TRANSCRIPT, gVoice.text, 40, cy + ringR + 30,
-                charsFit(sW - 44, 1), 1, COL_GREEN, TFT_BLACK);
+    // Keep the exact transcript visible between utterances.  Do not use the
+    // 6 px marquee here: it deliberately replaces UTF-8 bytes with '?' and
+    // would bypass the fixed-width 16x16 CJK bitmap renderer.
+    drawText16N(4, cy + ringR + 26, gVoice.text, strlen(gVoice.text),
+                COL_GREEN, TFT_BLACK, sW - 8);
   } else {
     centerText(st, cy + ringR + 30, 1, stCol);
   }

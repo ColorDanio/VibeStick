@@ -57,8 +57,7 @@ def test_focused_input_uses_clipboard_for_unicode_wayland_text(monkeypatch):
     assert calls[0][0] == ("/usr/bin/wl-copy",)
     assert calls[1] == ("input", "中文 text".encode())
     assert calls[2][0] == (
-        "/usr/bin/ydotool", "key", "29:1", "42:1", "47:1",
-        "47:0", "42:0", "29:0",
+        "/usr/bin/ydotool", "key", "29:1", "47:1", "47:0", "29:0",
     )
 
 

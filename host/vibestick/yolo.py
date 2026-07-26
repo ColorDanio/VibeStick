@@ -7,9 +7,10 @@ import shutil
 
 log = logging.getLogger(__name__)
 
-# Linux input-event codes.  Ctrl+Shift+V is the paste shortcut in terminals
-# and the plain-text paste shortcut in Chromium/Electron/most GTK apps.
-_PASTE = ("29:1", "42:1", "47:1", "47:0", "42:0", "29:0")
+# Linux input-event codes.  Ctrl+V is the standard paste shortcut for text
+# editors and browsers.  (Ctrl+Shift+V is terminal-specific and was not
+# accepted by the user's notepad.)
+_PASTE = ("29:1", "47:1", "47:0", "29:0")
 
 
 class FocusedInput:
