@@ -75,6 +75,18 @@ async function main(): Promise<void> {
           if (!commands || !(await commands.binding(tool?.bindings.cancel || "escape"))) throw new Error("inference cancel failed");
           return;
         }
+        if (command.cmd === "session.new") {
+          const tool = config.tools.find((item) => item.id === core.snapshot().selected_tool);
+          const commandLine = tool?.command || tool?.process || "";
+          const ok = Boolean(tool && commands && await commands.newSession({
+            tool: tool.id, name: tool.name, command: commandLine,
+            ...(tool.cwd ? { cwd: tool.cwd } : {}),
+            launcher: config.session_launcher,
+          }));
+          if (!ok) throw new Error("new session failed");
+          core.store.requestNewSession();
+          return;
+        }
         if (command.cmd === "yolo.enter") {
           if (!commands || !(await commands.focusedEnter())) throw new Error("YOLO enter failed");
           return;

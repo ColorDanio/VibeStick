@@ -14,6 +14,9 @@ export class LinuxCommandAdapter {
   async focusedText(text: string): Promise<boolean> { return this.invoke("focused.text", { text }); }
   async focusedEnter(): Promise<boolean> { return this.invoke("focused.enter"); }
   async focusedEscape(): Promise<boolean> { return this.invoke("focused.escape"); }
+  async newSession(input: { tool: string; name: string; command: string; cwd?: string; launcher: "auto" | "tmux" | "zellij" }): Promise<boolean> {
+    return this.invoke("session.new", input);
+  }
 
   private async invoke(command: string, values: Record<string, unknown> = {}): Promise<boolean> {
     try {

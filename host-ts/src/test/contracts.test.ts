@@ -98,6 +98,14 @@ test("domain store derives ready/running tool states and selected payloads", () 
   assert.deepEqual(store.toolsPayload().list[1]?.fns, ["status", "sessions", "voice"]);
 });
 
+test("session store selects the next discovered session after a successful session.new request", () => {
+  const store = new HostSessionStore(normalizeConfig({ tools: [{ id: "codex", name: "Codex" }] }));
+  const status = (id: string, updated: number) => ({ id, status: { tool: "codex", model: "", session: id, state: "idle", ctx_pct: -1, cost_usd: -1, last: "", updated } });
+  store.replace([status("old", 1)]); store.requestNewSession();
+  store.replace([status("new", 2), status("old", 1)]);
+  assert.equal(store.activeId, "new");
+});
+
 test("dashboard contract returns snapshots and routes commands through one core", () => {
   const core = new HostCore(normalizeConfig({ tools: [{ id: "codex", name: "Codex" }] }));
   core.replaceSessions([{ id: "c1", status: { tool: "codex", model: "", session: "Work", state: "idle", ctx_pct: -1, cost_usd: -1, last: "", updated: 1 } }]);
@@ -269,7 +277,8 @@ test("Linux command adapter keeps TS policy while delegating only safe system ac
   assert.equal(await adapter.focusedText("global text"), true);
   assert.equal(await adapter.focusedEnter(), true);
   assert.equal(await adapter.focusedEscape(), true);
-  assert.deepEqual(calls.map((call) => call.command), ["delivery.text", "delivery.binding", "focused.text", "focused.enter", "focused.escape"]);
+  assert.equal(await adapter.newSession({ tool: "codex", name: "Codex", command: "codex", launcher: "auto" }), true);
+  assert.deepEqual(calls.map((call) => call.command), ["delivery.text", "delivery.binding", "focused.text", "focused.enter", "focused.escape", "session.new"]);
   assert.deepEqual(calls[0]?.values.record, { tmux: "%7" });
 });
 

@@ -126,6 +126,29 @@ class Helper:
         self._release_owner()
         emit({"event": "disconnected"})
 
+    async def new_session(self, request: dict) -> bool:
+        """Launch a monitored CLI session; policy comes from TypeScript."""
+        tool_id = str(request.get("tool") or "")
+        name = str(request.get("name") or tool_id)
+        command = str(request.get("command") or "")
+        cwd = str(request.get("cwd") or "")
+        launcher = str(request.get("launcher") or "auto")
+        record = request.get("record") if isinstance(request.get("record"), dict) else {}
+        tmux = str(record.get("tmux") or "")
+        zellij = str(record.get("zellij") or "")
+        if not command or not tool_id:
+            return False
+        if launcher == "tmux":
+            return await (delivery.launch_tmux_window(tmux, name, command, cwd) if tmux
+                          else delivery.launch_tmux_session(tool_id, name, command, cwd or str(Path.home())))
+        if launcher == "zellij":
+            return await delivery.launch_zellij_pane(zellij, name, command, cwd) if zellij else False
+        if tmux:
+            return await delivery.launch_tmux_window(tmux, name, command, cwd)
+        if zellij:
+            return await delivery.launch_zellij_pane(zellij, name, command, cwd)
+        return await delivery.launch_tmux_session(tool_id, name, command, cwd or str(Path.home()))
+
 
 async def main() -> None:
     helper = Helper()
@@ -161,6 +184,8 @@ async def main() -> None:
                 result = {"delivered": await helper.focused.enter()}
             elif command == "focused.escape":
                 result = {"delivered": await helper.focused.escape_twice()}
+            elif command == "session.new":
+                result = {"delivered": await helper.new_session(request)}
             else:
                 raise ValueError("unknown command")
             emit({"id": ident, "ok": True, "result": result})

@@ -19,6 +19,7 @@ const rank = (state: string): number => {
 export class HostSessionStore {
   private records: SessionRecord[] = [];
   private selection: SessionSelection;
+  private pendingNew: { tool: string; known: Set<string>; deadline: number } | undefined;
 
   constructor(readonly config: Config) {
     this.selection = new SessionSelection(config.tools, []);
@@ -34,12 +35,19 @@ export class HostSessionStore {
       priorTool,
     );
     if (priorActive && this.selection.ids().includes(priorActive)) this.selection.apply({ cmd: "session.select", id: priorActive });
+    if (this.pendingNew && this.pendingNew.tool === this.selection.selectedTool && Date.now() <= this.pendingNew.deadline) {
+      const fresh = this.selection.ids().find((id) => !this.pendingNew?.known.has(id));
+      if (fresh) { this.selection.apply({ cmd: "session.select", id: fresh }); this.pendingNew = undefined; }
+    } else if (this.pendingNew && Date.now() > this.pendingNew.deadline) this.pendingNew = undefined;
   }
 
   apply(command: { cmd: string; id?: string }): boolean { return this.selection.apply(command); }
   get selectedTool(): string | null { return this.selection.selectedTool; }
   get activeId(): string | null { return this.selection.activeId; }
   activeRaw(): Record<string, unknown> | undefined { return this.records.find((record) => record.id === this.activeId)?.raw; }
+  requestNewSession(now = Date.now(), timeoutMs = 30_000): void {
+    this.pendingNew = { tool: this.selectedTool ?? "", known: new Set(this.selection.ids()), deadline: now + timeoutMs };
+  }
 
   statusPayload(): SessionStatus {
     return this.records.find((record) => record.id === this.activeId)?.status
