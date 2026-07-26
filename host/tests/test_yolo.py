@@ -111,6 +111,8 @@ def test_yolo_commands_route_to_focused_input_and_report_failure(tmp_path, monke
     class FakePipeline:
         def __init__(self, _asr, push, deliver, **_kwargs):
             self.push, self.deliver = push, deliver
+            self.state = "idle"
+            self.transcript = ""
 
         def start(self):
             pass
@@ -119,10 +121,11 @@ def test_yolo_commands_route_to_focused_input_and_report_failure(tmp_path, monke
             pass
 
         async def stop(self):
-            pass
+            self.state = "ready"
+            self.transcript = "hello yolo"
 
         def confirm(self):
-            self.deliver("hello yolo")
+            self.deliver(self.transcript)
 
         def cancel(self):
             pass

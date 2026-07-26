@@ -401,7 +401,12 @@ async def run_daemon(
                     async def finish() -> None:
                         await pipeline.stop()
                         if holder["voice_mode"] == "yolo":
-                            pipeline.confirm()
+                            # YOLO sends immediately, but deliberately keeps
+                            # VoicePipeline in ``ready``.  The Stick can then
+                            # show the exact last transcription until the
+                            # next hold-to-talk starts a new recording.
+                            if pipeline.state == "ready" and pipeline.transcript:
+                                await deliver_yolo_text(pipeline.transcript)
                             holder["voice_mode"] = "asr"
                     spawn(finish())
                 elif action == "asr.cancel":

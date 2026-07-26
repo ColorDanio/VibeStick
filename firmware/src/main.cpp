@@ -584,7 +584,9 @@ static void applyBleDirty() {
       sErrorAt = millis();
       Serial.printf("[VOICE] error: %s\n", sErrorText);
     }
-    if (sScreen == SCR_CONVO || sScreen == SCR_MIC) sNeedRedraw = true;
+    if (sScreen == SCR_CONVO || sScreen == SCR_MIC || sScreen == SCR_YOLO) {
+      sNeedRedraw = true;
+    }
   }
 }
 

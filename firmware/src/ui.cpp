@@ -1282,7 +1282,22 @@ void uiShowMic(const char* errorText, bool yolo) {
              TFT_BLACK);
   const char* st = bleConnected() ? "connected" : "advertising";
   uint16_t stCol = bleConnected() ? TFT_GREEN : COL_AMBER;
-  centerText(st, cy + ringR + 30, 1, stCol);
+  const char* vst = gVoice.valid ? gVoice.state : "idle";
+  bool hasLast = yolo && strcmp(vst, "ready") == 0 && gVoice.text[0];
+  if (yolo && strcmp(vst, "transcribing") == 0) {
+    centerText("transcribing...", cy + ringR + 30, 1, COL_AMBER);
+  } else if (hasLast) {
+    // Keep the last result visible between utterances.  It proves both ASR
+    // and focused-input delivery to the person holding the Stick without
+    // turning this compact mode into a conversation screen.
+    M5Lcd.setTextColor(COL_GREEN, TFT_BLACK);
+    M5Lcd.setCursor(4, cy + ringR + 30);
+    M5Lcd.print("last: ");
+    drawMarquee(MQ_TRANSCRIPT, gVoice.text, 40, cy + ringR + 30,
+                charsFit(sW - 44, 1), 1, COL_GREEN, TFT_BLACK);
+  } else {
+    centerText(st, cy + ringR + 30, 1, stCol);
+  }
 
   // Bottom hint line(s).
   M5Lcd.drawFastHLine(0, footDivY(), sW, COL_FAINT);
