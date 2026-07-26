@@ -245,9 +245,21 @@ async def run_daemon(
     focused = yolo.FocusedInput()
     holder["voice_mode"] = "asr"
 
+    async def deliver_yolo_text(text: str) -> None:
+        if not await focused.text(text):
+            push_status_error("YOLO input failed: install ydotool or wtype")
+
+    async def deliver_yolo_enter() -> None:
+        if not await focused.enter():
+            push_status_error("YOLO Enter failed: focused input unavailable")
+
+    async def deliver_yolo_escape() -> None:
+        if not await focused.escape_twice():
+            push_status_error("YOLO Escape failed: focused input unavailable")
+
     def deliver_transcript(text: str) -> None:
         if holder["voice_mode"] == "yolo":
-            spawn(focused.text(text))
+            spawn(deliver_yolo_text(text))
         else:
             deliver_message(text)
 
@@ -365,9 +377,9 @@ async def run_daemon(
         elif cmd == protocol.CMD_SESSION_NEW:
             on_session_new()
         elif cmd == protocol.CMD_YOLO_ENTER:
-            spawn(focused.enter())
+            spawn(deliver_yolo_enter())
         elif cmd == protocol.CMD_YOLO_ESCAPE:
-            spawn(focused.escape_twice())
+            spawn(deliver_yolo_escape())
         elif cmd in (protocol.CMD_VOICE_START, protocol.CMD_VOICE_STOP, protocol.CMD_VOICE_CANCEL):
             if cmd == protocol.CMD_VOICE_START:
                 holder["voice_mode"] = "yolo" if payload.get("mode") == "yolo" else "asr"
