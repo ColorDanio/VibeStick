@@ -12,7 +12,7 @@ import { VibeBridge } from "./bridge.js";
 import type { DashboardEnvironment } from "./dashboard.js";
 import { VoicePipeline, onlineTranscriber } from "./asr.js";
 import { NodeProcessInspector, discoverProcessSessions, mergeSessions } from "./process-discovery.js";
-import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher, updateToolCwd } from "./settings.js";
+import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher, updateToolCwd, verifyOnlineAsr } from "./settings.js";
 import { probeTraditionalOwner, type TraditionalOwner } from "./ownership.js";
 import { diagnosticsReport } from "./diagnostics.js";
 import { NobleGattTransport } from "./noble-transport.js";
@@ -53,6 +53,7 @@ async function main(): Promise<void> {
   };
   const dashboard = await startDashboardServer(core, args.port, environment, {
     async updateOnlineAsr(body) { config = updateOnlineAsr(config, body); await saveConfigFile(args.config, config); return publicAsrSettings(config); },
+    async testOnlineAsr() { return verifyOnlineAsr(config); },
     async updateSessionLauncher(body) { config = updateSessionLauncher(config, body); await saveConfigFile(args.config, config); return { session_launcher: config.session_launcher }; },
     async updateToolCwd(body) {
       const rawCwd = typeof body === "object" && body !== null && "cwd" in body && typeof (body as { cwd?: unknown }).cwd === "string" ? (body as { cwd: string }).cwd.trim() : "";

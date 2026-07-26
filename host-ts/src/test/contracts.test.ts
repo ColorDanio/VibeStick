@@ -23,7 +23,7 @@ import { LinuxVibeMicSink } from "../mic-sink.js";
 import { startDashboardServer } from "../server.js";
 import { VoicePipeline, wav, type AsrTranscriber } from "../asr.js";
 import { discoverProcessSessions, mergeSessions } from "../process-discovery.js";
-import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher, updateToolCwd } from "../settings.js";
+import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher, updateToolCwd, verifyOnlineAsr } from "../settings.js";
 import { probeTraditionalOwner } from "../ownership.js";
 import { diagnosticsReport } from "../diagnostics.js";
 import { NobleGattTransport, type NobleAdapter } from "../noble-transport.js";
@@ -210,7 +210,7 @@ test("cross-platform YOLO focused input uses safe argv/environment boundaries", 
   assert.equal(await linux.text("no"), false);
 });
 
-test("online ASR settings validate provider data and never return API keys", () => {
+test("online ASR settings validate provider data and never return API keys", async () => {
   const updated = updateOnlineAsr(normalizeConfig({}), { api_base: "https://api.example.test/v1", model: "whisper", api_key: "secret-key" });
   assert.equal(updated.asr.engine, "online");
   assert.deepEqual(publicAsrSettings(updated), { engine: "online", api_base: "https://api.example.test/v1", model: "whisper", configured: true });
@@ -222,6 +222,14 @@ test("online ASR settings validate provider data and never return API keys", () 
   const configuredTool = updateToolCwd(withTool, { id: "codex", cwd: "/work" });
   assert.equal(updateToolCwd(configuredTool, { id: "codex", cwd: "" }).tools[0]?.cwd, undefined);
   assert.throws(() => updateToolCwd(withTool, { id: "none", cwd: "/work" }), /Unknown/);
+  const calls: RequestInit[] = [];
+  const verification = await verifyOnlineAsr(updated, async (_url, init) => {
+    calls.push(init ?? {});
+    return new Response(JSON.stringify({ data: [{ id: "whisper" }] }), { status: 200 });
+  });
+  assert.deepEqual(verification, { provider: "reachable", model_available: true });
+  assert.equal((calls[0]?.headers as { authorization?: string }).authorization, "Bearer secret-key");
+  await assert.rejects(verifyOnlineAsr(normalizeConfig({ asr: { engine: "online" } })), /API key/);
 });
 
 test("loopback dashboard permits the desktop development origin and JSON commands", async () => {
@@ -230,6 +238,19 @@ test("loopback dashboard permits the desktop development origin and JSON command
   const response = await fetch(`http://127.0.0.1:${server.port}/api/desktop`, { headers: { origin: "http://127.0.0.1:5174" } });
   assert.equal(response.headers.get("access-control-allow-origin"), "http://127.0.0.1:5174");
   assert.equal(response.status, 200);
+  await server.close();
+});
+
+test("dashboard exposes an explicit online ASR provider test without returning secrets", async () => {
+  const core = new HostCore(normalizeConfig({ tools: [] }));
+  const server = await startDashboardServer(core, 0, undefined, {
+    async updateOnlineAsr() { return { engine: "online", api_base: "https://example.test", model: "whisper", configured: true }; },
+    async testOnlineAsr() { return { provider: "reachable", model_available: null }; },
+    async updateSessionLauncher() { return { session_launcher: "auto" }; },
+    async updateToolCwd() { return { id: "", cwd: "" }; },
+  });
+  const response = await fetch(`http://127.0.0.1:${server.port}/api/settings/asr/test`, { method: "POST" });
+  assert.deepEqual(await response.json(), { ok: true, provider: "reachable", model_available: null });
   await server.close();
 });
 

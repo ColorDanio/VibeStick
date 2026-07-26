@@ -4,6 +4,7 @@ import { dashboardRequest, type DashboardEnvironment } from "./dashboard.js";
 
 export interface SettingsService {
   updateOnlineAsr(body: unknown): Promise<{ engine: string; api_base: string; model: string; configured: boolean }>;
+  testOnlineAsr(): Promise<{ provider: "reachable"; model_available: boolean | null }>;
   updateSessionLauncher(body: unknown): Promise<{ session_launcher: "auto" | "tmux" | "zellij" }>;
   updateToolCwd(body: unknown): Promise<{ id: string; cwd: string }>;
 }
@@ -42,6 +43,16 @@ export async function startDashboardServer(core: HostCore, port = 7861, environm
         response.end(JSON.stringify({ ok: true, restart_required: true, asr: result })); return;
       } catch (error) {
         response.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) })); return;
+      }
+    }
+    if (request.method === "POST" && request.url === "/api/settings/asr/test" && settings) {
+      try {
+        const result = await settings.testOnlineAsr();
+        response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+        response.end(JSON.stringify({ ok: true, ...result })); return;
+      } catch (error) {
+        response.writeHead(400, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
         response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) })); return;
       }
     }

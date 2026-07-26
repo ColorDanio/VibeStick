@@ -2,6 +2,8 @@ import type { Config } from "./config.js";
 
 export interface OnlineAsrInput { api_base?: unknown; model?: unknown; api_key?: unknown; }
 export interface PublicAsrSettings { engine: string; api_base: string; model: string; configured: boolean; }
+export interface OnlineAsrVerification { provider: "reachable"; model_available: boolean | null; }
+export type SettingsFetcher = (input: string, init?: RequestInit) => Promise<Response>;
 
 /** Validate only the editable online-ASR fields; secrets are never returned. */
 export function updateOnlineAsr(config: Config, input: OnlineAsrInput | unknown): Config {
@@ -16,6 +18,19 @@ export function updateOnlineAsr(config: Config, input: OnlineAsrInput | unknown)
 
 export function publicAsrSettings(config: Config): PublicAsrSettings {
   return { engine: config.asr.engine, api_base: config.asr.online.api_base, model: config.asr.online.model, configured: config.asr.engine === "online" && Boolean(config.asr.online.api_key) };
+}
+
+/** Explicit, read-only provider check. It never sends audio or exposes the API key. */
+export async function verifyOnlineAsr(config: Config, fetcher: SettingsFetcher = fetch): Promise<OnlineAsrVerification> {
+  const { api_base: apiBase, api_key: apiKey, model } = config.asr.online;
+  if (config.asr.engine !== "online" || !apiKey) throw new Error("Save an online ASR API key before testing");
+  const response = await fetcher(`${apiBase.replace(/\/$/, "")}/models`, { headers: { authorization: `Bearer ${apiKey}` } });
+  if (!response.ok) throw new Error(`ASR provider check failed (${response.status})`);
+  let body: unknown;
+  try { body = await response.json(); } catch { return { provider: "reachable", model_available: null }; }
+  const entries = typeof body === "object" && body !== null && Array.isArray((body as { data?: unknown }).data) ? (body as { data: unknown[] }).data : undefined;
+  if (!entries) return { provider: "reachable", model_available: null };
+  return { provider: "reachable", model_available: entries.some((entry) => typeof entry === "object" && entry !== null && (entry as { id?: unknown }).id === model) };
 }
 
 export function updateSessionLauncher(config: Config, input: unknown): Config {
