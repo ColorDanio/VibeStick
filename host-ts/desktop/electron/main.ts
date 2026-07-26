@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, Menu, nativeImage, shell, Tray } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { homedir } from "node:os";
@@ -28,15 +28,42 @@ else app.on("second-instance", () => {
 });
 
 /** Electron is deliberately a thin, cross-platform native shell; HostCore stays shared TypeScript. */
-function startHostCore(): void {
+function pythonFromInstalledVibeConn(): string | undefined {
+  if (process.platform !== "linux") return undefined;
+  // The stable Python package exposes one of these console scripts. Their
+  // shebang is the exact interpreter that has vibestick, Bleak and PipeWire
+  // installed. This lets a packaged 2.0 app-icon work without requiring a
+  // developer to export VIBESTICK_LINUX_HELPER first.
+  const directories = (process.env.PATH ?? "").split(":").filter(Boolean);
+  for (const name of ["vibeconn", "vibeconnd"]) {
+    for (const directory of directories) {
+      const launcher = join(directory, name);
+      if (!existsSync(launcher)) continue;
+      try {
+        const first = readFileSync(launcher, "utf8").split(/\r?\n/, 1)[0] ?? "";
+        const match = first.match(/^#!\s*(\S*python(?:\d(?:\.\d+)?)?)\b/);
+        if (match?.[1] && existsSync(match[1])) return match[1];
+      } catch { /* unreadable/non-Python PATH entry: keep searching */ }
+    }
+  }
+  return undefined;
+}
+
+async function startHostCore(): Promise<void> {
   const generation = ++hostGeneration;
   if (process.env.VIBESTICK_NO_CORE === "1") { hostStatus = { state: "missing", detail: "HostCore startup disabled" }; return; }
   const cli = app.isPackaged ? join(process.resourcesPath, "host-core", "cli.js") : resolve(currentDir, "../../dist/cli.js");
   if (!existsSync(cli)) { hostStatus = { state: "missing", detail: "HostCore executable is missing" }; return; }
   const args = [cli, "--port", "7861"];
-  const helper = process.platform === "linux" ? process.env.VIBESTICK_LINUX_HELPER : undefined;
+  const helper = process.platform === "linux"
+    ? process.env.VIBESTICK_LINUX_HELPER || process.env.VIBECONN_PYTHON || pythonFromInstalledVibeConn()
+    : undefined;
   if (helper) args.push("--linux-helper", helper);
   else if (process.platform !== "linux" || process.env.VIBESTICK_NATIVE_BLE === "1") args.push("--native-ble");
+  else {
+    hostStatus = { state: "missing", detail: "Linux compatibility runtime not found. Install VibeConn 1.x or launch through tools/vibeconn." };
+    return;
+  }
   if (process.env.VIBESTICK_DEVICE_ADDRESS) args.push("--address", process.env.VIBESTICK_DEVICE_ADDRESS);
   const compatibilityDirectory = app.isPackaged ? join(process.resourcesPath, "vibeconn-compat") : resolve(currentDir, "../../../host/tools");
   host = spawn(process.execPath, args, {
@@ -61,7 +88,7 @@ async function restartHostCore(): Promise<typeof hostStatus> {
   if (prior && !prior.killed) {
     await new Promise<void>((resolve) => { prior.once("exit", () => resolve()); prior.kill(); setTimeout(resolve, 3000); });
   }
-  hostStatus = { state: "starting" }; startHostCore(); return hostStatus;
+  hostStatus = { state: "starting" }; await startHostCore(); return hostStatus;
 }
 
 function createWindow(): void {
@@ -96,7 +123,7 @@ function createTray(): void {
 
 void app.whenReady().then(() => {
   if (!app.hasSingleInstanceLock()) return;
-  startHostCore(); createWindow(); createTray();
+  void startHostCore(); createWindow(); createTray();
   app.on("activate", () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });
 ipcMain.handle("vibestick:host-status", () => hostStatus);

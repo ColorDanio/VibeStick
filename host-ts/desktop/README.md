@@ -30,6 +30,12 @@ Host 2.0 with that executable as the helper; it does not stop Python 1.x or
 steal the BLE owner lock. If Python 1.x owns the Stick, the UI reports the
 conflict as degraded until the user explicitly switches owners.
 
+For a packaged Linux app launched directly from an application icon, VibeConn
+2.0 first uses an explicitly configured Python path, then looks for the
+installed `vibeconn` / `vibeconnd` launcher and uses its Python shebang. If no
+compatible 1.x runtime is installed, it reports that prerequisite instead of
+pretending the native preview can provide BLE, Vibe Mic, or session delivery.
+
 When Python 1.x is the current BLE owner, the packaged desktop shows
 **Release to Host 2.0**. It is a user-triggered loopback request to Python's
 dashboard; Python gracefully stops and releases its BLE lock, while Host 2.0
