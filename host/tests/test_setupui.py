@@ -247,6 +247,14 @@ def test_api_command_round_trip(command_server):
     assert received == [{"cmd": "session.select", "id": "disc:abc123"}]
 
 
+def test_api_command_allows_explicit_owner_release(command_server):
+    base, received = command_server
+    status, body = post(base + "/api/command", b'{"cmd":"owner.release"}')
+    assert status == 200
+    assert json.loads(body)["ok"] is True
+    assert received == [{"cmd": "owner.release"}]
+
+
 def test_api_command_validation(command_server):
     base, received = command_server
     status, _ = post(base + "/api/command", b"not json")

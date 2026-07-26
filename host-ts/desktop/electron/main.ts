@@ -85,6 +85,18 @@ void app.whenReady().then(() => {
 });
 ipcMain.handle("vibestick:host-status", () => hostStatus);
 ipcMain.handle("vibestick:restart-host", () => restartHostCore());
+ipcMain.handle("vibestick:release-python-owner", async (): Promise<{ ok: boolean; detail: string }> => {
+  try {
+    const response = await fetch("http://127.0.0.1:7860/api/command", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cmd: "owner.release" }), signal: AbortSignal.timeout(1_500),
+    });
+    if (!response.ok) return { ok: false, detail: `Python 1.x refused owner release (${response.status}).` };
+    return { ok: true, detail: "Python 1.x released BLE. Host 2.0 will retry the connection shortly." };
+  } catch (error) {
+    return { ok: false, detail: error instanceof Error ? error.message.slice(0, 180) : String(error).slice(0, 180) };
+  }
+});
 ipcMain.handle("vibestick:login-startup", async (_event, action: unknown): Promise<{ ok: boolean; detail: string }> => {
   if (action !== "install" && action !== "uninstall") return { ok: false, detail: "Invalid login-startup action" };
   try {

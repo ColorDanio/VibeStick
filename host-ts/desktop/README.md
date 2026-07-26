@@ -26,6 +26,12 @@ Host 2.0 with that executable as the helper; it does not stop Python 1.x or
 steal the BLE owner lock. If Python 1.x owns the Stick, the UI reports the
 conflict as degraded until the user explicitly switches owners.
 
+When Python 1.x is the current BLE owner, the packaged desktop shows
+**Release to Host 2.0**. It is a user-triggered loopback request to Python's
+dashboard; Python gracefully stops and releases its BLE lock, while Host 2.0
+retries normally. The desktop never terminates Python, changes its settings,
+or requests release automatically.
+
 On macOS and Windows the packaged desktop app starts the TypeScript-native
 Noble GATT transport automatically. It can own the BLE link and synchronize
 the Stick, but it intentionally does **not** claim Vibe Mic, keyboard, or

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactElement } from "react";
 
-declare global { interface Window { vibestickDesktop?: { hostStatus(): Promise<{ state: string; detail?: string }>; restartHost(): Promise<{ state: string; detail?: string }>; loginStartup(action: "install" | "uninstall"): Promise<{ ok: boolean; detail: string }>; loginStartupStatus(): Promise<{ enabled: boolean; detail?: string }> }; } }
+declare global { interface Window { vibestickDesktop?: { hostStatus(): Promise<{ state: string; detail?: string }>; restartHost(): Promise<{ state: string; detail?: string }>; releasePythonOwner(): Promise<{ ok: boolean; detail: string }>; loginStartup(action: "install" | "uninstall"): Promise<{ ok: boolean; detail: string }>; loginStartupStatus(): Promise<{ enabled: boolean; detail?: string }> }; } }
 
 type Capability = { available: boolean; reason?: string; testable?: boolean };
 type Session = { id: string; state: "idle" | "running" | "waiting"; session: string; model: string; last: string; tool: string };
@@ -49,6 +49,7 @@ export function App(): ReactElement {
   const cwdInitialized = useRef(false);
   const [restartRequired, setRestartRequired] = useState(false);
   const [restarting, setRestarting] = useState(false);
+  const [releasingOwner, setReleasingOwner] = useState(false);
   const [loginBusy, setLoginBusy] = useState<"install" | "uninstall" | undefined>();
   const [loginStartupEnabled, setLoginStartupEnabled] = useState<boolean | undefined>();
 
@@ -148,6 +149,15 @@ export function App(): ReactElement {
     catch (error) { setNotice(`Could not restart Host 2.0: ${error instanceof Error ? error.message : String(error)}`); }
     finally { setRestarting(false); }
   };
+  const releasePythonOwner = async (): Promise<void> => {
+    if (!window.vibestickDesktop) return;
+    setReleasingOwner(true);
+    try {
+      const result = await window.vibestickDesktop.releasePythonOwner();
+      setNotice(result.detail);
+    } catch (error) { setNotice(`Could not release Python 1.x BLE owner: ${error instanceof Error ? error.message : String(error)}`); }
+    finally { setReleasingOwner(false); }
+  };
   const downloadDiagnostics = (): void => {
     const anchor = document.createElement("a");
     anchor.href = "http://127.0.0.1:7861/api/diagnostics";
@@ -185,6 +195,7 @@ export function App(): ReactElement {
         <div className="connection"><span className={`dot ${bleConnected ? "green" : runtime === "degraded" ? "amber" : ""}`}></span><strong>{bleConnected ? "BLE connected" : runtime === "degraded" ? "Needs attention" : "Not connected"}</strong><span className="owner">Host 2.0 {bleConnected ? "active" : "standby"}</span></div>
       </header>
       {notice && <div className="notice"><span>{notice}</span>{restartRequired && window.vibestickDesktop && <button onClick={() => void restartHost()} disabled={restarting}>{restarting ? "Restarting…" : "Restart Host 2.0"}</button>}</div>}
+      {data.environment.traditional_owner.state === "running" && data.environment.owner === "inactive" && window.vibestickDesktop && <div className="handoff"><div><b>Python 1.x owns BLE</b><p>{data.environment.traditional_owner.detail ?? "Release it explicitly before Host 2.0 connects."}</p><small>This stops Python 1.x gracefully and releases its BLE lock. It does not delete configuration or sessions.</small></div><button onClick={() => void releasePythonOwner()} disabled={releasingOwner}>{releasingOwner ? "Releasing…" : "Release to Host 2.0"}</button></div>}
       <section className="device-row">
         <div className="device-summary"><div className="stick-art"><i></i><i></i><b>V</b></div><div><p className="eyebrow">M5STICKC PLUS</p><h2>VibeStick</h2><p>{bleConnected ? "BLE bridge connected and synchronized. Check capability cards for platform setup." : "Choose Host 2.0 as the BLE owner to connect."}</p></div></div>
         <div className="capabilities">{(["ble", "keyboard", "mic", "asr"] as const).map((key) => <div className="cap" key={key}><span className={`cap-icon ${data.environment.capabilities[key].available ? "on" : ""}`}>{data.environment.capabilities[key].available ? "✓" : "–"}</span><div><b>{key === "ble" ? "BLE bridge" : key === "keyboard" ? "HID keys" : key === "mic" ? "Vibe Mic" : "Agent ASR"}</b><small>{data.environment.capabilities[key].available ? "Available" : data.environment.capabilities[key].reason}</small></div></div>)}{yolo && <div className="cap"><span className={`cap-icon ${yolo.available ? "on" : ""}`}>{yolo.available ? "✓" : "–"}</span><div><b>YOLO input</b><small>{yolo.available ? yolo.reason ?? "Available" : yolo.reason}</small></div></div>}</div>

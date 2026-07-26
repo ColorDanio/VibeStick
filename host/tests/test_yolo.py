@@ -117,3 +117,19 @@ def test_yolo_commands_route_to_focused_input_and_report_failure(tmp_path, monke
     status = json.loads(transport.last("STATUS"))
     assert status["state"] == "error"
     assert status["last"].startswith("YOLO ")
+
+
+def test_explicit_owner_release_stops_python_daemon_and_releases_ble(tmp_path):
+    async def main():
+        store = SessionStore(tmp_path / "sessions", config=Config(tools=[]))
+        transport = FakeTransport()
+        task = asyncio.create_task(daemon.run_daemon(
+            store, transport, store.config, runtime={},
+            poll_interval=0.02, presence_interval=60, discovery_interval=60,
+        ))
+        await asyncio.sleep(0.08)
+        transport.notify("COMMAND", b'{"cmd":"owner.release"}')
+        await asyncio.wait_for(task, timeout=1)
+        assert transport.connected is False
+
+    asyncio.run(main())

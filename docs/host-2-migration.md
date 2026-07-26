@@ -11,13 +11,18 @@ Start with Python 1.x unless you are deliberately validating Host 2.0.
 
 To hand the Stick to Host 2.0:
 
-1. Stop the Python process/service using the method that started it (terminal,
-   systemd user service, or the Python desktop app).
-2. Confirm its dashboard at `http://127.0.0.1:7860` is no longer running.
-3. Start VibeStick Host 2.0. It probes the Python dashboard before every first
+1. Start VibeStick Host 2.0. If Python 1.x is running, the Electron desktop
+   shows **Release to Host 2.0**. This is an explicit user action: it sends
+   Python's loopback `owner.release` command, which gracefully disconnects BLE,
+   cancels daemon-owned work, and releases the shared lock. It does not delete
+   configuration or sessions, and Host 2.0 never invokes it automatically.
+2. Alternatively, stop the Python process/service using the method that
+   started it (terminal, systemd user service, or the Python desktop app).
+3. Confirm its dashboard at `http://127.0.0.1:7860` is no longer running.
+4. Host 2.0 probes the Python dashboard before every first
    connection and reconnect attempt; while Python is running, Host 2.0 stays
    standby and does not scan, subscribe, or connect BLE.
-4. Pair or authorize Bluetooth when the operating system asks. The Host 2.0
+5. Pair or authorize Bluetooth when the operating system asks. The Host 2.0
    Overview must say **BLE connected** before treating the Stick as controlled.
 
 To return to Python 1.x, quit VibeStick Host 2.0 from its tray menu (not merely

@@ -85,6 +85,9 @@ async def run_daemon(
         "config_path": config_path,
         "config_mtime": _mtime(config_path),
     }
+    # Set only by the explicit loopback dashboard command. Host 2.0 never
+    # breaks Python's owner lock itself; this lets the user hand it off cleanly.
+    release_owner = asyncio.Event()
     event_loop = asyncio.get_running_loop()
     if runtime is not None:
         runtime["loop"] = event_loop
@@ -370,7 +373,9 @@ async def run_daemon(
 
     def on_command(payload: dict) -> None:
         cmd = payload.get("cmd")
-        if cmd == protocol.CMD_FN_ACTIVATE:
+        if cmd == "owner.release":
+            release_owner.set()
+        elif cmd == protocol.CMD_FN_ACTIVATE:
             on_fn_activate(payload)
         elif cmd == protocol.CMD_INFERENCE_CANCEL:
             on_inference_cancel()
@@ -520,9 +525,26 @@ async def run_daemon(
             await asyncio.sleep(poll_interval)
 
     poll_task = asyncio.ensure_future(poll_loop())
+    bridge_task = asyncio.ensure_future(bridge.run())
+    release_task = asyncio.ensure_future(release_owner.wait())
     try:
-        await bridge.run()
+        done, _pending = await asyncio.wait(
+            {bridge_task, release_task}, return_when=asyncio.FIRST_COMPLETED
+        )
+        if release_task in done:
+            log.info("Python 1.x BLE owner released by explicit dashboard request")
+            bridge_task.cancel()
+            await asyncio.gather(bridge_task, return_exceptions=True)
+        else:
+            # Bridge.run normally reconnects indefinitely. Preserve a rare
+            # unexpected exit rather than treating it as a successful handoff.
+            await bridge_task
     finally:
+        release_task.cancel()
+        await asyncio.gather(release_task, return_exceptions=True)
+        if not bridge_task.done():
+            bridge_task.cancel()
+            await asyncio.gather(bridge_task, return_exceptions=True)
         poll_task.cancel()
         await asyncio.gather(poll_task, return_exceptions=True)
         await background.cancel()
