@@ -38,7 +38,8 @@ async function main(): Promise<void> {
   console.log(`VibeStick TS dashboard: http://127.0.0.1:${dashboard.port}`);
 
   let bridge: VibeBridge | undefined;
-  let deliverSelected: ((text: string) => Promise<boolean>) | undefined;
+  let commands: ReturnType<typeof createLinuxBridge>["commands"] | undefined;
+  let voiceMode: "agent" | "yolo" = "agent";
   const voice = new VoicePipeline(config.asr, onlineTranscriber, (update) => { void bridge?.publishVoice(update); });
   if (args.helper) {
     const bridgeOptions: LinuxBridgeOptions = {
@@ -57,15 +58,36 @@ async function main(): Promise<void> {
         }
       },
       onCommand: async (command) => {
-        if (command.cmd !== "voice.confirm") return;
-        const text = voice.confirm();
-        if (text && (!deliverSelected || !(await deliverSelected(text)))) throw new Error("voice delivery failed");
+        if (command.cmd === "voice.start") { voiceMode = command.mode === "yolo" ? "yolo" : "agent"; return; }
+        if (command.cmd === "voice.cancel") { voiceMode = "agent"; return; }
+        if (command.cmd === "voice.stop" && voiceMode === "yolo") {
+          const text = voice.confirm(); voiceMode = "agent";
+          if (text && (!commands || !(await commands.focusedText(text)))) throw new Error("YOLO focused delivery failed");
+          return;
+        }
+        if (command.cmd === "voice.confirm") {
+          const text = voice.confirm();
+          if (text && (!commands || !(await commands.deliver(text)))) throw new Error("voice delivery failed");
+          return;
+        }
+        if (command.cmd === "inference.cancel") {
+          const tool = config.tools.find((item) => item.id === core.snapshot().selected_tool);
+          if (!commands || !(await commands.binding(tool?.bindings.cancel || "escape"))) throw new Error("inference cancel failed");
+          return;
+        }
+        if (command.cmd === "yolo.enter") {
+          if (!commands || !(await commands.focusedEnter())) throw new Error("YOLO enter failed");
+          return;
+        }
+        if (command.cmd === "yolo.escape") {
+          if (!commands || !(await commands.focusedEscape())) throw new Error("YOLO escape failed");
+        }
       },
       ...(args.address ? { address: args.address } : {}),
     };
     const linux = createLinuxBridge(core, bridgeOptions);
     bridge = linux.bridge;
-    deliverSelected = linux.deliver;
+    commands = linux.commands;
     const { mic } = linux;
     const capabilities: Capabilities = {
       ble: { available: true }, keyboard: { available: true }, mic: { available: false, reason: "PipeWire probe pending" },

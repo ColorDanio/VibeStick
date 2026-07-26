@@ -18,6 +18,7 @@ import { executeLifecycle, type CommandRunner, type FileSystem } from "../lifecy
 import { VibeBridge } from "../bridge.js";
 import { MemoryGattTransport } from "../transport.js";
 import { HostRuntime } from "../runtime.js";
+import { LinuxCommandAdapter } from "../linux-bridge.js";
 import { LinuxVibeMicSink } from "../mic-sink.js";
 import { startDashboardServer } from "../server.js";
 import { VoicePipeline, wav, type AsrTranscriber } from "../asr.js";
@@ -254,6 +255,22 @@ test("Linux Vibe Mic sink only forwards frames during a mic route", async () => 
   await sink.apply(["relay.stop"]);
   await sink.feed(new Uint8Array([128]));
   assert.deepEqual(calls, ["mic.warmup", "mic.start", "mic.feed:gA==", "mic.stop"]);
+});
+
+test("Linux command adapter keeps TS policy while delegating only safe system actions", async () => {
+  const core = new HostCore(normalizeConfig({ tools: [{ id: "codex", name: "Codex" }] }));
+  core.replaceSessions([{ id: "c1", raw: { tmux: "%7" }, status: { tool: "codex", model: "", session: "Work", state: "idle", ctx_pct: -1, cost_usd: -1, last: "", updated: 1 } }]);
+  const calls: { command: string; values: Record<string, unknown> }[] = [];
+  const adapter = new LinuxCommandAdapter({ invoke: async (command, values = {}) => {
+    calls.push({ command, values }); return { ok: true, result: { delivered: true } };
+  }}, core, (error) => assert.fail(error.message));
+  assert.equal(await adapter.deliver("continue"), true);
+  assert.equal(await adapter.binding("escape"), true);
+  assert.equal(await adapter.focusedText("global text"), true);
+  assert.equal(await adapter.focusedEnter(), true);
+  assert.equal(await adapter.focusedEscape(), true);
+  assert.deepEqual(calls.map((call) => call.command), ["delivery.text", "delivery.binding", "focused.text", "focused.enter", "focused.escape"]);
+  assert.deepEqual(calls[0]?.values.record, { tmux: "%7" });
 });
 
 test("TypeScript voice pipeline buffers firmware PCM, publishes states, and only delivers after confirm", async () => {

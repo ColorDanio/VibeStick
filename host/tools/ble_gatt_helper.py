@@ -18,7 +18,7 @@ from pathlib import Path
 from vibestick import protocol
 from vibestick.hid import VirtualKeyboard
 from vibestick.mic import MicRelay
-from vibestick import delivery
+from vibestick import delivery, yolo
 
 CACHE = Path.home() / ".vibestick" / "device-address"
 LOCK = Path.home() / ".vibestick" / "daemon.lock"
@@ -46,6 +46,7 @@ class Helper:
         self.lock_fd: int | None = None
         self.mic = MicRelay()
         self.keyboard = VirtualKeyboard()
+        self.focused = yolo.FocusedInput()
 
     async def connect(self, address: str = "") -> str:
         from bleak import BleakClient, BleakScanner
@@ -151,6 +152,15 @@ async def main() -> None:
             elif command == "delivery.text":
                 raw = request.get("record")
                 result = {"delivered": await delivery.deliver_text(raw if isinstance(raw, dict) else None, str(request.get("text") or ""))}
+            elif command == "delivery.binding":
+                raw = request.get("record")
+                result = {"delivered": await delivery.send_binding(raw if isinstance(raw, dict) else None, str(request.get("binding") or ""))}
+            elif command == "focused.text":
+                result = {"delivered": await helper.focused.text(str(request.get("text") or ""))}
+            elif command == "focused.enter":
+                result = {"delivered": await helper.focused.enter()}
+            elif command == "focused.escape":
+                result = {"delivered": await helper.focused.escape_twice()}
             else:
                 raise ValueError("unknown command")
             emit({"id": ident, "ok": True, "result": result})
