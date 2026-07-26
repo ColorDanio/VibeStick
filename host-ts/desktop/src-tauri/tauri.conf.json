@@ -29,13 +29,14 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "icon": ["../../../host/vibestick/assets/icon.png"],
     "resources": {
       "../dist/": "host-core/",
       "../node_modules/": "host-core/node_modules/",
       "resources/": "runtime/",
-      "../../host/tools/ble_gatt_helper.py": "host/tools/ble_gatt_helper.py",
-      "../../host/tools/asr_helper.py": "host/tools/asr_helper.py",
-      "../../host/tools/session_discovery_helper.py": "host/tools/session_discovery_helper.py"
+      "../../../host/tools/ble_gatt_helper.py": "host/tools/ble_gatt_helper.py",
+      "../../../host/tools/asr_helper.py": "host/tools/asr_helper.py",
+      "../../../host/tools/session_discovery_helper.py": "host/tools/session_discovery_helper.py"
     },
     "linux": {
       "category": "Utility"

@@ -21,7 +21,7 @@ const unavailable: Capabilities = {
   yolo: { available: false, reason: "Host 2.0 is not connected" },
 };
 
-/** HTTP/IPC contract; a Node HTTP server or Electron IPC adapter can call this. */
+/** HTTP contract used by the local HostCore server and the Tauri desktop shell. */
 export function dashboardRequest(core: HostCore, method: string, path: string, body?: unknown, environment?: DashboardEnvironment): DashboardResponse {
   if (method === "GET" && path === "/api/status") return { status: 200, body: core.snapshot() };
   if (method === "GET" && path === "/api/desktop") {
