@@ -90,15 +90,36 @@ Double-shake the stick to force a status refresh.
 
 ## Quick start
 
-1. Host: `pip install -e "host/[dev,asr]"`, then `vibestick-web`
-   (daemon + dashboard at http://127.0.0.1:7860). See `host/README.md`.
+1. Stable VibeConn 1.x: `pip install -e "host/[dev,asr]"`, then `vibeconn`
+   (daemon + desktop UI; `vibeconnd` is daemon-only). It is the default
+   release and dashboard owner at http://127.0.0.1:7860. See `host/README.md`.
 2. Firmware: `firmware/.venv/bin/pio run -d firmware -t upload`
    (device on `/dev/ttyUSB0`).
 3. Optional: register the adapters — Claude Code statusLine and Kimi
    hooks give the richest state; other CLIs work via on-disk discovery
    and process presence with no setup.
-4. Optional desktop integration: `vibestick-app --install-desktop`
-   (GNOME launcher entry + daemon autostart).
+4. Optional desktop integration: `vibeconn --install-desktop`
+   (VibeConn 1.x GNOME launcher entry + daemon autostart).
+
+### Select an implementation
+
+VibeConn 1.x is the supported default. The repository launcher makes the
+choice explicit and keeps both versions runnable without renaming the stable
+daemon:
+
+```sh
+tools/vibeconn                           # VibeConn 1.x: daemon + UI
+tools/vibeconn --implementation 1 --daemon
+tools/vibeconn --implementation 2        # VibeConn 2.0 Electron UI + daemon
+VIBECONN_IMPLEMENTATION=2 make vibeconn
+```
+
+The VibeConn 2.0 UI asks before taking BLE from 1.x. On Linux it defaults to
+the audited compatibility adapter so a 2.0 test has the full, known-good
+Linux device boundary; use `VIBECONN_LINUX_BACKEND=native` when explicitly
+validating the TypeScript-native BLE path. CI and tag releases
+build VibeConn 1.x by default; manually dispatch a workflow with implementation
+`2` to package the refactor.
 
 > tty delivery (voice messages and cancel into CLIs running in plain
 > terminals) uses the TIOCSTI ioctl. Recent kernels (~6.15+) restrict

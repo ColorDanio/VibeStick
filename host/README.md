@@ -17,6 +17,8 @@ python3 -m venv .venv
 ## Run
 
 ```sh
+vibeconn               # VibeConn 1.x daemon + desktop UI (stable default)
+vibeconnd              # VibeConn 1.x daemon only
 vibestickd            # or: python -m vibestick.daemon
 vibestickd -v         # debug logging
 vibestick-web         # daemon + dashboard, and opens the browser
@@ -24,6 +26,10 @@ vibestickd --no-dashboard      # disable the dashboard web UI
 vibestickd --setup-port 8080   # dashboard on a different port
 vibestickd --config /path/to/config.json
 ```
+
+`vibestickd`, `vibestick-web`, and `vibestick-app` remain compatibility
+commands. The product-facing 1.x command is `vibeconn`; VibeConn 2.0 is an
+explicit opt-in TypeScript refactor and never replaces this daemon implicitly.
 
 The daemon serves the **dashboard** at http://127.0.0.1:7860 by default
 (`--no-dashboard` disables it; `--setup` is kept as a no-op alias for

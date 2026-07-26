@@ -8,6 +8,12 @@ on:
       tag:
         description: "Release tag (e.g. v0.2.0)"
         required: true
+      vibeconn_implementation:
+        description: "Artifact implementation (1 = stable Python VibeConn, 2 = TypeScript VibeConn refactor)"
+        required: true
+        default: "1"
+        type: choice
+        options: ["1", "2"]
 
 permissions:
   contents: write
@@ -55,7 +61,8 @@ jobs:
           if-no-files-found: error
 
   host-ts-desktop:
-    name: Host 2.0 desktop (${{ matrix.label }})
+    name: VibeConn 2.0 desktop (${{ matrix.label }})
+    if: github.event_name == 'workflow_dispatch' && inputs.vibeconn_implementation == '2'
     strategy:
       fail-fast: false
       matrix:
@@ -99,6 +106,7 @@ jobs:
   release:
     name: Create GitHub Release
     needs: [base-artifacts, host-ts-desktop]
+    if: ${{ always() && needs.base-artifacts.result == 'success' && (needs.host-ts-desktop.result == 'success' || needs.host-ts-desktop.result == 'skipped') }}
     runs-on: ubuntu-latest
     steps:
       - name: Download release artifacts

@@ -4,10 +4,19 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      vibeconn_implementation:
+        description: "Implementation to validate (1 = stable release baseline, 2 = TypeScript refactor)"
+        required: true
+        default: "1"
+        type: choice
+        options: ["1", "2"]
 
 jobs:
   host-ts-tests:
-    name: Host 2.0 core (TypeScript)
+    name: VibeConn 2.0 core (TypeScript)
+    if: github.event_name == 'workflow_dispatch' && inputs.vibeconn_implementation == '2'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,7 +31,8 @@ jobs:
         run: npm test --prefix host-ts
 
   host-ts-desktop:
-    name: Host 2.0 desktop (${{ matrix.label }})
+    name: VibeConn 2.0 desktop (${{ matrix.label }})
+    if: github.event_name == 'workflow_dispatch' && inputs.vibeconn_implementation == '2'
     strategy:
       fail-fast: false
       matrix:
@@ -32,7 +42,7 @@ jobs:
             output: host-ts/desktop/dist/linux-unpacked/resources/host-core/cli.js
           - os: macos-latest
             label: macOS
-            output: host-ts/desktop/dist/mac/VibeStick Host.app/Contents/Resources/host-core/cli.js
+            output: host-ts/desktop/dist/mac/VibeConn 2.0.app/Contents/Resources/host-core/cli.js
           - os: windows-latest
             label: Windows
             output: host-ts/desktop/dist/win-unpacked/resources/host-core/cli.js
@@ -61,7 +71,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         working-directory: host-ts/desktop
         shell: bash
-        run: ELECTRON_RUN_AS_NODE=1 ./dist/linux-unpacked/vibestick-host -e "require('./dist/linux-unpacked/resources/host-core/node_modules/@abandonware/noble'); console.log('packaged noble loads')"
+        run: ELECTRON_RUN_AS_NODE=1 ./dist/linux-unpacked/vibeconn-2 -e "require('./dist/linux-unpacked/resources/host-core/node_modules/@abandonware/noble'); console.log('packaged noble loads')"
       - name: Upload unpacked desktop artifact
         uses: actions/upload-artifact@v4
         with:
@@ -70,7 +80,7 @@ jobs:
           if-no-files-found: error
 
   host-tests:
-    name: Host tests (pytest)
+    name: VibeConn 1.x tests (Python release baseline)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

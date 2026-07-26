@@ -2,7 +2,7 @@
   "name": "@vibestick/host-desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Cross-platform VibeStick Host 2.0 desktop companion",
+  "description": "Cross-platform VibeConn 2.0 desktop companion",
   "author": "VibeStick contributors",
   "type": "module",
   "main": "electron-dist/main.js",
@@ -33,8 +33,8 @@
   },
   "build": {
     "appId": "io.vibestick.host",
-    "productName": "VibeStick Host",
-    "executableName": "vibestick-host",
+    "productName": "VibeConn 2.0",
+    "executableName": "vibeconn-2",
     "asar": true,
     "npmRebuild": false,
     "files": [

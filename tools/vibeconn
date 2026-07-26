@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# VibeConn implementation selector for local development and support.
+#
+# Default: the stable Python VibeConn 1.x daemon + UI.
+# Opt in to the TypeScript VibeConn 2.0 desktop with either:
+#   VIBECONN_IMPLEMENTATION=2 tools/vibeconn
+#   tools/vibeconn --implementation 2
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+implementation="${VIBECONN_IMPLEMENTATION:-1}"
+mode="desktop"
+args=()
+
+while (($#)); do
+  case "$1" in
+    --implementation|--impl)
+      implementation="${2:?missing implementation}"; shift 2 ;;
+    --daemon)
+      mode="daemon"; shift ;;
+    --help|-h)
+      cat <<'EOF'
+Usage: vibeconn [--implementation 1|2] [--daemon]
+
+VibeConn 1.x (default) starts the stable Python daemon and its UI.
+VibeConn 2.0 starts the TypeScript/Electron refactor.  It will remain on
+standby while 1.x owns BLE; use the explicit owner handoff in its UI.
+
+Environment:
+  VIBECONN_IMPLEMENTATION=1|2
+  VIBECONN_LINUX_BACKEND=helper|native  (2.0 only; helper is default)
+  VIBESTICK_LINUX_HELPER=/path/to/python  (2.0 helper backend only)
+EOF
+      exit 0 ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+
+case "$implementation" in
+  1)
+    python_bin="${VIBECONN_PYTHON:-$ROOT_DIR/host/.venv/bin/python}"
+    if [[ ! -x "$python_bin" ]]; then
+      printf '%s\n' "VibeConn 1.x needs $python_bin; create host/.venv first." >&2
+      exit 1
+    fi
+    if [[ "$mode" == "daemon" ]]; then
+      exec "$python_bin" -m vibestick.daemon "${args[@]}"
+    fi
+    exec "$python_bin" -m vibestick.app "${args[@]}"
+    ;;
+  2)
+    if ! command -v npm >/dev/null; then
+      printf '%s\n' "VibeConn 2.0 needs Node.js/npm." >&2
+      exit 1
+    fi
+    if [[ "${VIBECONN_LINUX_BACKEND:-helper}" == "helper" && -z "${VIBESTICK_LINUX_HELPER:-}" ]]; then
+      export VIBESTICK_LINUX_HELPER="$ROOT_DIR/host/.venv/bin/python"
+    fi
+    if [[ "${VIBECONN_LINUX_BACKEND:-helper}" != "helper" && "$(uname -s)" == "Linux" ]]; then
+      export VIBESTICK_NATIVE_BLE=1
+    fi
+    if [[ "$mode" == "daemon" ]]; then
+      cd "$ROOT_DIR/host-ts"
+      [[ -f dist/cli.js ]] || npm run build
+      native_args=()
+      if [[ "$(uname -s)" == "Linux" && "${VIBECONN_LINUX_BACKEND:-helper}" != "helper" ]]; then native_args+=(--native-ble); fi
+      if [[ "${VIBECONN_LINUX_BACKEND:-helper}" == "helper" ]]; then native_args+=(--linux-helper "${VIBESTICK_LINUX_HELPER}"); fi
+      exec node dist/cli.js "${native_args[@]}" "${args[@]}"
+    fi
+    cd "$ROOT_DIR/host-ts/desktop"
+    [[ -f electron-dist/main.js && -f ../dist/cli.js ]] || npm run build
+    exec npm run desktop -- "${args[@]}"
+    ;;
+  *)
+    printf '%s\n' "VIBECONN_IMPLEMENTATION must be 1 or 2 (got: $implementation)." >&2
+    exit 2 ;;
+esac

@@ -1,6 +1,6 @@
-# VibeStick TypeScript Host 2.0
+# VibeConn 2.0 (TypeScript refactor)
 
-This is the new cross-platform TypeScript Host 2.0 runtime, developed
+This is the new cross-platform TypeScript VibeConn 2.0 runtime, developed
 alongside—not in place of—the supported Python 1.x daemon. Its React +
 Electron desktop control center lives in [`desktop/`](desktop/). Platform
 capabilities are added only after this core conforms to `../contracts/v1`.
@@ -10,6 +10,11 @@ npm install
 npm test
 npm start -- --config ~/.vibestick/config.json
 ```
+
+For repository development, prefer the versioned launcher from the project
+root: `tools/vibeconn --implementation 2`. It starts the Electron UI and its
+own HostCore daemon. `tools/vibeconn` without an implementation remains the
+stable VibeConn 1.x command.
 
 The test suite reads the same versioned JSON fixtures as Python.  Do not copy
 or alter product semantics in platform UI code: add them here and prove them

@@ -68,10 +68,10 @@ function showWindow(): void {
 
 function createTray(): void {
   const icon = nativeImage.createFromDataURL("data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDE2IDE2Ij48cmVjdCB4PSIxIiB5PSIxIiB3aWR0aD0iMTQiIGhlaWdodD0iMTQiIHJ4PSI0IiBmaWxsPSIjMjEyNzJiIiBzdHJva2U9IiM3YmUwYmQiLz48cGF0aCBkPSJtNCA1IDQgNiA0LTYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzdiZTBiZCIgc3Ryb2tlLXdpZHRoPSIyIi8+PC9zdmc+");
-  tray = new Tray(icon); tray.setToolTip("VibeStick Host 2.0");
+  tray = new Tray(icon); tray.setToolTip("VibeConn 2.0");
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: "Show VibeStick", click: showWindow },
-    { label: "Restart Host 2.0", click: () => { void restartHostCore(); } },
+    { label: "Show VibeConn", click: showWindow },
+    { label: "Restart VibeConn 2.0", click: () => { void restartHostCore(); } },
     { type: "separator" },
     { label: "Quit", click: () => { quitting = true; app.quit(); } },
   ]));

@@ -25,6 +25,10 @@ app = [
 ]
 
 [project.scripts]
+# VibeConn is the stable product-facing name for the Python 1.x release.
+# The historical vibestick-* commands remain supported for existing users.
+vibeconnd = "vibestick.daemon:main"
+vibeconn = "vibestick.app:main"
 vibestickd = "vibestick.daemon:main"
 vibestick-web = "vibestick.web:main"
 vibestick-app = "vibestick.app:main"
