@@ -198,6 +198,20 @@ test("BLE bridge forwards the original HID report for the Linux uinput helper", 
   assert.equal(raw, "00006a0000000000");
 });
 
+test("BLE bridge publishes TypeScript voice state and exposes commands to the voice pipeline", async () => {
+  const core = new HostCore(normalizeConfig({ tools: [] }));
+  const transport = new MemoryGattTransport();
+  const commands: string[] = [];
+  const bridge = new VibeBridge(transport, core, { onCommand: (command) => { commands.push(command.cmd); } });
+  await bridge.connect();
+  await bridge.publishVoice({ state: "ready", text: "send this" });
+  transport.notify("COMMAND", new TextEncoder().encode('{"cmd":"voice.confirm"}'));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const voice = [...transport.writes].reverse().find((item) => item.characteristic === "VOICE");
+  assert.equal(new TextDecoder().decode(voice?.data), '{"state":"ready","text":"send this"}');
+  assert.deepEqual(commands, ["voice.confirm"]);
+});
+
 test("runtime reports a missing Vibe Mic capability as degraded instead of ready", async () => {
   const core = new HostCore(normalizeConfig({ tools: [] }));
   const bridge = new VibeBridge(new MemoryGattTransport(), core);

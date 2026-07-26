@@ -33,3 +33,9 @@ degraded and does not claim to own the Stick.
 
 The desktop shell remains in preview until Host 2.0 owns the BLE link; it
 never presents unavailable BLE, HID, or Vibe Mic capabilities as usable.
+
+Host 2.0 currently implements its own OpenAI-compatible online ASR path. Set
+`asr.engine` to `"online"` and provide `asr.online.api_key` in the shared
+configuration before it will advertise Agent ASR as available. The existing
+local faster-whisper path remains part of Python 1.x until a TS-native local
+provider is packaged.
