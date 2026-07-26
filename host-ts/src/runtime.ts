@@ -1,7 +1,8 @@
 import type { VibeBridge } from "./bridge.js";
 
 export type RuntimeState = "stopped" | "starting" | "ready" | "degraded" | "stopping";
-export interface Capability { available: boolean; reason?: string; }
+/** A platform feature state. `testable` exposes an explicit safe readiness probe, if one exists. */
+export interface Capability { available: boolean; reason?: string; testable?: boolean; }
 export interface Capabilities { ble: Capability; keyboard: Capability; mic: Capability; asr: Capability; yolo?: Capability; }
 export interface ConnectionPermission { allowed: boolean; reason: string; }
 export type ConnectionGuard = () => Promise<ConnectionPermission>;

@@ -268,6 +268,20 @@ test("dashboard exposes an explicit online ASR provider test without returning s
   await server.close();
 });
 
+test("dashboard capability contract exposes only explicit safe permission probes", () => {
+  const core = new HostCore(normalizeConfig({ tools: [] }));
+  const response = dashboardRequest(core, "GET", "/api/desktop", undefined, {
+    implementation: "host-2", owner: "inactive", runtime: "degraded",
+    capabilities: {
+      ble: { available: false }, keyboard: { available: false }, mic: { available: false }, asr: { available: false },
+      yolo: { available: false, reason: "Run the focused-input permission test in Settings", testable: true },
+    },
+    traditional_owner: { state: "unavailable" },
+    config: { path: "", asr_engine: "online", asr_api_base: "", asr_model: "", online_asr_configured: true, session_launcher: "auto", tools: [] },
+  }).body as { environment: { capabilities: { yolo?: { testable?: boolean } } } };
+  assert.equal(response.environment.capabilities.yolo?.testable, true);
+});
+
 test("file repository atomically persists config and defensively loads fresh sessions", async () => {
   const directory = await mkdtemp(join(tmpdir(), "vibestick-ts-"));
   const configPath = join(directory, "config.json");

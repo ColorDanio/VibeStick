@@ -80,7 +80,8 @@ Before the capability becomes ready, select **Settings → Test permission**.
 This is an explicit non-injecting probe: it checks only the current foreground
 target and OS accessibility/input permission, and never types text or sends
 Enter/Escape. It is not a substitute for the pending physical macOS/Windows
-end-to-end validation.
+end-to-end validation. The control is exposed only when the native macOS or
+Windows adapter supports the probe, not on Linux's helper path.
 
 ## Safe rollback and support bundle
 

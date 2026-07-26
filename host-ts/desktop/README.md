@@ -35,7 +35,8 @@ online-ASR text can be sent only to the OS's currently focused app
 (Accessibility permission on macOS; normal-integrity foreground app on Windows).
 Before it is marked ready, use **Settings → Test permission**. That explicit
 probe only checks a foreground target and OS permission; it never types text or
-presses a key.
+presses a key. The button appears only when the native macOS/Windows adapter
+actually exposes that probe; Linux never presents a misleading unsupported test.
 Linux can opt into the same transport for bring-up via
 `VIBESTICK_NATIVE_BLE=1`; its Python helper remains the supported full-feature
 path.

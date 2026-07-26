@@ -213,19 +213,19 @@ async function main(): Promise<void> {
       asr: { available: false, reason: "Agent CLI session delivery is not implemented; YOLO supports online ASR only" },
       yolo: process.platform === "darwin" || process.platform === "win32"
         ? config.asr.engine === "online" && Boolean(config.asr.online.api_key)
-          ? { available: false, reason: "Run the focused-input permission test in Settings" }
+          ? { available: false, reason: "Run the focused-input permission test in Settings", testable: true }
           : { available: false, reason: "Configure online ASR before using YOLO" }
         : { available: false, reason: "Native YOLO focused input is available only on macOS and Windows" },
     };
     testYoloFocused = async () => {
       if (config.asr.engine !== "online" || !config.asr.online.api_key) {
-        capabilities.yolo = { available: false, reason: "Configure online ASR before testing YOLO" };
+        capabilities.yolo = { available: false, reason: "Configure online ASR before testing YOLO", testable: false };
         return { available: false, detail: capabilities.yolo.reason ?? "" };
       }
       const available = await focused.probe();
       capabilities.yolo = available
-        ? { available: true, reason: "Focused-input permission probe passed" }
-        : { available: false, reason: "Focused-input permission probe failed; grant macOS Accessibility or focus a normal-integrity Windows app" };
+        ? { available: true, reason: "Focused-input permission probe passed", testable: true }
+        : { available: false, reason: "Focused-input permission probe failed; grant macOS Accessibility or focus a normal-integrity Windows app", testable: true };
       runtime?.reconcile();
       return { available, detail: capabilities.yolo.reason ?? "" };
     };
