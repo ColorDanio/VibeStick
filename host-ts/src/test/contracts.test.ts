@@ -221,6 +221,17 @@ test("BLE bridge publishes TypeScript voice state and exposes commands to the vo
   assert.deepEqual(commands, ["voice.confirm"]);
 });
 
+test("BLE bridge preserves a device custom-function identifier for platform delivery", async () => {
+  const core = new HostCore(normalizeConfig({ tools: [] }));
+  const transport = new MemoryGattTransport();
+  let received = "";
+  const bridge = new VibeBridge(transport, core, { onCommand: (command) => { received = command.fn ?? ""; } });
+  await bridge.connect();
+  transport.notify("COMMAND", new TextEncoder().encode('{"cmd":"fn.activate","fn":"format"}'));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(received, "format");
+});
+
 test("runtime reports a missing Vibe Mic capability as degraded instead of ready", async () => {
   const core = new HostCore(normalizeConfig({ tools: [] }));
   const bridge = new VibeBridge(new MemoryGattTransport(), core);

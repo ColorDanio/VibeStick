@@ -75,6 +75,12 @@ async function main(): Promise<void> {
           if (!commands || !(await commands.binding(tool?.bindings.cancel || "escape"))) throw new Error("inference cancel failed");
           return;
         }
+        if (command.cmd === "fn.activate") {
+          const tool = config.tools.find((item) => item.id === core.snapshot().selected_tool);
+          const binding = command.fn ? tool?.bindings[command.fn] : undefined;
+          if (!binding || !commands || !(await commands.binding(binding))) throw new Error("custom function failed");
+          return;
+        }
         if (command.cmd === "session.new") {
           const tool = config.tools.find((item) => item.id === core.snapshot().selected_tool);
           const commandLine = tool?.command || tool?.process || "";

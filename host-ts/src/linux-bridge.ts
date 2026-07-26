@@ -1,5 +1,6 @@
 import type { HostCore } from "./core.js";
 import { VibeBridge } from "./bridge.js";
+import type { DeviceCommand } from "./bridge.js";
 import { HelperGattTransport } from "./helper-transport.js";
 import { LinuxVibeMicSink } from "./mic-sink.js";
 
@@ -33,7 +34,7 @@ export interface LinuxBridgeOptions {
   address?: string;
   onAsrAudio?(pcm: Uint8Array): void;
   onRoutingActions?(actions: import("./routing.js").RoutingAction[]): void | Promise<void>;
-  onCommand?(command: { cmd: string; id?: string; mode?: unknown }): void | Promise<void>;
+  onCommand?(command: DeviceCommand): void | Promise<void>;
   onError?(error: Error): void;
 }
 

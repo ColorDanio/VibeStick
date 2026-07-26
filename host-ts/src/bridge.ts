@@ -8,8 +8,9 @@ export interface BridgeHooks {
   onAudio?(destination: "asr" | "mic", pcm: Uint8Array): void | Promise<void>;
   onHid?(keycodes: number[], report: Uint8Array): void;
   onActions?(actions: RoutingAction[]): void | Promise<void>;
-  onCommand?(command: { cmd: string; id?: string; mode?: unknown }): void | Promise<void>;
+  onCommand?(command: DeviceCommand): void | Promise<void>;
 }
+export interface DeviceCommand { cmd: string; id?: string; mode?: unknown; fn?: string; }
 
 /** BLE protocol bridge shared by every platform adapter. */
 export class VibeBridge {
@@ -57,9 +58,10 @@ export class VibeBridge {
       return;
     }
     if (characteristic === "COMMAND" && typeof payload.cmd === "string") {
-      const command: { cmd: string; id?: string; mode?: unknown } = { cmd: payload.cmd };
+      const command: DeviceCommand = { cmd: payload.cmd };
       if (typeof payload.id === "string") command.id = payload.id;
       if ("mode" in payload) command.mode = payload.mode;
+      if (typeof payload.fn === "string") command.fn = payload.fn;
       const result = this.core.command(command);
       this.effects = this.effects.catch(() => undefined).then(async () => {
         await this.hooks.onActions?.(result.actions);
