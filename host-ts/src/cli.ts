@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { HostCore } from "./core.js";
 import { loadConfigFile, loadSessionDirectory } from "./files.js";
 import { createLinuxBridge, type LinuxBridgeOptions } from "./linux-bridge.js";
@@ -10,6 +11,7 @@ import type { DashboardEnvironment } from "./dashboard.js";
 import { VoicePipeline, onlineTranscriber } from "./asr.js";
 
 type Args = { config: string; sessions: string; port: number; helper?: string; address?: string };
+const moduleDirectory = dirname(fileURLToPath(import.meta.url));
 
 async function main(): Promise<void> {
   const args = parse(process.argv.slice(2));
@@ -41,7 +43,7 @@ async function main(): Promise<void> {
   if (args.helper) {
     const bridgeOptions: LinuxBridgeOptions = {
       helperExecutable: args.helper,
-      helperArgs: [resolve(process.cwd(), "../host/tools/ble_gatt_helper.py")],
+      helperArgs: [resolve(moduleDirectory, "../../host/tools/ble_gatt_helper.py")],
       onError: (error: Error) => console.error(`capability error: ${error.message}`),
       onAsrAudio: (pcm: Uint8Array) => voice.feed(pcm),
       onRoutingActions: async (actions) => {

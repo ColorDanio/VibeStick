@@ -20,7 +20,13 @@ function startHostCore(): void {
   if (process.env.VIBESTICK_NO_CORE === "1") return;
   const cli = app.isPackaged ? join(process.resourcesPath, "host-core", "cli.js") : resolve(currentDir, "../../dist/cli.js");
   if (!existsSync(cli)) return;
-  host = spawn(process.execPath, [cli], { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, stdio: "ignore", windowsHide: true });
+  const args = [cli, "--port", "7861"];
+  const helper = process.platform === "linux" ? process.env.VIBESTICK_LINUX_HELPER : undefined;
+  if (helper) args.push("--linux-helper", helper);
+  if (process.env.VIBESTICK_DEVICE_ADDRESS) args.push("--address", process.env.VIBESTICK_DEVICE_ADDRESS);
+  host = spawn(process.execPath, args, {
+    cwd: dirname(cli), env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, stdio: "ignore", windowsHide: true,
+  });
 }
 
 function createWindow(): void {
