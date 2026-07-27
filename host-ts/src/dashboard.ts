@@ -25,20 +25,32 @@ const unavailable: Capabilities = {
 export function dashboardRequest(core: HostCore, method: string, path: string, body?: unknown, environment?: DashboardEnvironment): DashboardResponse {
   if (method === "GET" && path === "/api/status") return { status: 200, body: core.snapshot() };
   if (method === "GET" && path === "/api/desktop") {
-    return { status: 200, body: { ...core.snapshot(), environment: environment ?? {
-      implementation: "host-2", owner: "inactive", runtime: "stopped", capabilities: unavailable,
-      traditional_owner: { state: "unavailable" },
-      config: { path: "", asr_engine: "", asr_api_base: "", asr_model: "", online_asr_configured: false, session_launcher: "auto", tools: [] },
-    } } };
+    return { status: 200, body: { ...core.snapshot(), environment: environment ?? defaultEnvironment() } };
   }
   if (method === "POST" && path === "/api/command" && isRecord(body) && typeof body.cmd === "string") {
     const command: { cmd: string; id?: string; mode?: unknown } = { cmd: body.cmd };
     if (typeof body.id === "string") command.id = body.id;
     if ("mode" in body) command.mode = body.mode;
     const result = core.command(command);
-    return { status: result.changed ? 200 : 400, body: { ok: result.changed, actions: result.actions, ...core.snapshot() } };
+    // The native renderer replaces its desktop snapshot with this response.
+    // Keep it structurally identical to /api/desktop so selecting an agent
+    // cannot leave the renderer without its environment data.
+    return { status: result.changed ? 200 : 400, body: {
+      ok: result.changed,
+      actions: result.actions,
+      ...core.snapshot(),
+      environment: environment ?? defaultEnvironment(),
+    } };
   }
   return { status: 404, body: { error: "not found" } };
+}
+
+function defaultEnvironment(): DashboardEnvironment {
+  return {
+    implementation: "host-2", owner: "inactive", runtime: "stopped", capabilities: unavailable,
+    traditional_owner: { state: "unavailable" },
+    config: { path: "", asr_engine: "", asr_api_base: "", asr_model: "", online_asr_configured: false, session_launcher: "auto", tools: [] },
+  };
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
