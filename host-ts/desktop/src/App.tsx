@@ -9,6 +9,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 type Page = "overview" | "sessions" | "settings";
+type ThemePreference = "system" | "light" | "dark";
 type Capability = { available: boolean; reason?: string; testable?: boolean };
 type Session = {
   id: string;
@@ -125,6 +126,10 @@ export function App(): ReactElement {
   const [page, setPage] = useState<Page>("overview");
   const [connected, setConnected] = useState(false);
   const [notice, setNotice] = useState("");
+  const [theme, setTheme] = useState<ThemePreference>(() => {
+    const saved = window.localStorage.getItem("vibeconn-theme");
+    return saved === "light" || saved === "dark" || saved === "system" ? saved : "system";
+  });
   const [apiBase, setApiBase] = useState(demo.environment.config.asr_api_base);
   const [onlineModel, setOnlineModel] = useState(
     demo.environment.config.asr_online_model ?? "",
@@ -147,6 +152,16 @@ export function App(): ReactElement {
     document.title = "VibeConn";
     if (isTauri()) void getCurrentWindow().setTitle("VibeConn");
   }, []);
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = (): void => {
+      document.documentElement.dataset.theme = theme === "system" ? (media.matches ? "dark" : "light") : theme;
+    };
+    apply();
+    media.addEventListener("change", apply);
+    window.localStorage.setItem("vibeconn-theme", theme);
+    return () => media.removeEventListener("change", apply);
+  }, [theme]);
   useEffect(() => {
     let alive = true;
     const refresh = async (): Promise<void> => {
@@ -475,9 +490,11 @@ export function App(): ReactElement {
             saving={saving}
             busy={busy}
             testing={testing}
+            theme={theme}
             desktopShell={isTauri()}
             loginEnabled={loginEnabled}
             onApiBase={setApiBase}
+            onTheme={setTheme}
             onOnlineModel={setOnlineModel}
             onLocalModel={setLocalModel}
             onAsrMode={(mode) => {
@@ -802,9 +819,11 @@ function Settings(props: {
   saving: boolean;
   busy?: string;
   testing?: "asr" | "yolo";
+  theme: ThemePreference;
   desktopShell: boolean;
   loginEnabled?: boolean;
   onApiBase(v: string): void;
+  onTheme(v: ThemePreference): void;
   onOnlineModel(v: string): void;
   onLocalModel(v: string): void;
   onAsrMode(v: "local" | "online"): void;
@@ -848,6 +867,17 @@ function Settings(props: {
             </button>
           )}
         </div>
+      </div>
+      <div className="form-block inline theme-setting">
+        <div>
+          <h3>Appearance</h3>
+          <p>Choose how VibeConn looks on this computer.</p>
+        </div>
+        <select value={props.theme} onChange={(e) => props.onTheme(e.target.value as ThemePreference)} aria-label="Appearance">
+          <option value="system">Follow system</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
       </div>
       <form className="form-block" onSubmit={props.onSaveAsr}>
         <h3>Speech recognition</h3>
