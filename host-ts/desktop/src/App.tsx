@@ -413,7 +413,7 @@ export function App(): ReactElement {
           <Nav
             page={page}
             target="sessions"
-            label="Agent CLI"
+            label="Sessions"
             icon="▤"
             onClick={setPage}
           />
@@ -474,6 +474,18 @@ export function App(): ReactElement {
             onSelect={(id) => void send("session.select", id)}
             onTool={(id) => void send("tool.select", id)}
             onNew={() => void send("session.new")}
+            launcher={launcher}
+            cwdTool={cwdTool}
+            cwd={cwd}
+            busy={busy}
+            onLauncher={setLauncher}
+            onSaveLauncher={saveLauncher}
+            onCwdTool={(id) => {
+              setCwdTool(id);
+              setCwd(data.environment.config.tools.find((tool) => tool.id === id)?.cwd ?? "");
+            }}
+            onCwd={setCwd}
+            onSaveCwd={saveCwd}
           />
         )}
         {page === "settings" && (
@@ -484,9 +496,6 @@ export function App(): ReactElement {
             localModel={localModel}
             asrMode={asrMode}
             apiKey={apiKey}
-            launcher={launcher}
-            cwdTool={cwdTool}
-            cwd={cwd}
             saving={saving}
             busy={busy}
             testing={testing}
@@ -506,17 +515,6 @@ export function App(): ReactElement {
             onTestAsr={() => void testProvider("asr")}
             onTestYolo={() => void testProvider("yolo")}
             onRestart={() => void restart()}
-            onLauncher={setLauncher}
-            onSaveLauncher={saveLauncher}
-            onCwdTool={(id) => {
-              setCwdTool(id);
-              setCwd(
-                data.environment.config.tools.find((tool) => tool.id === id)
-                  ?.cwd ?? "",
-              );
-            }}
-            onCwd={setCwd}
-            onSaveCwd={saveCwd}
             onLogin={login}
           />
         )}
@@ -706,11 +704,29 @@ function Sessions({
   onSelect,
   onTool,
   onNew,
+  launcher,
+  cwdTool,
+  cwd,
+  busy,
+  onLauncher,
+  onSaveLauncher,
+  onCwdTool,
+  onCwd,
+  onSaveCwd,
 }: {
   data: Snapshot;
   onSelect(id: string): void;
   onTool(id: string): void;
   onNew(): void;
+  launcher: "auto" | "tmux" | "zellij";
+  cwdTool: string;
+  cwd: string;
+  busy?: string;
+  onLauncher(value: "auto" | "tmux" | "zellij"): void;
+  onSaveLauncher(event: FormEvent): void;
+  onCwdTool(value: string): void;
+  onCwd(value: string): void;
+  onSaveCwd(event: FormEvent): void;
 }): ReactElement {
   const sessions = data.sessions.list.filter(
     (session) => session.tool === data.selected_tool,
@@ -770,6 +786,28 @@ function Sessions({
           />
         )}
       </div>
+      <div className="session-preferences">
+        <div>
+          <span className="section-label">SESSION PREFERENCES</span>
+          <h3>New sessions</h3>
+          <p className="lede">Controls where Stick-created Agent CLI sessions open.</p>
+        </div>
+        <form className="form-block inline" onSubmit={onSaveLauncher}>
+          <div><h3>Launcher</h3><p>Terminal multiplexer for new sessions.</p></div>
+          <select value={launcher} onChange={(event) => onLauncher(event.target.value as "auto" | "tmux" | "zellij")}>
+            <option value="auto">Auto</option><option value="tmux">tmux</option><option value="zellij">zellij</option>
+          </select>
+          <button className="secondary" disabled={busy === "launcher"}>Save</button>
+        </form>
+        <form className="form-block inline" onSubmit={onSaveCwd}>
+          <div><h3>Working directory</h3><p>Used when a new session is created for this Agent CLI.</p></div>
+          <select value={cwdTool} onChange={(event) => onCwdTool(event.target.value)}>
+            {data.environment.config.tools.map((tool) => <option key={tool.id} value={tool.id}>{tool.name}</option>)}
+          </select>
+          <input value={cwd} placeholder="Empty: inherit pane / home" onChange={(event) => onCwd(event.target.value)} />
+          <button className="secondary" disabled={busy === "cwd"}>Save</button>
+        </form>
+      </div>
     </section>
   );
 }
@@ -813,9 +851,6 @@ function Settings(props: {
   localModel: string;
   asrMode: "local" | "online";
   apiKey: string;
-  launcher: "auto" | "tmux" | "zellij";
-  cwdTool: string;
-  cwd: string;
   saving: boolean;
   busy?: string;
   testing?: "asr" | "yolo";
@@ -832,11 +867,6 @@ function Settings(props: {
   onTestAsr(): void;
   onTestYolo(): void;
   onRestart(): void;
-  onLauncher(v: "auto" | "tmux" | "zellij"): void;
-  onSaveLauncher(e: FormEvent): void;
-  onCwdTool(v: string): void;
-  onCwd(v: string): void;
-  onSaveCwd(e: FormEvent): void;
   onLogin(v: "install" | "uninstall"): void;
 }): ReactElement {
   const { data } = props;
@@ -914,49 +944,6 @@ function Settings(props: {
           </button>
         </div>
       )}
-      <form className="form-block inline" onSubmit={props.onSaveLauncher}>
-        <div>
-          <h3>New-session launcher</h3>
-          <p>Choose where Stick-created sessions open.</p>
-        </div>
-        <select
-          value={props.launcher}
-          onChange={(e) =>
-            props.onLauncher(e.target.value as "auto" | "tmux" | "zellij")
-          }
-        >
-          <option value="auto">Auto</option>
-          <option value="tmux">tmux</option>
-          <option value="zellij">zellij</option>
-        </select>
-        <button className="secondary" disabled={props.busy === "launcher"}>
-          Save
-        </button>
-      </form>
-      <form className="form-block inline" onSubmit={props.onSaveCwd}>
-        <div>
-          <h3>Working directory</h3>
-          <p>Used only for newly created Agent CLI sessions.</p>
-        </div>
-        <select
-          value={props.cwdTool}
-          onChange={(e) => props.onCwdTool(e.target.value)}
-        >
-          {data.environment.config.tools.map((tool) => (
-            <option key={tool.id} value={tool.id}>
-              {tool.name}
-            </option>
-          ))}
-        </select>
-        <input
-          value={props.cwd}
-          placeholder="Empty: inherit pane / home"
-          onChange={(e) => props.onCwd(e.target.value)}
-        />
-        <button className="secondary" disabled={props.busy === "cwd"}>
-          Save
-        </button>
-      </form>
       {props.desktopShell && (
         <div className="form-block inline">
           <div>
