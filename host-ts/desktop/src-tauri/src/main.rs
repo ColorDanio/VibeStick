@@ -229,6 +229,9 @@ fn main() {
                 .map_err(std::io::Error::other)?;
             Ok(())
         })
+        .on_page_load(|webview, _| {
+            let _ = webview.window().set_title("VibeConn");
+        })
         .invoke_handler(tauri::generate_handler![
             release_python_owner,
             restart_host,

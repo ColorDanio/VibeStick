@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactElement } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 type Page = "overview" | "sessions" | "voice" | "settings";
 type Capability = { available: boolean; reason?: string; testable?: boolean };
@@ -13,6 +14,7 @@ export function App(): ReactElement {
   const [data, setData] = useState<Snapshot>(demo); const [page, setPage] = useState<Page>("overview"); const [connected, setConnected] = useState(false); const [notice, setNotice] = useState("");
   const [apiBase, setApiBase] = useState(demo.environment.config.asr_api_base); const [model, setModel] = useState(demo.environment.config.asr_model); const [apiKey, setApiKey] = useState(""); const [saving, setSaving] = useState(false);
   const [launcher, setLauncher] = useState<"auto" | "tmux" | "zellij">("auto"); const [cwdTool, setCwdTool] = useState(""); const [cwd, setCwd] = useState(""); const [loginEnabled, setLoginEnabled] = useState<boolean>(); const [busy, setBusy] = useState<string>(); const [testing, setTesting] = useState<"asr" | "yolo">(); const initialized = useRef(false);
+  useEffect(() => { document.title = "VibeConn"; if (isTauri()) void getCurrentWindow().setTitle("VibeConn"); }, []);
   useEffect(() => { let alive = true; const refresh = async (): Promise<void> => { try { const next = await api("/api/desktop"); if (alive) { setData(next); setConnected(true); if (!next.environment.error && next.environment.owner === "active") setNotice(""); } } catch { if (alive) setConnected(false); } }; void refresh(); const timer = window.setInterval(() => void refresh(), 1200); return () => { alive = false; window.clearInterval(timer); }; }, []);
   useEffect(() => { setApiBase(data.environment.config.asr_api_base); setModel(data.environment.config.asr_model); setLauncher(data.environment.config.session_launcher); if (!initialized.current && data.environment.config.tools.length) { const tool = data.environment.config.tools[0]!; setCwdTool(tool.id); setCwd(tool.cwd); initialized.current = true; } }, [data.environment.config]);
   useEffect(() => { if (!isTauri()) return; void invoke<{ enabled: boolean }>("login_startup", { action: "status" }).then((result) => setLoginEnabled(result.enabled)).catch(() => setLoginEnabled(undefined)); }, []);
