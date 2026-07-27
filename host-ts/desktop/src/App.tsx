@@ -569,20 +569,20 @@ function Overview({
   const caps = data.environment.capabilities;
   const agents = data.tools.list;
   return (
-    <>
-      <section className="device-card">
+    <div className="overview-dashboard">
+      <section className="device-card dashboard-hero">
         <div className="stick">
           <i />
           <i />
           <b>V</b>
         </div>
         <div className="device-copy">
-          <span className="section-label">M5STICKC PLUS</span>
-          <h2>VibeStick</h2>
+          <span className="section-label">STICK STATUS</span>
+          <h2>M5StickC Plus</h2>
           <p>
             {data.environment.owner === "active"
-              ? "Connected and synchronized with VibeConn 2.0."
-              : "Ready to become the active VibeConn device."}
+              ? "Connected, synchronized, and ready for voice input."
+              : "Waiting to become the active VibeConn device."}
           </p>
           <div className="device-facts">
             <span>
@@ -590,6 +590,9 @@ function Overview({
             </span>
             <span>
               ASR <b>{caps.asr.available ? "Ready" : "Setup needed"}</b>
+            </span>
+            <span>
+              Mode <b>{modeName(data.device_mode)}</b>
             </span>
           </div>
         </div>
@@ -614,48 +617,40 @@ function Overview({
           </div>
         )}
       </section>
-      <section className="split">
-        <div className="panel">
-          <span className="section-label">STICK MODE</span>
-          <h2>Where the Stick is now</h2>
-          {data.device_mode === "home" && <p className="lede">Main menu — choose Agent CLI, Vibe Mic, or YOLO on the Stick.</p>}
-          <div className="route-list">
-            <Route
-              name="Agent CLI"
-              description="Transcribe, then deliver to the selected session."
-              active={data.device_mode === "agent"}
-            />
-            <Route
-              name="Vibe Mic"
-              description="Raw audio to your system input device."
-              active={data.device_mode === "mic"}
-            />
-            <Route
-              name="YOLO"
-              description={
-                data.environment.capabilities.yolo?.available
-                  ? "Focused-window input is ready."
-                  : (data.environment.capabilities.yolo?.reason ??
-                    "Focused-window input.")
-              }
-              active={data.device_mode === "yolo"}
-            />
+      <section className="dashboard-grid">
+        <VoiceActivity voice={data.voice} />
+        <div className="dashboard-side">
+          <div className="panel location-panel">
+            <span className="section-label">LOCATION / MODE</span>
+            <h2>{modeName(data.device_mode)}</h2>
+            {data.device_mode === "home" && <p className="lede">At the Stick main menu. Choose Agent CLI, Vibe Mic, or YOLO.</p>}
+            {data.device_mode !== "home" && <p className="lede">The Stick is currently operating in this mode.</p>}
+            <div className="mode-rail">
+              <ModeRow name="Agent CLI" detail="Transcript to selected session" active={data.device_mode === "agent"} />
+              <ModeRow name="Vibe Mic" detail="Raw audio to system input" active={data.device_mode === "mic"} />
+              <ModeRow name="YOLO" detail="Transcript to focused window" active={data.device_mode === "yolo"} />
+            </div>
+          </div>
+          <div className="panel target-panel">
+            <span className="section-label">CURRENT TARGET</span>
+            <h2>{selected ? sessionTitle(selected) : "No session selected"}</h2>
+            <p className="lede">
+              {selected
+                ? `${agentName(agents, selected.tool)} · ${selected.last || "Ready for your next prompt"}`
+                : "Select an Agent CLI session in Sessions before sending a transcript."}
+            </p>
           </div>
         </div>
-        <div className="panel">
-          <span className="section-label">CURRENT TARGET</span>
-          <h2>{selected ? sessionTitle(selected) : "No session selected"}</h2>
-          <p className="lede">
-            {selected
-              ? `Voice from Agent CLI goes to ${agentName(agents, selected.tool)}.`
-              : "Choose an agent and a session before delivering a transcript."}
-          </p>
-        </div>
       </section>
-      <VoiceActivity voice={data.voice} />
       <TransferLog transfers={data.transfers} status={data.status} />
-    </>
+    </div>
   );
+}
+function ModeRow({ name, detail, active }: { name: string; detail: string; active: boolean }): ReactElement {
+  return <div className={active ? "mode-row active" : "mode-row"}><i /><div><b>{name}</b><span>{detail}</span></div>{active && <em>Now</em>}</div>;
+}
+function modeName(mode: Snapshot["device_mode"]): string {
+  return mode === "agent" ? "Agent CLI" : mode === "mic" ? "Vibe Mic" : mode === "yolo" ? "YOLO" : "Main menu";
 }
 function Sessions({
   data,
@@ -997,7 +992,9 @@ function Route({
 function VoiceActivity({ voice }: { voice: Snapshot["voice"] }): ReactElement {
   const seconds = (voice.recorded_ms / 1000).toFixed(1);
   const mode = voice.mode === "mic" ? "Vibe Mic" : voice.mode === "yolo" ? "YOLO" : "Agent CLI";
-  return <section className="panel voice-activity"><div><span className="section-label">VOICE ACTIVITY</span><h2>{voice.state === "recording" ? `Recording · ${mode}` : voice.state === "transcribing" ? "Transcribing" : voice.state === "ready" ? "Transcript ready" : voice.state === "error" ? "Voice error" : "No active voice"}</h2><p className="lede">{voice.state === "recording" ? `${seconds}s captured from the Stick` : voice.mode === "mic" ? "Raw audio is sent to the system Vibe Mic input; it is not transcribed." : voice.state === "idle" ? "Hold A on the Stick to begin recording." : ""}</p></div>{voice.state === "recording" && <div className="voice-meter" aria-label={`Audio level ${Math.round(voice.level * 100)} percent`}><i style={{ width: `${Math.max(4, voice.level * 100)}%` }} /></div>}{voice.text && <div className={voice.state === "error" ? "voice-preview error" : "voice-preview"}>{voice.text}</div>}</section>;
+  const heading = voice.state === "recording" ? `Recording · ${mode}` : voice.state === "transcribing" ? "Transcribing" : voice.state === "ready" ? "Transcript ready" : voice.state === "error" ? "Voice error" : "Listening for the Stick";
+  const detail = voice.state === "recording" ? `${seconds}s captured from the Stick` : voice.mode === "mic" ? "Raw audio is routed to the system Vibe Mic input." : voice.state === "idle" ? "Hold A on the Stick to begin recording." : "Audio is being processed on the paired host.";
+  return <section className="panel voice-activity"><div className="voice-copy"><span className="section-label">LIVE ACTIVITY</span><h2>{heading}</h2><p className="lede">{detail}</p></div><span className={`voice-state ${voice.state}`}>{voice.state === "recording" ? `${seconds}s` : mode}</span><div className="voice-wave" aria-label={`Audio level ${Math.round(voice.level * 100)} percent`}>{Array.from({ length: 32 }, (_, index) => <i key={index} style={{ height: `${voice.state === "recording" ? 18 + ((index * 29 + Math.round(voice.level * 100) * 7) % 66) : 16 + ((index * 17) % 32)}%` }} />)}</div>{voice.text && <div className={voice.state === "error" ? "voice-preview error" : "voice-preview"}>{voice.text}</div>}</section>;
 }
 function TransferLog({ transfers, status }: { transfers: Snapshot["transfers"]; status: Snapshot["status"] }): ReactElement {
   return <section className="panel transfer-log"><div className="panel-head"><div><span className="section-label">TRANSMISSION RECORD</span><h2>Recent activity</h2></div><span className="transfer-target">{status.state === "idle" ? "Host ready" : status.state}</span></div>{transfers.length ? <div className="transfer-list">{transfers.map((item, index) => <div className="transfer-row" key={`${item.at}-${index}`}><span className={`transfer-kind ${item.kind}`}>{transferLabel(item.kind)}</span><p>{item.text}</p><time>{formatTime(item.at)}</time></div>)}</div> : <Empty text="Voice recordings, transcripts, and deliveries from the Stick will appear here." />}</section>;
