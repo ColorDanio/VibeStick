@@ -301,6 +301,10 @@ test("online ASR settings validate provider data and never return API keys", asy
   const updated = updateOnlineAsr(normalizeConfig({}), { api_base: "https://api.example.test/v1", model: "whisper", api_key: "secret-key" });
   assert.equal(updated.asr.engine, "online");
   assert.deepEqual(publicAsrSettings(updated), { engine: "online", api_base: "https://api.example.test/v1", model: "whisper", configured: true });
+  const local = updateOnlineAsr(updated, { mode: "local", local_model: "base" });
+  assert.equal(local.asr.engine, "faster-whisper");
+  assert.equal(local.asr.model, "base");
+  assert.throws(() => updateOnlineAsr(local, { mode: "local", local_model: "invalid" }), /Local ASR model/);
   assert.throws(() => updateOnlineAsr(updated, { api_base: "file:///tmp", model: "x" }), /http/);
   assert.equal(updateSessionLauncher(updated, { session_launcher: "zellij" }).session_launcher, "zellij");
   assert.throws(() => updateSessionLauncher(updated, { session_launcher: "screen" }), /launcher/);

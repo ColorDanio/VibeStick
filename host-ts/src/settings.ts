@@ -1,13 +1,19 @@
 import type { Config } from "./config.js";
 
-export interface OnlineAsrInput { api_base?: unknown; model?: unknown; api_key?: unknown; }
+export interface OnlineAsrInput { mode?: unknown; api_base?: unknown; model?: unknown; api_key?: unknown; local_model?: unknown; }
 export interface PublicAsrSettings { engine: string; api_base: string; model: string; configured: boolean; }
 export interface OnlineAsrVerification { provider: "reachable"; model_available: boolean | null; }
 export type SettingsFetcher = (input: string, init?: RequestInit) => Promise<Response>;
 
-/** Validate only the editable online-ASR fields; secrets are never returned. */
+/** Validate the active ASR mode. Secrets are never returned. */
 export function updateOnlineAsr(config: Config, input: OnlineAsrInput | unknown): Config {
   const values: OnlineAsrInput = typeof input === "object" && input !== null && !Array.isArray(input) ? input as OnlineAsrInput : {};
+  if (values.mode === "local") {
+    const model = string(values.local_model, config.asr.model).trim();
+    if (!["tiny", "base", "small", "medium"].includes(model)) throw new TypeError("Local ASR model must be tiny, base, small, or medium");
+    return { ...config, asr: { ...config.asr, engine: "faster-whisper", model: model as Config["asr"]["model"] } };
+  }
+  if (values.mode !== undefined && values.mode !== "online") throw new TypeError("ASR mode must be local or online");
   const apiBase = string(values.api_base, config.asr.online.api_base).trim();
   const model = string(values.model, config.asr.online.model).trim();
   if (!apiBase || !/^https?:\/\//.test(apiBase)) throw new TypeError("ASR API base must be an http(s) URL");

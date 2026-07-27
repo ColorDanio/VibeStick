@@ -71,7 +71,7 @@ async function main(): Promise<void> {
         asr: { available: false, reason: "Configure an ASR provider for Host 2.0" },
         yolo: { available: false, reason: "Start the Host 2.0 runtime" },
       },
-      config: { path: args.config, asr_engine: config.asr.engine, asr_api_base: config.asr.online.api_base, asr_model: config.asr.engine === "online" ? config.asr.online.model : config.asr.model, online_asr_configured: config.asr.engine === "online" && Boolean(config.asr.online.api_key), session_launcher: config.session_launcher, tools: config.tools.map((tool) => ({ id: tool.id, name: tool.name, cwd: tool.cwd ?? "" })) },
+      config: { path: args.config, asr_engine: config.asr.engine, asr_api_base: config.asr.online.api_base, asr_model: config.asr.engine === "online" ? config.asr.online.model : config.asr.model, asr_online_model: config.asr.online.model, online_asr_configured: config.asr.engine === "online" && Boolean(config.asr.online.api_key), session_launcher: config.session_launcher, tools: config.tools.map((tool) => ({ id: tool.id, name: tool.name, cwd: tool.cwd ?? "" })) },
       ...(diagnostics?.error ? { error: diagnostics.error } : {}),
     };
   };
