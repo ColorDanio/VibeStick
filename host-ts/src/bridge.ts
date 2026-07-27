@@ -1,5 +1,6 @@
 import { type HostCore } from "./core.js";
 import { keycodesFromReport } from "./hid.js";
+import { sessionsToWire } from "./protocol.js";
 import type { RoutingAction } from "./routing.js";
 import type { Characteristic, GattTransport } from "./transport.js";
 
@@ -36,7 +37,7 @@ export class VibeBridge {
   async sync(): Promise<void> {
     const snapshot = this.core.snapshot();
     await this.write("STATUS", snapshot.status);
-    await this.write("SESSIONS", snapshot.sessions);
+    await this.write("SESSIONS", sessionsToWire(snapshot.sessions));
     await this.write("TOOLS", snapshot.tools);
   }
   async publishVoice(value: { state: string; text: string }): Promise<void> { await this.write("VOICE", value); }

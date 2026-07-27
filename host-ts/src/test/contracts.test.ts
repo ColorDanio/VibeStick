@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { configToWire, normalizeConfig } from "../config.js";
 import { keycodesFromReport } from "../hid.js";
-import { BLE, sessionsToWire, statusToWire } from "../protocol.js";
+import { BLE, BLE_PAYLOAD_MAX_BYTES, sessionsToWire, statusToWire } from "../protocol.js";
 import { transition, type AudioRoute } from "../routing.js";
 import { SendQueue } from "../queue.js";
 import { SessionSelection } from "../session.js";
@@ -54,6 +54,23 @@ test("status and sessions payloads conform to v1", async () => {
   assert.deepEqual(statusToWire(status.input), status.expected);
   const sessions = await fixture("sessions-payload.json");
   assert.deepEqual(sessionsToWire(sessions.input), sessions.expected);
+});
+
+test("device session payload stays within one BLE value and keeps the active session", () => {
+  const payload = sessionsToWire({
+    active: 8,
+    list: Array.from({ length: 12 }, (_, index) => ({
+      id: `disc:codex:${index}:this-is-a-deliberately-long-session-identifier`,
+      tool: "codex",
+      name: `A deliberately long session headline ${index} that must be clipped before sending to VibeStick`,
+      state: "idle",
+      fg: index === 8,
+    })),
+  });
+  assert.ok(Buffer.byteLength(JSON.stringify(payload)) <= BLE_PAYLOAD_MAX_BYTES);
+  assert.ok(payload.list.some((session) => session.id.includes(":8:")));
+  assert.equal(payload.list[payload.active]?.id.includes(":8:"), true);
+  assert.ok(payload.list.every((session) => Array.from(session.name).length <= 40));
 });
 
 test("voice routing conforms to v1", async () => {
