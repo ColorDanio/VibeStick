@@ -301,12 +301,14 @@ test("online ASR settings validate provider data and never return API keys", asy
   await assert.rejects(verifyOnlineAsr(normalizeConfig({ asr: { engine: "online" } })), /API key/);
 });
 
-test("loopback dashboard permits the desktop development origin and JSON commands", async () => {
+test("loopback dashboard permits development and Tauri desktop origins", async () => {
   const core = new HostCore(normalizeConfig({ tools: [] }));
   const server = await startDashboardServer(core, 0);
   const response = await fetch(`http://127.0.0.1:${server.port}/api/desktop`, { headers: { origin: "http://127.0.0.1:5174" } });
   assert.equal(response.headers.get("access-control-allow-origin"), "http://127.0.0.1:5174");
   assert.equal(response.status, 200);
+  const tauri = await fetch(`http://127.0.0.1:${server.port}/api/desktop`, { headers: { origin: "http://tauri.localhost" } });
+  assert.equal(tauri.headers.get("access-control-allow-origin"), "http://tauri.localhost");
   await server.close();
 });
 

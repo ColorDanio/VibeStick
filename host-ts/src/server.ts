@@ -14,11 +14,21 @@ export type DiagnosticsService = () => Record<string, unknown>;
 
 export interface DashboardServer { readonly port: number; close(): Promise<void>; }
 
+const desktopOrigins = new Set([
+  "http://127.0.0.1:5174",
+  "http://localhost:5174",
+  // Tauri's Linux/WebKit custom protocol is exposed as an HTTP localhost origin;
+  // other targets may retain the tauri scheme. Both are app-local renderers.
+  "http://tauri.localhost",
+  "tauri://localhost",
+  "null",
+]);
+
 /** Minimal loopback-only HTTP adapter; Electron or a browser may consume it. */
 export async function startDashboardServer(core: HostCore, port = 7861, environment?: () => DashboardEnvironment, settings?: SettingsService, diagnostics?: DiagnosticsService): Promise<DashboardServer> {
   const server = createServer(async (request, response) => {
     const origin = request.headers.origin;
-    if (origin === "http://127.0.0.1:5174" || origin === "http://localhost:5174" || origin === "null") {
+    if (origin && desktopOrigins.has(origin)) {
       response.setHeader("access-control-allow-origin", origin);
       response.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
       response.setHeader("access-control-allow-headers", "content-type");
