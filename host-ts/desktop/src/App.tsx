@@ -26,6 +26,7 @@ type Snapshot = {
   active_session: string | null;
   audio_route: "asr" | "mic";
   device_mode: "home" | "agent" | "mic" | "yolo";
+  voice: { state: "idle" | "recording" | "transcribing" | "ready" | "error"; mode: "agent" | "mic" | "yolo"; recorded_ms: number; level: number; text: string };
   queued: number;
   status: { state: string; session: string; tool: string; model: string };
   sessions: { list: Session[] };
@@ -64,6 +65,7 @@ const demo: Snapshot = {
   active_session: "design",
   audio_route: "asr",
   device_mode: "home",
+  voice: { state: "idle", mode: "agent", recorded_ms: 0, level: 0, text: "" },
   queued: 0,
   status: {
     state: "idle",
@@ -696,6 +698,7 @@ function Overview({
           </p>
         </div>
       </section>
+      <VoiceActivity voice={data.voice} />
     </>
   );
 }
@@ -1035,6 +1038,11 @@ function Route({
       {active && <em>Current</em>}
     </div>
   );
+}
+function VoiceActivity({ voice }: { voice: Snapshot["voice"] }): ReactElement {
+  const seconds = (voice.recorded_ms / 1000).toFixed(1);
+  const mode = voice.mode === "mic" ? "Vibe Mic" : voice.mode === "yolo" ? "YOLO" : "Agent CLI";
+  return <section className="panel voice-activity"><div><span className="section-label">VOICE ACTIVITY</span><h2>{voice.state === "recording" ? `Recording · ${mode}` : voice.state === "transcribing" ? "Transcribing" : voice.state === "ready" ? "Transcript ready" : voice.state === "error" ? "Voice error" : "No active voice"}</h2><p className="lede">{voice.state === "recording" ? `${seconds}s captured from the Stick` : voice.mode === "mic" ? "Raw audio is sent to the system Vibe Mic input; it is not transcribed." : voice.state === "idle" ? "Hold A on the Stick to begin recording." : ""}</p></div>{voice.state === "recording" && <div className="voice-meter" aria-label={`Audio level ${Math.round(voice.level * 100)} percent`}><i style={{ width: `${Math.max(4, voice.level * 100)}%` }} /></div>}{voice.text && <div className={voice.state === "error" ? "voice-preview error" : "voice-preview"}>{voice.text}</div>}</section>;
 }
 function Mode({
   name,

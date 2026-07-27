@@ -40,7 +40,7 @@ export class VibeBridge {
     await this.write("SESSIONS", sessionsToWire(snapshot.sessions));
     await this.write("TOOLS", snapshot.tools);
   }
-  async publishVoice(value: { state: string; text: string }): Promise<void> { await this.write("VOICE", value); }
+  async publishVoice(value: { state: string; text: string }): Promise<void> { this.core.updateVoice(value); await this.write("VOICE", value); }
 
   private async write(characteristic: "STATUS" | "SESSIONS" | "TOOLS" | "VOICE", value: unknown): Promise<void> {
     await this.transport.write(characteristic, new TextEncoder().encode(JSON.stringify(value)));
@@ -48,6 +48,7 @@ export class VibeBridge {
 
   private notification(characteristic: Characteristic, data: Uint8Array): void {
     if (characteristic === "AUDIO") {
+      this.core.observeAudio(data);
       const destination = this.core.snapshot().audio_route;
       // A PTT start and its first AUDIO notify can arrive back-to-back. Queue
       // frames behind relay.start/relay.stop so Vibe Mic never drops frame 1.
