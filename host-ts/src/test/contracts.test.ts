@@ -153,6 +153,9 @@ test("dashboard contract returns snapshots and routes commands through one core"
   const micBody = mic.body as { actions: string[]; audio_route: string; environment: { owner: string } };
   assert.deepEqual([mic.status, micBody.actions, micBody.audio_route], [200, ["relay.start"], "mic"]);
   assert.equal(micBody.environment.owner, "inactive", "command responses remain safe desktop snapshots");
+  const mode = core.command({ cmd: "mode.select", mode: "yolo" });
+  assert.equal(mode.changed, true);
+  assert.equal(core.snapshot().device_mode, "yolo");
   assert.equal(dashboardRequest(core, "POST", "/api/command", { cmd: "tool.select", id: "nope" }).status, 400);
   const desktop = dashboardRequest(core, "GET", "/api/desktop", undefined, {
     implementation: "host-2", owner: "active", runtime: "ready",

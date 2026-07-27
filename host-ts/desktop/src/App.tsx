@@ -24,6 +24,7 @@ type Snapshot = {
   selected_tool: string | null;
   active_session: string | null;
   audio_route: "asr" | "mic";
+  device_mode: "home" | "agent" | "mic" | "yolo";
   queued: number;
   status: { state: string; session: string; tool: string; model: string };
   sessions: { list: Session[] };
@@ -61,6 +62,7 @@ const demo: Snapshot = {
   selected_tool: "opencode",
   active_session: "design",
   audio_route: "asr",
+  device_mode: "home",
   queued: 0,
   status: {
     state: "idle",
@@ -643,18 +645,19 @@ function Overview({
       </section>
       <section className="split">
         <div className="panel">
-          <span className="section-label">VOICE ROUTING</span>
-          <h2>How the Stick speaks</h2>
+          <span className="section-label">STICK MODE</span>
+          <h2>Where the Stick is now</h2>
+          {data.device_mode === "home" && <p className="lede">Main menu — choose Agent CLI, Vibe Mic, or YOLO on the Stick.</p>}
           <div className="route-list">
             <Route
               name="Agent CLI"
               description="Transcribe, then deliver to the selected session."
-              active={data.audio_route === "asr"}
+              active={data.device_mode === "agent"}
             />
             <Route
               name="Vibe Mic"
               description="Raw audio to your system input device."
-              active={data.audio_route === "mic"}
+              active={data.device_mode === "mic"}
             />
             <Route
               name="YOLO"
@@ -664,6 +667,7 @@ function Overview({
                   : (data.environment.capabilities.yolo?.reason ??
                     "Focused-window input.")
               }
+              active={data.device_mode === "yolo"}
             />
           </div>
         </div>

@@ -111,6 +111,11 @@ static void setScreen(Screen s) {
   Serial.printf("[UI] screen: %s -> %s\n", SCREEN_NAMES[sScreen],
                 SCREEN_NAMES[s]);
   sScreen = s;
+  // Keep the host overview in sync with the actual device mode. Audio route
+  // alone cannot distinguish Agent CLI from YOLO because both use ASR.
+  const char* mode = s == SCR_MIC ? "mic" : s == SCR_YOLO ? "yolo" :
+                     s == SCR_CONVO ? "agent" : "home";
+  bleNotifyCommand("mode.select", "mode", mode);
   sNeedRedraw = true;
   uiMarqueeResetAll();  // no stale band may paint over the new screen
   uiConvoPageReset();

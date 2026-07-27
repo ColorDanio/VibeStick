@@ -7,6 +7,7 @@ export interface CoreSnapshot {
   selected_tool: string | null;
   active_session: string | null;
   audio_route: AudioRoute;
+  device_mode: "home" | "agent" | "mic" | "yolo";
   queued: number;
   status: ReturnType<HostSessionStore["statusPayload"]>;
   sessions: ReturnType<HostSessionStore["sessionsPayload"]>;
@@ -21,11 +22,16 @@ export class HostCore {
   readonly store: HostSessionStore;
   readonly queue = new SendQueue();
   private route: AudioRoute = "asr";
+  private deviceMode: "home" | "agent" | "mic" | "yolo" = "home";
 
   constructor(readonly config: Config) { this.store = new HostSessionStore(config); }
   replaceSessions(records: SessionRecord[]): void { this.store.replace(records); }
 
   command(input: { cmd: string; id?: string; mode?: unknown }): { changed: boolean; actions: RoutingAction[] } {
+    if (input.cmd === "mode.select" && typeof input.mode === "string" && ["home", "agent", "mic", "yolo"].includes(input.mode)) {
+      this.deviceMode = input.mode as typeof this.deviceMode;
+      return { changed: true, actions: [] };
+    }
     if (["voice.start", "voice.stop", "voice.cancel"].includes(input.cmd)) {
       const outcome = transition(this.route, input.cmd, input.mode);
       this.route = outcome.route;
@@ -47,6 +53,7 @@ export class HostCore {
       selected_tool: this.store.selectedTool,
       active_session: this.store.activeId,
       audio_route: this.route,
+      device_mode: this.deviceMode,
       queued: this.queue.size,
       status: this.store.statusPayload(),
       sessions: this.store.sessionsPayload(),
