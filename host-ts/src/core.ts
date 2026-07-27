@@ -5,6 +5,11 @@ import { HostSessionStore, type SessionRecord } from "./store.js";
 
 type VoiceState = "idle" | "recording" | "transcribing" | "ready" | "error";
 type VoicePreview = { state: VoiceState; mode: "agent" | "mic" | "yolo"; recorded_ms: number; level: number; text: string };
+export type TransferRecord = {
+  at: number;
+  kind: "recording" | "transcript" | "delivery" | "audio" | "error";
+  text: string;
+};
 
 export interface CoreSnapshot {
   selected_tool: string | null;
@@ -12,6 +17,7 @@ export interface CoreSnapshot {
   audio_route: AudioRoute;
   device_mode: "home" | "agent" | "mic" | "yolo";
   voice: VoicePreview;
+  transfers: TransferRecord[];
   queued: number;
   status: ReturnType<HostSessionStore["statusPayload"]>;
   sessions: ReturnType<HostSessionStore["sessionsPayload"]>;
@@ -28,6 +34,7 @@ export class HostCore {
   private route: AudioRoute = "asr";
   private deviceMode: "home" | "agent" | "mic" | "yolo" = "home";
   private voice: VoicePreview = { state: "idle", mode: "agent", recorded_ms: 0, level: 0, text: "" };
+  private transfers: TransferRecord[] = [];
 
   constructor(readonly config: Config) { this.store = new HostSessionStore(config); }
   replaceSessions(records: SessionRecord[]): void { this.store.replace(records); }
@@ -40,8 +47,14 @@ export class HostCore {
     if (["voice.start", "voice.stop", "voice.cancel"].includes(input.cmd)) {
       const outcome = transition(this.route, input.cmd, input.mode);
       this.route = outcome.route;
-      if (input.cmd === "voice.start") this.voice = { state: "recording", mode: input.mode === "mic" ? "mic" : input.mode === "yolo" ? "yolo" : "agent", recorded_ms: 0, level: 0, text: "" };
-      if (input.cmd === "voice.stop") this.voice = { ...this.voice, state: this.voice.mode === "mic" ? "idle" : "transcribing", level: 0 };
+      if (input.cmd === "voice.start") {
+        this.voice = { state: "recording", mode: input.mode === "mic" ? "mic" : input.mode === "yolo" ? "yolo" : "agent", recorded_ms: 0, level: 0, text: "" };
+        this.record("recording", `${this.modeLabel(this.voice.mode)} recording started`);
+      }
+      if (input.cmd === "voice.stop") {
+        this.voice = { ...this.voice, state: this.voice.mode === "mic" ? "idle" : "transcribing", level: 0 };
+        if (this.voice.mode === "mic") this.record("audio", "Raw audio sent to Vibe Mic");
+      }
       if (input.cmd === "voice.cancel") this.voice = { ...this.voice, state: "idle", level: 0, text: "" };
       return { changed: true, actions: outcome.actions };
     }
@@ -56,9 +69,14 @@ export class HostCore {
 
   drainQueued(): PendingMessage[] { return this.queue.drain(this.store.statusPayload().state); }
   activeSessionRaw(): Record<string, unknown> | undefined { return this.store.activeRaw(); }
+  recordDelivery(mode: VoicePreview["mode"]): void {
+    this.record("delivery", `Delivered to ${this.modeLabel(mode)}`);
+  }
   updateVoice(update: { state: string; text: string }): void {
     if (["idle", "recording", "transcribing", "ready", "error"].includes(update.state)) {
       this.voice = { ...this.voice, state: update.state as VoiceState, level: update.state === "recording" ? this.voice.level : 0, text: update.text };
+      if (update.state === "ready" && update.text) this.record("transcript", update.text);
+      if (update.state === "error" && update.text) this.record("error", update.text);
     }
   }
   observeAudio(frame: Uint8Array): void {
@@ -74,10 +92,19 @@ export class HostCore {
       audio_route: this.route,
       device_mode: this.deviceMode,
       voice: { ...this.voice },
+      transfers: this.transfers.map((item) => ({ ...item })),
       queued: this.queue.size,
       status: this.store.statusPayload(),
       sessions: this.store.sessionsPayload(),
       tools: this.store.toolsPayload(),
     };
+  }
+
+  private record(kind: TransferRecord["kind"], text: string): void {
+    this.transfers = [{ at: Date.now(), kind, text }, ...this.transfers].slice(0, 10);
+  }
+
+  private modeLabel(mode: VoicePreview["mode"]): string {
+    return mode === "mic" ? "Vibe Mic" : mode === "yolo" ? "YOLO" : "Agent CLI";
   }
 }

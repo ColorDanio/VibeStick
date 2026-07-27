@@ -27,6 +27,7 @@ type Snapshot = {
   audio_route: "asr" | "mic";
   device_mode: "home" | "agent" | "mic" | "yolo";
   voice: { state: "idle" | "recording" | "transcribing" | "ready" | "error"; mode: "agent" | "mic" | "yolo"; recorded_ms: number; level: number; text: string };
+  transfers: { at: number; kind: "recording" | "transcript" | "delivery" | "audio" | "error"; text: string }[];
   queued: number;
   status: { state: string; session: string; tool: string; model: string };
   sessions: { list: Session[] };
@@ -66,6 +67,7 @@ const demo: Snapshot = {
   audio_route: "asr",
   device_mode: "home",
   voice: { state: "idle", mode: "agent", recorded_ms: 0, level: 0, text: "" },
+  transfers: [],
   queued: 0,
   status: {
     state: "idle",
@@ -150,10 +152,17 @@ export function App(): ReactElement {
   const [busy, setBusy] = useState<string>();
   const [testing, setTesting] = useState<"asr" | "yolo">();
   const initialized = useRef(false);
+  const previousDeviceMode = useRef<Snapshot["device_mode"]>(demo.device_mode);
   useEffect(() => {
     document.title = "VibeConn";
     if (isTauri()) void getCurrentWindow().setTitle("VibeConn");
   }, []);
+  useEffect(() => {
+    if (data.device_mode === "agent" && previousDeviceMode.current !== "agent") {
+      setPage("sessions");
+    }
+    previousDeviceMode.current = data.device_mode;
+  }, [data.device_mode]);
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = (): void => {
@@ -465,9 +474,6 @@ export function App(): ReactElement {
             ownerBlocked={ownerBlocked}
             busy={busy}
             onRelease={() => void release()}
-            onSessions={() => setPage("sessions")}
-            onTool={(id) => void send("tool.select", id)}
-            onNew={() => void send("session.new")}
           />
         )}
         {page === "sessions" && (
@@ -553,24 +559,15 @@ function Overview({
   ownerBlocked,
   busy,
   onRelease,
-  onSessions,
-  onTool,
-  onNew,
 }: {
   data: Snapshot;
   selected?: Session;
   ownerBlocked: boolean;
   busy?: string;
   onRelease(): void;
-  onSessions(): void;
-  onTool(id: string): void;
-  onNew(): void;
 }): ReactElement {
   const caps = data.environment.capabilities;
   const agents = data.tools.list;
-  const agentSessions = data.sessions.list.filter(
-    (session) => session.tool === data.selected_tool,
-  );
   return (
     <>
       <section className="device-card">
@@ -617,49 +614,6 @@ function Overview({
           </div>
         )}
       </section>
-      <section className="agent-menu">
-        <div className="panel-head">
-          <div>
-            <span className="section-label">AGENT CLI</span>
-            <h2>Choose an agent</h2>
-          </div>
-          <button className="quiet" onClick={onSessions}>
-            Manage sessions →
-          </button>
-        </div>
-        <AgentBar
-          agents={agents}
-          selected={data.selected_tool}
-          onSelect={onTool}
-        />
-        <div className="agent-session-head">
-          <div>
-            <b>{agentName(agents, data.selected_tool)}</b>
-            <span>
-              {agentSessions.length
-                ? `${agentSessions.length} session${agentSessions.length === 1 ? "" : "s"}`
-                : "No sessions"}
-            </span>
-          </div>
-          <button className="quiet" onClick={onNew}>
-            ＋ New session
-          </button>
-        </div>
-        {selected && selected.tool === data.selected_tool ? (
-          <button className="selected-session" onClick={onSessions}>
-            <Status state={selected.state} />
-            <div>
-              <b>{sessionTitle(selected)}</b>
-              <span>
-                {agentName(agents, selected.tool)} · {selected.last || "Ready"}
-              </span>
-            </div>
-            <em>Open</em>
-          </button>
-        ) : (
-          <Empty text="Start a session for this agent or choose another agent." />
-        )}
-      </section>
       <section className="split">
         <div className="panel">
           <span className="section-label">STICK MODE</span>
@@ -699,6 +653,7 @@ function Overview({
         </div>
       </section>
       <VoiceActivity voice={data.voice} />
+      <TransferLog transfers={data.transfers} status={data.status} />
     </>
   );
 }
@@ -1043,6 +998,15 @@ function VoiceActivity({ voice }: { voice: Snapshot["voice"] }): ReactElement {
   const seconds = (voice.recorded_ms / 1000).toFixed(1);
   const mode = voice.mode === "mic" ? "Vibe Mic" : voice.mode === "yolo" ? "YOLO" : "Agent CLI";
   return <section className="panel voice-activity"><div><span className="section-label">VOICE ACTIVITY</span><h2>{voice.state === "recording" ? `Recording · ${mode}` : voice.state === "transcribing" ? "Transcribing" : voice.state === "ready" ? "Transcript ready" : voice.state === "error" ? "Voice error" : "No active voice"}</h2><p className="lede">{voice.state === "recording" ? `${seconds}s captured from the Stick` : voice.mode === "mic" ? "Raw audio is sent to the system Vibe Mic input; it is not transcribed." : voice.state === "idle" ? "Hold A on the Stick to begin recording." : ""}</p></div>{voice.state === "recording" && <div className="voice-meter" aria-label={`Audio level ${Math.round(voice.level * 100)} percent`}><i style={{ width: `${Math.max(4, voice.level * 100)}%` }} /></div>}{voice.text && <div className={voice.state === "error" ? "voice-preview error" : "voice-preview"}>{voice.text}</div>}</section>;
+}
+function TransferLog({ transfers, status }: { transfers: Snapshot["transfers"]; status: Snapshot["status"] }): ReactElement {
+  return <section className="panel transfer-log"><div className="panel-head"><div><span className="section-label">TRANSMISSION RECORD</span><h2>Recent activity</h2></div><span className="transfer-target">{status.state === "idle" ? "Host ready" : status.state}</span></div>{transfers.length ? <div className="transfer-list">{transfers.map((item, index) => <div className="transfer-row" key={`${item.at}-${index}`}><span className={`transfer-kind ${item.kind}`}>{transferLabel(item.kind)}</span><p>{item.text}</p><time>{formatTime(item.at)}</time></div>)}</div> : <Empty text="Voice recordings, transcripts, and deliveries from the Stick will appear here." />}</section>;
+}
+function transferLabel(kind: Snapshot["transfers"][number]["kind"]): string {
+  return { recording: "REC", transcript: "ASR", delivery: "SENT", audio: "AUDIO", error: "ERROR" }[kind];
+}
+function formatTime(value: number): string {
+  return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 function Mode({
   name,

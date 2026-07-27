@@ -143,11 +143,13 @@ async function main(): Promise<void> {
         if (command.cmd === "voice.stop" && voiceMode === "yolo") {
           const text = voice.confirm(); voiceMode = "agent";
           if (text && (!commands || !(await commands.focusedText(text)))) throw new Error("YOLO focused delivery failed");
+          if (text) core.recordDelivery("yolo");
           return;
         }
         if (command.cmd === "voice.confirm") {
           const text = voice.confirm();
           if (text && (!commands || !(await commands.deliver(text)))) throw new Error("voice delivery failed");
+          if (text) core.recordDelivery("agent");
           return;
         }
         if (command.cmd === "inference.cancel") {
@@ -243,6 +245,7 @@ async function main(): Promise<void> {
         if (command.cmd === "voice.stop" && voiceMode === "yolo") {
           const text = voice.confirm(); voiceMode = "agent";
           if (text && !(await focused.text(text))) throw new Error("YOLO focused delivery failed");
+          if (text) core.recordDelivery("yolo");
           return;
         }
         if (command.cmd === "yolo.enter") {
@@ -256,6 +259,7 @@ async function main(): Promise<void> {
         if (command.cmd === "voice.confirm") {
           const text = voice.confirm();
           if (text && (!terminals || !(await terminals.deliver(text)))) throw new Error("Agent CLI delivery failed: select a tmux or zellij session");
+          if (text) core.recordDelivery("agent");
           return;
         }
         if (command.cmd === "inference.cancel") {

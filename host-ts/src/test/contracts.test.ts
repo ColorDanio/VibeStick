@@ -161,6 +161,9 @@ test("dashboard contract returns snapshots and routes commands through one core"
   assert.deepEqual(core.snapshot().voice, { state: "recording", mode: "yolo", recorded_ms: 1, level: 1, text: "" });
   core.updateVoice({ state: "ready", text: "Preview text" });
   assert.equal(core.snapshot().voice.text, "Preview text");
+  assert.equal(core.snapshot().transfers[0]?.text, "Preview text");
+  core.recordDelivery("yolo");
+  assert.equal(core.snapshot().transfers[0]?.kind, "delivery");
   assert.equal(dashboardRequest(core, "POST", "/api/command", { cmd: "tool.select", id: "nope" }).status, 400);
   const desktop = dashboardRequest(core, "GET", "/api/desktop", undefined, {
     implementation: "host-2", owner: "active", runtime: "ready",
