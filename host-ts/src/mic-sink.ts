@@ -12,6 +12,11 @@ export class LinuxVibeMicSink {
   }
   async apply(actions: RoutingAction[]): Promise<void> {
     for (const action of actions) {
+      if (action === "relay.prepare") {
+        const reply = await this.helper.invoke("mic.select");
+        if (reply.result?.available !== true) throw new Error("Vibe Mic unavailable: check PipeWire");
+      }
+      if (action === "relay.restore") { await this.helper.invoke("mic.restore"); this.active = false; }
       if (action === "relay.start") {
         const reply = await this.helper.invoke("mic.start");
         this.active = reply.result?.available === true;

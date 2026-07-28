@@ -161,6 +161,29 @@ def test_relay_disabled_refuses(spawned):
     relay.feed(b"\x80")  # no-op, no crash
 
 
+def test_selects_vibe_mic_as_default_for_mic_mode_and_restores_previous(monkeypatch):
+    relay = MicRelay()
+    changes = []
+    current = ["auto_null", "vibe-mic"]
+
+    async def ensure():
+        return True
+
+    async def default_source():
+        return current.pop(0)
+
+    async def set_default(name):
+        changes.append(name)
+        return True
+
+    monkeypatch.setattr(relay, "_ensure_node", ensure)
+    monkeypatch.setattr(mic, "_default_source", default_source)
+    monkeypatch.setattr(mic, "_set_default_source", set_default)
+    assert asyncio.run(relay.select()) is True
+    asyncio.run(relay.restore())
+    assert changes == ["vibe-mic", "auto_null"]
+
+
 def test_relay_tolerates_missing_binary(monkeypatch):
     async def no_binary(*argv, **kwargs):
         raise FileNotFoundError("pw-dump")

@@ -1,5 +1,5 @@
 export type AudioRoute = "asr" | "mic";
-export type RoutingAction = "relay.start" | "relay.stop" | "asr.start" | "asr.stop" | "asr.cancel";
+export type RoutingAction = "relay.prepare" | "relay.restore" | "relay.start" | "relay.stop" | "asr.start" | "asr.stop" | "asr.cancel";
 export interface RouteTransition { route: AudioRoute; actions: RoutingAction[]; }
 
 /** Product-level Vibe Mic versus Agent CLI audio routing contract. */

@@ -41,7 +41,10 @@ export class HostCore {
 
   command(input: { cmd: string; id?: string; mode?: unknown }): { changed: boolean; actions: RoutingAction[] } {
     if (input.cmd === "mode.select" && typeof input.mode === "string" && ["home", "agent", "mic", "yolo"].includes(input.mode)) {
+      const previous = this.deviceMode;
       this.deviceMode = input.mode as typeof this.deviceMode;
+      if (this.deviceMode === "mic" && previous !== "mic") return { changed: true, actions: ["relay.prepare"] };
+      if (previous === "mic" && this.deviceMode !== "mic") return { changed: true, actions: ["relay.restore"] };
       return { changed: true, actions: [] };
     }
     if (["voice.start", "voice.stop", "voice.cancel"].includes(input.cmd)) {

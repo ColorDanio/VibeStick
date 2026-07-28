@@ -233,7 +233,7 @@ async function main(): Promise<void> {
           }
           if (action === "asr.stop") await voice.stop();
           if (action === "asr.cancel") voice.cancel();
-          if (action === "relay.start" || action === "relay.stop") {
+          if (action === "relay.prepare" || action === "relay.restore" || action === "relay.start" || action === "relay.stop") {
             if (nativeMic) await nativeMic.apply([action]);
             else runtime?.reportError("Vibe Mic is unavailable for the native BLE adapter");
           }

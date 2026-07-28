@@ -153,8 +153,10 @@ test("dashboard contract returns snapshots and routes commands through one core"
   const micBody = mic.body as { actions: string[]; audio_route: string; environment: { owner: string } };
   assert.deepEqual([mic.status, micBody.actions, micBody.audio_route], [200, ["relay.start"], "mic"]);
   assert.equal(micBody.environment.owner, "inactive", "command responses remain safe desktop snapshots");
+  assert.deepEqual(core.command({ cmd: "mode.select", mode: "mic" }).actions, ["relay.prepare"]);
   const mode = core.command({ cmd: "mode.select", mode: "yolo" });
   assert.equal(mode.changed, true);
+  assert.deepEqual(mode.actions, ["relay.restore"]);
   assert.equal(core.snapshot().device_mode, "yolo");
   core.command({ cmd: "voice.start", mode: "yolo" });
   core.observeAudio(new Uint8Array([0, 128, 255, 128]));
@@ -657,12 +659,14 @@ test("Linux Vibe Mic sink only forwards frames during a mic route", async () => 
   }};
   const sink = new LinuxVibeMicSink(helper);
   assert.equal(await sink.warmup(), true);
+  await sink.apply(["relay.prepare"]);
   await sink.feed(new Uint8Array([128]));
   await sink.apply(["relay.start"]);
   await sink.feed(new Uint8Array([128]));
   await sink.apply(["relay.stop"]);
+  await sink.apply(["relay.restore"]);
   await sink.feed(new Uint8Array([128]));
-  assert.deepEqual(calls, ["mic.warmup", "mic.start", "mic.feed:gA==", "mic.stop"]);
+  assert.deepEqual(calls, ["mic.warmup", "mic.select", "mic.start", "mic.feed:gA==", "mic.stop", "mic.restore"]);
 });
 
 test("Linux command adapter keeps TS policy while delegating only safe system actions", async () => {

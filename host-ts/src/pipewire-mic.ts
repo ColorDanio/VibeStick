@@ -26,6 +26,8 @@ export class PipeWireVibeMicSink {
 
   async apply(actions: RoutingAction[]): Promise<void> {
     for (const action of actions) {
+      if (action === "relay.prepare" && !(await this.ensureNode())) throw new Error("Vibe Mic unavailable: check PipeWire");
+      if (action === "relay.restore") await this.stop();
       if (action === "relay.start" && !(await this.start())) throw new Error("Vibe Mic unavailable: check PipeWire");
       if (action === "relay.stop") await this.stop();
     }

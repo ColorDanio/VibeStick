@@ -164,6 +164,10 @@ async def main() -> None:
                 await helper.write(str(request["characteristic"]), str(request["data"])); result = {}
             elif command == "mic.warmup":
                 result = {"available": await helper.mic.warmup()}
+            elif command == "mic.select":
+                result = {"available": await helper.mic.select()}
+            elif command == "mic.restore":
+                await helper.mic.restore(); result = {}
             elif command == "mic.start":
                 result = {"available": await helper.mic.start()}
             elif command == "mic.feed":

@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 
 log = logging.getLogger(__name__)
 
@@ -86,6 +87,7 @@ class MicRelay:
         self.active = False  # a PTT feed session is open
         self._feeder: asyncio.subprocess.Process | None = None
         self._node_created = False  # we created the node (vs. pre-existing)
+        self._default_before: str | None = None
 
     async def start(self) -> bool:
         """Open a feed session (virtual mic node up + pw-cat feeder linked)."""
@@ -95,7 +97,7 @@ class MicRelay:
         if self.active:
             return True
         try:
-            if not await self._ensure_node():
+            if not await self.select():
                 return False
             self._feeder = await asyncio.create_subprocess_exec(
                 *FEEDER_ARGV,
@@ -131,6 +133,30 @@ class MicRelay:
         """End the feed session (the virtual source stays registered)."""
         self.active = False
         await self._stop_feeder()
+
+    async def select(self) -> bool:
+        """Expose Vibe Mic as the host's active capture source for MIC mode.
+
+        A PipeWire virtual Source is valid, but applications that simply open
+        the system default otherwise follow a stale Bluetooth/default-null
+        source. Selecting Vibe Mic on entering its Stick mode makes those
+        applications receive the raw stream without a separate picker step.
+        """
+        if not self.enabled or not await self._ensure_node():
+            return False
+        current = await _default_source()
+        if current != NODE_NAME:
+            if self._default_before is None:
+                self._default_before = current
+            return await _set_default_source(NODE_NAME)
+        return True
+
+    async def restore(self) -> None:
+        """Return the default capture source selected before Vibe Mic mode."""
+        current = await _default_source()
+        previous, self._default_before = self._default_before, None
+        if current == NODE_NAME and previous:
+            await _set_default_source(previous)
 
     async def close(self) -> None:
         """Full shutdown: stop feeding and remove the node we created."""
@@ -249,6 +275,26 @@ async def _remove_legacy_nodes() -> None:
 async def _list_output_ports() -> list[str]:
     out = await _run_capture("pw-link", "-o")
     return [line.strip() for line in out.splitlines() if ":" in line]
+
+
+async def _default_source() -> str | None:
+    out = await _run_capture("pw-metadata", "-n", "default")
+    match = re.search(r"key:'default\.audio\.source' value:'([^']+)'", out)
+    if not match:
+        return None
+    try:
+        value = json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return None
+    return value.get("name") if isinstance(value, dict) and isinstance(value.get("name"), str) else None
+
+
+async def _set_default_source(name: str) -> bool:
+    rc, _ = await _run(
+        "pw-metadata", "-n", "default", "0", "default.audio.source",
+        json.dumps({"name": name}), "Spa:String:JSON",
+    )
+    return rc == 0
 
 
 async def _link(out_port: str, in_port: str) -> bool:
