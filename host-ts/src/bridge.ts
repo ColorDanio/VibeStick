@@ -19,6 +19,9 @@ export interface DeviceCommand { cmd: string; id?: string; mode?: unknown; fn?: 
 /** BLE protocol bridge shared by every platform adapter. */
 export class VibeBridge {
   private effects: Promise<void> = Promise.resolve();
+  private audioEffects: Promise<void> = Promise.resolve();
+  /** AUDIO must not reach a recorder until its matching voice.start action is complete. */
+  private audioStartBarrier: Promise<void> = Promise.resolve();
   private wired = false;
   constructor(private readonly transport: GattTransport, private readonly core: HostCore, private readonly hooks: BridgeHooks = {}) {}
 
@@ -50,9 +53,15 @@ export class VibeBridge {
     if (characteristic === "AUDIO") {
       this.core.observeAudio(data);
       const destination = this.core.snapshot().audio_route;
-      // A PTT start and its first AUDIO notify can arrive back-to-back. Queue
-      // frames behind relay.start/relay.stop so Vibe Mic never drops frame 1.
-      this.queue(() => Promise.resolve(this.hooks.onAudio?.(destination, data)));
+      // Do not put every PCM frame on the control queue. During a recording
+      // that queue can contain hundreds of frames, which used to postpone
+      // voice.stop (and its Transcribing state) for an observable interval.
+      // A per-recording barrier still preserves start -> first frame ordering.
+      const barrier = this.audioStartBarrier;
+      this.audioEffects = this.audioEffects.catch(() => undefined).then(async () => {
+        await barrier;
+        await this.hooks.onAudio?.(destination, data);
+      }).catch((value: unknown) => this.reportEffectError(value));
       return;
     }
     if (characteristic === "HID_INPUT") {
@@ -72,19 +81,28 @@ export class VibeBridge {
       if ("mode" in payload) command.mode = payload.mode;
       if (typeof payload.fn === "string") command.fn = payload.fn;
       const result = this.core.command(command);
+      const audioBeforeControl = command.cmd === "voice.stop" || command.cmd === "voice.cancel"
+        ? this.audioEffects
+        : undefined;
       this.queue(async () => {
+        // Preserve every frame that arrived before stop/cancel, but do not
+        // wait behind audio that arrives later in the next recording.
+        if (audioBeforeControl) await audioBeforeControl;
         await this.hooks.onActions?.(result.actions);
         await this.hooks.onCommand?.(command);
         await this.sync();
       });
+      if (command.cmd === "voice.start") this.audioStartBarrier = this.effects;
     }
   }
 
   private queue(effect: () => Promise<void>): void {
-    this.effects = this.effects.catch(() => undefined).then(effect).catch(async (value: unknown) => {
-      const error = value instanceof Error ? value : new Error(String(value));
-      await this.hooks.onEffectError?.(error);
-    });
+    this.effects = this.effects.catch(() => undefined).then(effect).catch((value: unknown) => this.reportEffectError(value));
+  }
+
+  private async reportEffectError(value: unknown): Promise<void> {
+    const error = value instanceof Error ? value : new Error(String(value));
+    await this.hooks.onEffectError?.(error);
   }
 }
 

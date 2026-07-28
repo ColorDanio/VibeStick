@@ -477,6 +477,27 @@ test("BLE bridge subscribes, syncs and keeps Vibe Mic audio separate from ASR", 
   assert.deepEqual(audio, ["mic", "asr"]);
 });
 
+test("BLE voice stop publishes transcribing immediately but waits for preceding PCM before ASR stop", async () => {
+  const core = new HostCore(normalizeConfig({ tools: [] }));
+  const transport = new MemoryGattTransport();
+  const events: string[] = [];
+  const bridge = new VibeBridge(transport, core, {
+    onActions: async (actions) => { events.push(...actions); },
+    onAudio: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 8));
+      events.push("audio");
+    },
+  });
+  await bridge.connect();
+  transport.notify("COMMAND", new TextEncoder().encode('{"cmd":"voice.start","mode":"yolo"}'));
+  transport.notify("AUDIO", new Uint8Array([128]));
+  transport.notify("AUDIO", new Uint8Array([129]));
+  transport.notify("COMMAND", new TextEncoder().encode('{"cmd":"voice.stop"}'));
+  assert.equal(core.snapshot().voice.state, "transcribing");
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  assert.deepEqual(events, ["asr.start", "audio", "audio", "asr.stop"]);
+});
+
 test("BLE bridge forwards the original HID report for the Linux uinput helper", async () => {
   const core = new HostCore(normalizeConfig({ tools: [] }));
   const transport = new MemoryGattTransport();
