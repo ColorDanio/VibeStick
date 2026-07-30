@@ -14,9 +14,9 @@ void boardInit() {
   M5.Display.setBrightness(200);
 }
 
-// StickS3's A/B GPIOs and side power key are board-specific. M5Unified owns
-// their debounce and the M5PM1 PMIC key state; callers must use these event
-// objects after boardUpdate() rather than reading the GPIOs directly.
+// StickS3's A/B GPIOs are board-specific. M5Unified owns their debounce;
+// callers must use these event objects after boardUpdate() rather than reading
+// the GPIOs directly.
 void boardUpdate() { M5.update(); }
 
 bool boardBtnA_wasPressed() { return M5.BtnA.wasPressed(); }
@@ -27,9 +27,10 @@ bool boardBtnB_wasReleased() { return M5.BtnB.wasReleased(); }
 bool boardBtnB_isPressed() { return M5.BtnB.isPressed(); }
 
 uint8_t boardPowerButtonEvent() {
-  // Keep the common board API: 2 means a short press. The main loop already
-  // turns a short press into Back and two short presses into Home.
-  return M5.BtnPWR.wasClicked() ? 2 : 0;
+  // StickS3's side key is a hardware power/reset control: single-click reset,
+  // double-click power off, long-press download mode. It can reset or power
+  // down the MCU before app code receives an event, so it is not an app key.
+  return 0;
 }
 
 int boardBatteryPct() {
