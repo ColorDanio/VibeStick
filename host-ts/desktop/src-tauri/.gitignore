@@ -2,3 +2,5 @@
 /gen/
 /resources/vibeconn-node
 /resources/vibeconn-node.exe
+/host-core-runtime/
+/host-tools/

@@ -8,9 +8,110 @@ use std::{
     sync::Mutex,
     time::Duration,
 };
-use tauri::{AppHandle, Manager, State};
+use tauri::{
+    image::Image,
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Manager, State, WindowEvent,
+};
 
 struct HostProcess(Mutex<Option<Child>>);
+
+const TRAY_ID: &str = "connection-status";
+
+/// A small, high-contrast indicator that remains legible in Linux panels.
+/// Green means the Host owns a ready Stick connection; amber is starting or
+/// degraded; gray means the local Host is unavailable.
+fn connection_icon(color: [u8; 4]) -> Image<'static> {
+    const SIZE: u32 = 22;
+    let mut rgba = vec![0; (SIZE * SIZE * 4) as usize];
+    let center = (SIZE as i32 - 1) / 2;
+    let radius = 8_i32;
+    for y in 0..SIZE as i32 {
+        for x in 0..SIZE as i32 {
+            let dx = x - center;
+            let dy = y - center;
+            if dx * dx + dy * dy <= radius * radius {
+                let index = ((y as u32 * SIZE + x as u32) * 4) as usize;
+                rgba[index..index + 4].copy_from_slice(&color);
+            }
+        }
+    }
+    Image::new_owned(rgba, SIZE, SIZE)
+}
+
+fn dashboard_connection_state() -> (&'static str, [u8; 4]) {
+    let address = match "127.0.0.1:7861".to_socket_addrs().ok().and_then(|mut it| it.next()) {
+        Some(address) => address,
+        None => return ("VibeConn: host unavailable", [120, 124, 130, 255]),
+    };
+    let mut stream = match TcpStream::connect_timeout(&address, Duration::from_millis(700)) {
+        Ok(stream) => stream,
+        Err(_) => return ("VibeConn: starting host", [230, 167, 40, 255]),
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_millis(700)));
+    if stream.write_all(b"GET /api/diagnostics HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n").is_err() {
+        return ("VibeConn: starting host", [230, 167, 40, 255]);
+    }
+    let mut response = String::new();
+    if stream.read_to_string(&mut response).is_err() {
+        return ("VibeConn: starting host", [230, 167, 40, 255]);
+    }
+    if response.contains("\"host_2\": \"active\"") && response.contains("\"state\": \"ready\"") {
+        ("VibeConn: Stick connected", [47, 179, 87, 255])
+    } else if response.contains("\"state\": \"starting\"") {
+        ("VibeConn: connecting to Stick…", [230, 167, 40, 255])
+    } else {
+        ("VibeConn: Stick disconnected", [216, 75, 75, 255])
+    }
+}
+
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+fn start_connection_indicator(app: AppHandle, status: MenuItem<tauri::Wry>) {
+    std::thread::spawn(move || loop {
+        let (label, color) = dashboard_connection_state();
+        let _ = status.set_text(label);
+        if let Some(tray) = app.tray_by_id(TRAY_ID) {
+            let _ = tray.set_icon(Some(connection_icon(color)));
+            let _ = tray.set_title(Some(match label {
+                "VibeConn: Stick connected" => "●",
+                "VibeConn: connecting to Stick…" => "…",
+                _ => "!",
+            }));
+        }
+        std::thread::sleep(Duration::from_secs(2));
+    });
+}
+
+fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
+    let status = MenuItem::with_id(app, "connection-state", "VibeConn: starting host", false, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "Open VibeConn", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&status, &open, &quit])?;
+    TrayIconBuilder::with_id(TRAY_ID)
+        .icon(connection_icon([230, 167, 40, 255]))
+        .title("…")
+        .menu(&menu)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "open" => show_main_window(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click { button: MouseButton::Left, .. } = event {
+                show_main_window(tray.app_handle());
+            }
+        })
+        .build(app)?;
+    start_connection_indicator(app.clone(), status);
+    Ok(())
+}
 
 #[derive(Serialize)]
 struct CommandResult {
@@ -108,22 +209,44 @@ fn start_host(app: &AppHandle, state: &HostProcess) -> Result<(), String> {
     let mut command = Command::new(node);
     command.arg(cli).arg("--port").arg("7861");
     if cfg!(target_os = "linux") {
-        let Some(python) = python_from_installed_vibeconn() else {
-            return Err("Linux compatibility runtime not found. Install VibeConn 1.x or launch through tools/vibeconn.".to_string());
+        // BlueZ/D-Bus works without CAP_NET_RAW. Prefer an installed 1.x
+        // interpreter for compatibility, otherwise use the system Python with
+        // our packaged helper dependencies.
+        let python = if cfg!(debug_assertions) {
+            development_path("../../../host/.venv/bin/python")
+                .to_string_lossy()
+                .into_owned()
+        } else {
+            python_from_installed_vibeconn().unwrap_or_else(|| "python3".to_string())
         };
         command.arg("--linux-helper").arg(python);
     } else {
         command.arg("--native-ble");
     }
-    let compatibility = if cfg!(debug_assertions) {
-        development_path("../../../host/tools")
+    let compatibility_root = if cfg!(debug_assertions) {
+        development_path("../../../host")
     } else {
         app.path()
             .resource_dir()
             .map_err(|error| error.to_string())?
-            .join("host/tools")
+            .join("host")
+    };
+    let compatibility = if cfg!(debug_assertions) {
+        compatibility_root.join("tools")
+    } else {
+        compatibility_root.join("tools")
+    };
+    let python_path = if cfg!(debug_assertions) {
+        format!(
+            "{}:{}",
+            compatibility_root.display(),
+            compatibility_root.join(".venv/lib/python3.14/site-packages").display()
+        )
+    } else {
+        compatibility.join("site-packages").to_string_lossy().into_owned()
     };
     command
+        .env("PYTHONPATH", python_path)
         .env(
             "VIBECONN_LINUX_HELPER_SCRIPT",
             compatibility.join("ble_gatt_helper.py"),
@@ -227,10 +350,17 @@ fn main() {
         .setup(|app| {
             start_host(&app.handle(), &app.state::<HostProcess>())
                 .map_err(std::io::Error::other)?;
+            setup_tray(&app.handle()).map_err(std::io::Error::other)?;
             Ok(())
         })
         .on_page_load(|webview, _| {
             let _ = webview.window().set_title("VibeConn");
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
         })
         .invoke_handler(tauri::generate_handler![
             release_python_owner,

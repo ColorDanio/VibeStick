@@ -1,6 +1,6 @@
 {
   "name": "@vibestick/host-desktop",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Cross-platform VibeConn 2.0 desktop companion",
   "author": "VibeStick contributors",

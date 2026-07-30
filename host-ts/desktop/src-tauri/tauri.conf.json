@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "VibeConn",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "identifier": "io.vibeconn.host2",
   "build": {
     "beforeDevCommand": "npm run dev:ui",
@@ -16,8 +16,8 @@
         "title": "VibeConn",
         "width": 1180,
         "height": 760,
-        "minWidth": 980,
-        "minHeight": 680,
+        "minWidth": 1024,
+        "minHeight": 720,
         "resizable": true,
         "decorations": true
       }
@@ -32,12 +32,10 @@
     "category": "Utility",
     "icon": ["../../../host/vibestick/assets/icon.png"],
     "resources": {
-      "../../dist/": "host-core/",
-      "../../node_modules/": "host-core/node_modules/",
+      "host-core-runtime/": "host-core/",
+      "host-core-runtime/node_modules/": "host-core/node_modules/",
       "resources/": "runtime/",
-      "../../../host/tools/ble_gatt_helper.py": "host/tools/ble_gatt_helper.py",
-      "../../../host/tools/asr_helper.py": "host/tools/asr_helper.py",
-      "../../../host/tools/session_discovery_helper.py": "host/tools/session_discovery_helper.py"
+      "host-tools/": "host/tools/"
     }
   }
 }
