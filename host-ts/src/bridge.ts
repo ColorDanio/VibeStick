@@ -14,7 +14,7 @@ export interface BridgeHooks {
   /** Surface serialized BLE side-effect failures instead of silently dropping them. */
   onEffectError?(error: Error): void | Promise<void>;
 }
-export interface DeviceCommand { cmd: string; id?: string; mode?: unknown; fn?: string; model?: string; firmware?: string; }
+export interface DeviceCommand { cmd: string; id?: string; mode?: unknown; fn?: string; name?: string; model?: string; firmware?: string; }
 
 /** BLE protocol bridge shared by every platform adapter. */
 export class VibeBridge {
@@ -102,6 +102,7 @@ export class VibeBridge {
       if (typeof payload.id === "string") command.id = payload.id;
       if ("mode" in payload) command.mode = payload.mode;
       if (typeof payload.fn === "string") command.fn = payload.fn;
+      if (typeof payload.name === "string") command.name = payload.name;
       if (typeof payload.model === "string") command.model = payload.model;
       if (typeof payload.firmware === "string") command.firmware = payload.firmware;
       const result = this.core.command(command);

@@ -26,6 +26,8 @@
 
 // One-time board init (M5.begin + display brightness).
 void boardInit();
+// Stable BLE identity derived from the board's factory MAC, e.g. VibeStick_A1B2.
+const char* boardDeviceName();
 // Per-loop update (button scanning etc.).
 void boardUpdate();
 

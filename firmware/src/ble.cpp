@@ -86,8 +86,8 @@ void bleNotifyAudio(const uint8_t* data, size_t len) {
 static void bleNotifyDeviceInfo() {
   char buf[128];
   snprintf(buf, sizeof(buf),
-           "{\"cmd\":\"device.info\",\"model\":\"%s\",\"firmware\":\"%s\"}",
-           BOARD_MODEL, FIRMWARE_VERSION);
+           "{\"cmd\":\"device.info\",\"name\":\"%s\",\"model\":\"%s\",\"firmware\":\"%s\"}",
+           boardDeviceName(), BOARD_MODEL, FIRMWARE_VERSION);
   notifyJson(pCommandChar, buf);
 }
 
@@ -366,7 +366,7 @@ class DeviceConfigCB : public NimBLECharacteristicCallbacks {
 // ---- Setup ----
 
 void bleInit() {
-  NimBLEDevice::init("VibeStick");
+  NimBLEDevice::init(boardDeviceName());
   NimBLEDevice::setMTU(247);
   NimBLEDevice::setPower(ESP_PWR_LVL_P9);
   NimBLEDevice::setCustomGapHandler(gapEventHandler);  // disconnect reasons
@@ -412,5 +412,5 @@ void bleInit() {
   pAdv->setScanResponse(true);  // device name goes in the scan response
   pAdv->start();
 
-  Serial.println("[BLE] init done, advertising as 'VibeStick'");
+  Serial.printf("[BLE] init done, advertising as '%s'\n", boardDeviceName());
 }

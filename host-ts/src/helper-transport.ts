@@ -2,7 +2,8 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createInterface } from "node:readline";
 import type { Characteristic, ConnectionHandler, GattTransport, NotificationHandler } from "./transport.js";
 
-export type HelperReply = { id?: number; ok?: boolean; result?: { address?: string; available?: boolean; delivered?: boolean }; error?: string; event?: string; characteristic?: Characteristic; data?: string };
+export type DiscoveredStick = { name: string; address: string; rssi?: number | null };
+export type HelperReply = { id?: number; ok?: boolean; result?: { address?: string; available?: boolean; delivered?: boolean; devices?: DiscoveredStick[] }; error?: string; event?: string; characteristic?: Characteristic; data?: string };
 
 /** GattTransport backed by a signed/platform-specific JSON-lines helper. */
 export class HelperGattTransport implements GattTransport {
@@ -14,7 +15,7 @@ export class HelperGattTransport implements GattTransport {
   private connected = false;
   address: string | undefined;
 
-  constructor(private readonly executable: string, private readonly args: string[] = [], private readonly targetAddress = "") {}
+  constructor(private readonly executable: string, private readonly args: string[] = [], private targetAddress = "") {}
   onNotification(handler: NotificationHandler): void { this.handler = handler; }
   onConnectionState(handler: ConnectionHandler): void { this.connectionHandler = handler; }
   isConnected(): boolean { return this.connected; }
@@ -31,6 +32,11 @@ export class HelperGattTransport implements GattTransport {
     this.connected = false; this.connectionHandler?.(false);
     this.child?.kill(); this.child = undefined;
   }
+  async scan(): Promise<DiscoveredStick[]> {
+    if (!this.child) this.start();
+    return (await this.request({ cmd: "scan" })).result?.devices ?? [];
+  }
+  setTargetAddress(address: string): void { this.targetAddress = address; }
   async subscribe(_characteristic: Characteristic): Promise<void> { /* helper subscribes atomically on connect */ }
   async write(characteristic: "STATUS" | "SESSIONS" | "TOOLS" | "VOICE" | "DEVICE_CONFIG", data: Uint8Array): Promise<void> {
     await this.request({ cmd: "write", characteristic, data: Buffer.from(data).toString("base64") });

@@ -62,10 +62,11 @@ class Helper:
                 client = None
         try:
             if client is None:
-                device = await BleakScanner.find_device_by_name(protocol.DEVICE_NAME, timeout=15.0)
-                if device is None:
+                devices = await self.scan()
+                candidate = next((item for item in devices if item["name"].startswith("VibeStick_")), None)
+                if candidate is None:
                     raise ConnectionError("VibeStick not found")
-                client = BleakClient(device, disconnected_callback=self._disconnected)
+                client = BleakClient(candidate["address"], disconnected_callback=self._disconnected)
                 await client.connect()
         except Exception:
             self._release_owner()
@@ -86,6 +87,20 @@ class Helper:
                 if name != "HID_INPUT":
                     raise
         return actual
+
+    async def scan(self) -> list[dict]:
+        """Return nearby VibeStick boards; scanning never opens a second GATT link."""
+        from bleak import BleakScanner
+        found = await BleakScanner.discover(timeout=5.0)
+        devices: dict[str, dict] = {}
+        for device in found:
+            name = str(getattr(device, "name", "") or "")
+            if not name.startswith("VibeStick_"):
+                continue
+            address = str(getattr(device, "address", "") or "")
+            if address:
+                devices[address] = {"name": name, "address": address, "rssi": getattr(device, "rssi", None)}
+        return sorted(devices.values(), key=lambda item: item["name"])
 
     async def disconnect(self) -> None:
         try:
@@ -168,6 +183,8 @@ async def main() -> None:
             ident, command = request["id"], request["cmd"]
             if command == "connect":
                 result = {"address": await helper.connect(str(request.get("address") or ""))}
+            elif command == "scan":
+                result = {"devices": await helper.scan()}
             elif command == "disconnect":
                 await helper.disconnect(); result = {}
             elif command == "write":

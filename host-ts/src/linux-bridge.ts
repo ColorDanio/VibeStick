@@ -49,7 +49,7 @@ export interface LinuxBridgeOptions {
 }
 
 /** Wire Linux-specific Vibe Mic and uinput fallback into the shared bridge. */
-export function createLinuxBridge(core: HostCore, options: LinuxBridgeOptions): { bridge: VibeBridge; mic: LinuxVibeMicSink; commands: LinuxCommandAdapter } {
+export function createLinuxBridge(core: HostCore, options: LinuxBridgeOptions): { bridge: VibeBridge; mic: LinuxVibeMicSink; commands: LinuxCommandAdapter; transport: HelperGattTransport } {
   const transport = new HelperGattTransport(options.helperExecutable, options.helperArgs ?? [], options.address ?? "");
   const mic = new LinuxVibeMicSink(transport);
   const reportError = (error: unknown): void => options.onError?.(error instanceof Error ? error : new Error(String(error)));
@@ -68,5 +68,5 @@ export function createLinuxBridge(core: HostCore, options: LinuxBridgeOptions): 
     onHid: (_keycodes, report) => { void transport.invoke("hid.report", { data: Buffer.from(report).toString("base64") }).catch(reportError); },
     ...(options.onConnectionState ? { onConnectionState: options.onConnectionState } : {}),
   });
-  return { bridge, mic, commands };
+  return { bridge, mic, commands, transport };
 }

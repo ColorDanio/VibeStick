@@ -12,6 +12,8 @@ export interface SettingsService {
   updateSessionLauncher(body: unknown): Promise<{ session_launcher: "auto" | "tmux" | "zellij" }>;
   updateToolCwd(body: unknown): Promise<{ id: string; cwd: string }>;
   updateMicBindings?(body: unknown): Promise<{ button_a: string; button_b: string }>;
+  scanSticks?(): Promise<{ name: string; address: string; rssi?: number | null }[]>;
+  connectStick?(body: unknown): Promise<{ name?: string; address: string }>;
 }
 
 export type LocalAsrModelStatus = { model: string; state: "idle" | "downloading" | "ready" | "applying" | "applied" | "error"; progress: number; detail?: string };
@@ -136,6 +138,14 @@ export async function startDashboardServer(core: HostCore, port = 7861, environm
         response.writeHead(400, { "content-type": "application/json; charset=utf-8" });
         response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) })); return;
       }
+    }
+    if (request.method === "POST" && request.url === "/api/devices/scan" && settings?.scanSticks) {
+      try { response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }); response.end(JSON.stringify({ ok: true, devices: await settings.scanSticks() })); return; }
+      catch (error) { response.writeHead(400, { "content-type": "application/json; charset=utf-8" }); response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) })); return; }
+    }
+    if (request.method === "POST" && request.url === "/api/devices/connect" && settings?.connectStick) {
+      try { response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }); response.end(JSON.stringify({ ok: true, device: await settings.connectStick(body) })); return; }
+      catch (error) { response.writeHead(400, { "content-type": "application/json; charset=utf-8" }); response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) })); return; }
     }
     const result = dashboardRequest(core, request.method ?? "GET", request.url ?? "/", body, environment?.());
     response.writeHead(result.status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });

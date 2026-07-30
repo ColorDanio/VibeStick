@@ -40,7 +40,7 @@ type Snapshot = {
   active_session: string | null;
   audio_route: "asr" | "mic";
   device_mode: "home" | "agent" | "mic" | "yolo";
-  device: { model: string; firmware: string };
+  device: { name?: string; model: string; firmware: string };
   foreground_target?: { app: string };
   voice: { state: "idle" | "recording" | "transcribing" | "ready" | "error"; mode: "agent" | "mic" | "yolo"; recorded_ms: number; level: number; text: string };
   transcriptions: { at: number; source: "agent" | "yolo"; text: string }[];
@@ -85,7 +85,7 @@ const demo: Snapshot = {
   active_session: "design",
   audio_route: "asr",
   device_mode: "home",
-  device: { model: "M5StickC-Plus", firmware: "" },
+  device: { name: "VibeStick", model: "M5StickC-Plus", firmware: "" },
   voice: { state: "idle", mode: "agent", recorded_ms: 0, level: 0, text: "" },
   transcriptions: [],
   transfers: [],
@@ -705,7 +705,7 @@ function Overview({
         <DeviceImage model={data.device.model} />
         <div className="device-copy">
           <span className="section-label">{t("STICK STATUS", "设备状态")}</span>
-          <h2>{deviceName(data.device.model)}</h2>
+          <h2>{data.device.name || deviceName(data.device.model)}</h2>
           <p>
             {data.environment.owner === "active"
               ? t("Connected, synchronized, and ready for voice input.", "已连接并同步，可以开始语音输入。")
@@ -963,6 +963,24 @@ function Settings(props: {
 }): ReactElement {
   const t = useT();
   const { data } = props;
+  const [sticks, setSticks] = useState<{ name: string; address: string; rssi?: number | null }[]>([]);
+  const [deviceBusy, setDeviceBusy] = useState<"scan" | string>();
+  const scan = async (): Promise<void> => {
+    setDeviceBusy("scan");
+    try {
+      const response = await fetch("http://127.0.0.1:7861/api/devices/scan", { method: "POST" });
+      const result = await response.json() as { devices?: { name: string; address: string; rssi?: number | null }[]; error?: string };
+      if (!response.ok) throw new Error(result.error ?? "Scan failed");
+      setSticks(result.devices ?? []);
+    } finally { setDeviceBusy(undefined); }
+  };
+  const selectStick = async (address: string): Promise<void> => {
+    setDeviceBusy(address);
+    try {
+      const response = await fetch("http://127.0.0.1:7861/api/devices/connect", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ address }) });
+      if (!response.ok) throw new Error("Connect failed");
+    } finally { setDeviceBusy(undefined); }
+  };
   const yolo = data.environment.capabilities.yolo;
   return (
     <section className="settings-view">
@@ -992,8 +1010,9 @@ function Settings(props: {
       </div>
       <section className="setup-section">
         <div><span className="section-label">{t("DEVICE SETUP", "设备设置")}</span><h3>{t("VibeStick devices", "VibeStick 设备")}</h3><p>{t("Manage paired Sticks and their connection state.", "管理已配对设备及其连接状态。")}</p></div>
-        <div className="device-manager"><DeviceImage model={data.device.model} /><div><b>{deviceName(data.device.model)}</b><span><i className={data.environment.owner === "active" ? "online" : "warn"} />{data.environment.owner === "active" ? t("Connected", "已连接") : t("Disconnected", "未连接")}</span><small>{data.device.firmware || t("Firmware detected automatically", "自动检测固件版本")}</small></div><button className="secondary" onClick={props.onRestart} disabled={props.busy === "restart"}>{props.busy === "restart" ? t("Reconnecting…", "正在重连…") : t("Reconnect", "重新连接")}</button></div>
-        <button className="quiet" onClick={() => window.alert(t("Pair an additional Stick from your system Bluetooth settings, then open Vibe Stick to connect it.", "请先在系统蓝牙设置中配对其他 Stick，然后打开 Vibe Stick 连接。"))}>+ {t("Add Stick", "添加设备")}</button>
+        <div className="device-manager"><DeviceImage model={data.device.model} /><div><b>{data.device.name || deviceName(data.device.model)}</b><span><i className={data.environment.owner === "active" ? "online" : "warn"} />{data.environment.owner === "active" ? t("Connected", "已连接") : t("Disconnected", "未连接")}</span><small>{data.device.firmware || t("Firmware detected automatically", "自动检测固件版本")}</small></div><button className="secondary" onClick={props.onRestart} disabled={props.busy === "restart"}>{props.busy === "restart" ? t("Reconnecting…", "正在重连…") : t("Reconnect", "重新连接")}</button></div>
+        <button className="quiet" onClick={() => void scan()} disabled={deviceBusy === "scan"}>{deviceBusy === "scan" ? t("Scanning…", "正在扫描…") : `+ ${t("Scan for Sticks", "扫描设备")}`}</button>
+        {sticks.map((stick) => <div className="device-manager" key={stick.address}><div /><div><b>{stick.name}</b><small>{stick.address}{typeof stick.rssi === "number" ? ` · ${stick.rssi} dBm` : ""}</small></div><button className="secondary" onClick={() => void selectStick(stick.address)} disabled={Boolean(deviceBusy)}>{deviceBusy === stick.address ? t("Connecting…", "正在连接…") : t("Use this Stick", "使用此设备")}</button></div>)}
       </section>
       <section className="setup-section host-setup">
         <span className="section-label">{t("HOST SETUP", "主机设置")}</span>

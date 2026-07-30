@@ -64,6 +64,8 @@ async function main(): Promise<void> {
   await loadSessions();
   let runtime: HostRuntime | undefined;
   let bridge: VibeBridge | undefined;
+  let scanSticks: (() => Promise<{ name: string; address: string; rssi?: number | null }[]>) | undefined;
+  let connectStick: ((body: unknown) => Promise<{ address: string }>) | undefined;
   let testYoloFocused: (() => Promise<{ available: boolean; detail: string }>) | undefined;
   let localModelStatus: LocalAsrModelStatus = config.asr.engine === "faster-whisper"
     ? { model: config.asr.model, state: "applied", progress: 100, detail: "Active model" }
@@ -148,6 +150,14 @@ async function main(): Promise<void> {
       // connected. A later reconnect also performs this sync automatically.
       const device_synced = bridge ? await bridge.syncDeviceConfig() : false;
       return { button_a: config.mic.buttonA, button_b: config.mic.buttonB, device_synced };
+    },
+    async scanSticks() {
+      if (!scanSticks) throw new Error("Stick scanning is available only with the Linux BLE helper");
+      return scanSticks();
+    },
+    async connectStick(body) {
+      if (!connectStick) throw new Error("Stick selection is available only with the Linux BLE helper");
+      return connectStick(body);
     },
   }, () => diagnosticsReport(core, environment(), { platform: process.platform, arch: process.arch, runtime: `node ${process.version}` }));
   console.log(`VibeConn 2.0 dashboard: http://127.0.0.1:${dashboard.port}`);
@@ -240,6 +250,18 @@ async function main(): Promise<void> {
     const linux = createLinuxBridge(core, bridgeOptions);
     bridge = linux.bridge;
     commands = linux.commands;
+    scanSticks = () => linux.transport.scan();
+    connectStick = async (body) => {
+      const address = typeof body === "object" && body !== null && typeof (body as { address?: unknown }).address === "string"
+        ? (body as { address: string }).address.trim() : "";
+      if (!/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/i.test(address)) throw new Error("Invalid Stick address");
+      // The helper owns one BleakClient and HostRuntime owns one bridge: stop
+      // the old link before selecting the new device, never two at once.
+      await runtime?.stop();
+      linux.transport.setTargetAddress(address);
+      await runtime?.start();
+      return { address };
+    };
     const { mic } = linux;
     const capabilities: Capabilities = {
       ble: { available: true },

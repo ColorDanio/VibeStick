@@ -21,7 +21,7 @@ export interface CoreSnapshot {
   active_session: string | null;
   audio_route: AudioRoute;
   device_mode: "home" | "agent" | "mic" | "yolo";
-  device: { model: string; firmware: string };
+  device: { name?: string; model: string; firmware: string };
   foreground_target?: { app: string };
   voice: VoicePreview;
   transcriptions: TranscriptionRecord[];
@@ -45,7 +45,7 @@ export class HostCore {
   private transfers: TransferRecord[] = [];
   private transcriptions: TranscriptionRecord[] = [];
   private foregroundTarget: { app: string } | undefined;
-  private device = { model: "", firmware: "" };
+  private device = { name: "", model: "", firmware: "" };
   private onTranscription: ((record: TranscriptionRecord) => void) | undefined;
 
   constructor(public config: Config) { this.store = new HostSessionStore(config); }
@@ -53,12 +53,13 @@ export class HostCore {
   updateMicConfig(mic: Config["mic"]): void { this.config = { ...this.config, mic }; }
   replaceSessions(records: SessionRecord[]): void { this.store.replace(records); }
 
-  command(input: { cmd: string; id?: string; mode?: unknown; model?: unknown; firmware?: unknown }): { changed: boolean; actions: RoutingAction[] } {
+  command(input: { cmd: string; id?: string; mode?: unknown; name?: unknown; model?: unknown; firmware?: unknown }): { changed: boolean; actions: RoutingAction[] } {
     if (input.cmd === "device.info") {
+      const name = typeof input.name === "string" ? input.name : "";
       const model = typeof input.model === "string" ? input.model : "";
       const firmware = typeof input.firmware === "string" ? input.firmware : "";
-      const changed = model !== this.device.model || firmware !== this.device.firmware;
-      this.device = { model: model || this.device.model, firmware: firmware || this.device.firmware };
+      const changed = name !== this.device.name || model !== this.device.model || firmware !== this.device.firmware;
+      this.device = { name: name || this.device.name, model: model || this.device.model, firmware: firmware || this.device.firmware };
       return { changed, actions: [] };
     }
     if (input.cmd === "mode.select" && typeof input.mode === "string" && ["home", "agent", "mic", "yolo"].includes(input.mode)) {
@@ -124,7 +125,7 @@ export class HostCore {
       active_session: this.store.activeId,
       audio_route: this.route,
       device_mode: this.deviceMode,
-      device: { ...this.device },
+      device: { ...(this.device.name ? { name: this.device.name } : {}), model: this.device.model, firmware: this.device.firmware },
       ...(this.foregroundTarget ? { foreground_target: { ...this.foregroundTarget } } : {}),
       voice: { ...this.voice },
       transcriptions: this.transcriptions.map((item) => ({ ...item })),

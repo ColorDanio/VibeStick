@@ -47,6 +47,12 @@ export class HostRuntime {
     finally { this.ownsBleLink = false; this.state = "stopped"; }
   }
 
+  /** Switch the one active GATT link. Callers update their transport target first. */
+  async reconnectNow(): Promise<RuntimeState> {
+    await this.stop();
+    return this.start();
+  }
+
   /** Re-evaluate probes completed after BLE connection (for example PipeWire). */
   reconcile(): RuntimeState {
     if (this.state === "ready" || this.state === "degraded") {

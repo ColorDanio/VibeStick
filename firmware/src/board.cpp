@@ -4,7 +4,18 @@
 
 // ---- M5StickS3 (ESP32-S3-PICO, M5Unified) ----
 
+static char sDeviceName[16] = "VibeStick";
+
+static void initDeviceName() {
+  uint64_t mac = ESP.getEfuseMac();
+  snprintf(sDeviceName, sizeof(sDeviceName), "VibeStick_%04llX",
+           (unsigned long long)(mac & 0xFFFF));
+}
+
+const char* boardDeviceName() { return sDeviceName; }
+
 void boardInit() {
+  initDeviceName();
   auto cfg = M5.config();
   M5.begin(cfg);
   // Keep M5Unified's board-specific panel colour order.  Overriding it here
@@ -53,7 +64,18 @@ bool boardGetAccel(float* x, float* y, float* z) {
 
 // ---- M5StickC Plus (ESP32-PICO, M5StickCPlus lib) ----
 
+static char sDeviceName[16] = "VibeStick";
+
+static void initDeviceName() {
+  uint64_t mac = ESP.getEfuseMac();
+  snprintf(sDeviceName, sizeof(sDeviceName), "VibeStick_%04llX",
+           (unsigned long long)(mac & 0xFFFF));
+}
+
+const char* boardDeviceName() { return sDeviceName; }
+
 void boardInit() {
+  initDeviceName();
   M5.begin();
   M5.Axp.ScreenBreath(80);
   M5.IMU.Init();

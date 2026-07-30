@@ -554,8 +554,8 @@ static void waitingDrawMsg(int animPhase) {
   M5Lcd.fillRect(0, y - 1, sW, 10, TFT_BLACK);  // erase message line
   char dots[4] = "...";
   dots[animPhase + 1] = '\0';
-  char msg[24];
-  snprintf(msg, sizeof(msg), "Waiting for host%s", dots);
+  char msg[30];
+  snprintf(msg, sizeof(msg), "Ready to connect%s", dots);
   centerText(msg, y, 1, COL_DIM);
 }
 
@@ -570,6 +570,10 @@ void uiShowWaiting(int animPhase) {
   int uy = nameY + 8 * nameSize + 4;
   M5Lcd.fillRoundRect((sW - uw) / 2, uy, uw, 3, 1, COL_ACCENT);
   centerText("companion for AI CLIs", uy + 7, 1, COL_DIM);
+
+  // This is the exact BLE name shown in the host's device picker. It is
+  // intentionally visible before pairing so several nearby Sticks are clear.
+  centerText(boardDeviceName(), uy + 19, 1, COL_ACCENT);
 
   waitingDrawRings(animPhase);
   waitingDrawMsg(animPhase);
