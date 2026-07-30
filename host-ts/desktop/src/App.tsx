@@ -1019,9 +1019,8 @@ function Settings(props: {
       </form>
       <form className="form-block inline" onSubmit={props.onSaveMicBindings}>
         <div><h3>{t("Vibe Mic buttons", "Vibe Mic 按键")}</h3><p>{t("Buttons can emit F1–F24, optionally with Ctrl, Alt, or Shift, while Vibe Mic is active. Examples: Ctrl+F2, Alt+F14, Ctrl+Alt+F8.", "仅在 Vibe Mic 激活时发送 F1–F24，且可组合 Ctrl、Alt 或 Shift。示例：Ctrl+F2、Alt+F14、Ctrl+Alt+F8。")}</p></div>
-        <label>{t("Button A", "按键 A")}<input list="vibe-mic-shortcuts" value={props.micButtonA} onChange={(e) => props.onMicButtonA(e.target.value)} placeholder="Ctrl+F2" /></label>
-        <label>{t("Button B", "按键 B")}<input list="vibe-mic-shortcuts" value={props.micButtonB} onChange={(e) => props.onMicButtonB(e.target.value)} placeholder="Alt+F14" /></label>
-        <datalist id="vibe-mic-shortcuts">{shortcutOptions()}</datalist>
+        <label>{t("Button A", "按键 A")}<ShortcutPicker value={props.micButtonA} onChange={props.onMicButtonA} t={t} /></label>
+        <label>{t("Button B", "按键 B")}<ShortcutPicker value={props.micButtonB} onChange={props.onMicButtonB} t={t} /></label>
         <button className="secondary" disabled={props.busy === "mic-bindings"}>{props.busy === "mic-bindings" ? t("Saving…", "正在保存…") : t("Save", "保存")}</button>
       </form>
       {yolo?.testable && (
@@ -1066,11 +1065,24 @@ function Settings(props: {
     </section>
   );
 }
-function shortcutOptions(): ReactElement[] {
-  return ["", "Ctrl+", "Alt+", "Ctrl+Alt+"].flatMap((prefix) => Array.from({ length: 24 }, (_, index) => {
-    const value = `${prefix}F${index + 1}`;
-    return <option key={value} value={value} />;
-  }));
+function ShortcutPicker({ value, onChange, t }: { value: string; onChange: (value: string) => void; t: Translate }): ReactElement {
+  const parts = value.split("+");
+  const key = parts.find((part) => /^F(?:[1-9]|1\d|2[0-4])$/.test(part)) ?? "F1";
+  const update = (nextKey = key, nextParts = parts) => {
+    const modifiers = ["Ctrl", "Alt", "Shift"].filter((modifier) => nextParts.includes(modifier));
+    onChange([...modifiers, nextKey].join("+"));
+  };
+  return <div className="shortcut-picker">
+    <select aria-label={t("Function key", "功能键")} value={key} onChange={(event) => update(event.target.value)}>
+      {Array.from({ length: 24 }, (_, index) => <option key={index} value={`F${index + 1}`}>{`F${index + 1}`}</option>)}
+    </select>
+    <div className="shortcut-modifiers">
+      {["Ctrl", "Alt", "Shift"].map((modifier) => <label key={modifier}>
+        <input type="checkbox" checked={parts.includes(modifier)} onChange={(event) => update(key, event.target.checked ? [...parts, modifier] : parts.filter((part) => part !== modifier))} />
+        {modifier === "Ctrl" ? "Ctrl" : modifier === "Alt" ? "Alt" : t("Shift", "Shift")}
+      </label>)}
+    </div>
+  </div>;
 }
 function modelStatusLabel(status: LocalModelStatus, selected: string, t: Translate): string {
   if (status.model !== selected || status.state === "idle") return t("Not downloaded in this session", "本次运行尚未下载");
