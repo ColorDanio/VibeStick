@@ -63,6 +63,10 @@ The commands are the same on macOS and Windows; only the port changes. For
 example, in PowerShell use `--upload-port COM4`, and on macOS use a value such
 as `--upload-port /dev/cu.usbserial-0001`.
 
+The repository configures the M5StickS3 uploader to use the ESP32-S3 native
+USB reset path. Do not add custom DTR/RTS reset flags: its normal USB CDC port
+may briefly disappear when those legacy serial-control signals are used.
+
 After `SUCCESS`, unplug and reconnect the Stick or restart it. Its serial log
 should include the current Vibe Stick version and `advertising as 'VibeStick'`.
 
