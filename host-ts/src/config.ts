@@ -26,7 +26,7 @@ export interface Config {
     online: { api_base: string; api_key: string; model: string; language: string | null };
   };
   features: { process_watcher: boolean; voice_enabled: boolean };
-  mic: { enabled: boolean; buttonA: FunctionKey; buttonB: FunctionKey };
+  mic: { enabled: boolean; buttonA: Shortcut; buttonB: Shortcut };
   session_launcher: "auto" | "tmux" | "zellij";
 }
 
@@ -39,9 +39,14 @@ const language = (value: unknown): string | null => {
   const text = asString(value).trim();
   return !text || ["auto", "none", "null"].includes(text.toLowerCase()) ? null : text;
 };
-export type FunctionKey = "F13" | "F14" | "F15" | "F16" | "F17" | "F18" | "F19" | "F20" | "F21" | "F22" | "F23" | "F24";
-const functionKeys: FunctionKey[] = ["F13", "F14", "F15", "F16", "F17", "F18", "F19", "F20", "F21", "F22", "F23", "F24"];
-const functionKey = (value: unknown, fallback: FunctionKey): FunctionKey => functionKeys.includes(value as FunctionKey) ? value as FunctionKey : fallback;
+export type Shortcut = string;
+const shortcut = (value: unknown, fallback: Shortcut): Shortcut => {
+  const parts = asString(value).trim().split("+").map((part) => part.trim().toUpperCase()).filter(Boolean);
+  const modifiers = ["CTRL", "ALT", "SHIFT"];
+  const key = parts.find((part) => /^F(?:[1-9]|1\d|2[0-4])$/.test(part));
+  if (!key || parts.length === 0 || parts.length !== new Set(parts).size || parts.some((part) => part !== key && !modifiers.includes(part))) return fallback;
+  return [...modifiers.filter((modifier) => parts.includes(modifier)).map((modifier) => modifier === "CTRL" ? "Ctrl" : modifier[0] + modifier.slice(1).toLowerCase()), key].join("+");
+};
 
 export function normalizeConfig(value: unknown): Config {
   if (!isRecord(value)) throw new TypeError("config must be a JSON object");
@@ -92,7 +97,7 @@ export function normalizeConfig(value: unknown): Config {
       api_key: asString(rawOnline.api_key), model: asString(rawOnline.model, "whisper-large-v3-turbo") || "whisper-large-v3-turbo", language: language(rawOnline.language),
     }},
     features: { process_watcher: rawFeatures.process_watcher !== false, voice_enabled: rawFeatures.voice_enabled !== false },
-    mic: { enabled: rawMic.enabled !== false, buttonA: functionKey(rawMic.button_a, "F14"), buttonB: functionKey(rawMic.button_b, "F15") },
+    mic: { enabled: rawMic.enabled !== false, buttonA: shortcut(rawMic.button_a, "F14"), buttonB: shortcut(rawMic.button_b, "F15") },
     session_launcher: launcher,
   };
 }

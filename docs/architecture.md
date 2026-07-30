@@ -94,7 +94,8 @@ PipeWire virtual source named **Vibe Mic** (a persistent
 GNOME Settings needs, fed per-press by `pw-cat` with ×3 software gain).
 The stick behaves like any USB microphone: bind it in openwhispr, the
 ChatGPT app, or anywhere else; A press starts PTT immediately and A release
-stops it. In this mode A also emits HID F13 and B emits HID F14.
+stops it. In this mode A and B also emit their configured HID shortcuts
+(defaults: F14 and F15; Ctrl/Alt/Shift + F1–F24 are supported).
 
 ## Delivery targets
 

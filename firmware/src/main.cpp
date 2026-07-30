@@ -346,7 +346,7 @@ static void pollButtons() {
     activity();
     sADownAt = millis();
     if (hidMicMode) {
-      hidKey(hidKeyForButtonA(), true);
+      hidKey(hidKeyForButtonA(), hidModifiersForButtonA(), true);
       // Microphone mode is PTT, not the conversation's delayed hold-to-talk:
       // physical A down simultaneously starts the raw BLE audio stream.
       if (!wakeOnly && !sRecording) startRecording(true);
@@ -356,13 +356,13 @@ static void pollButtons() {
     if (sDimmed) sSwallowGesture = true;
     activity();
     sBDownAt = millis();
-    if (hidMicMode) hidKey(hidKeyForButtonB(), true);
+    if (hidMicMode) hidKey(hidKeyForButtonB(), hidModifiersForButtonB(), true);
   }
 
   if (boardBtnA_wasReleased() && sADownAt != 0) {
     uint32_t dur = millis() - sADownAt;
     sADownAt = 0;
-    if (hidMicMode) hidKey(hidKeyForButtonA(), false);
+    if (hidMicMode) hidKey(hidKeyForButtonA(), hidModifiersForButtonA(), false);
     if (sSwallowGesture && !boardBtnA_isPressed() && !boardBtnB_isPressed()) {
       sSwallowGesture = false;
     } else if (hidMicMode) {
@@ -409,7 +409,7 @@ static void pollButtons() {
   if (boardBtnB_wasReleased() && sBDownAt != 0) {
     uint32_t dur = millis() - sBDownAt;
     sBDownAt = 0;
-    if (hidMicMode) hidKey(hidKeyForButtonB(), false);
+    if (hidMicMode) hidKey(hidKeyForButtonB(), hidModifiersForButtonB(), false);
     if (sSwallowGesture && !boardBtnA_isPressed() && !boardBtnB_isPressed()) {
       sSwallowGesture = false;
     } else if (!sSwallowGesture) {

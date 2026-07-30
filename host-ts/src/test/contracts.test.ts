@@ -49,13 +49,13 @@ test("config normalization conforms to v1", async () => {
   assert.deepEqual(configToWire(normalizeConfig(data.input)), data.expected);
 });
 
-test("Vibe Mic button bindings default to A=F14 and B=F15 and accept F13–F24", () => {
+test("Vibe Mic button bindings accept function-key shortcuts with modifiers", () => {
   const defaults = normalizeConfig({});
   assert.deepEqual(defaults.mic, { enabled: true, buttonA: "F14", buttonB: "F15" });
-  const configured = updateMicBindings(defaults, { button_a: "f13", button_b: "F24" });
-  assert.deepEqual(configured.mic, { enabled: true, buttonA: "F13", buttonB: "F24" });
-  assert.deepEqual(configToWire(configured).mic, { enabled: true, button_a: "F13", button_b: "F24" });
-  assert.throws(() => updateMicBindings(defaults, { button_a: "F12", button_b: "F15" }), /F13 through F24/);
+  const configured = updateMicBindings(defaults, { button_a: "alt+ctrl+f2", button_b: "Shift+F24" });
+  assert.deepEqual(configured.mic, { enabled: true, buttonA: "Ctrl+Alt+F2", buttonB: "Shift+F24" });
+  assert.deepEqual(configToWire(configured).mic, { enabled: true, button_a: "Ctrl+Alt+F2", button_b: "Shift+F24" });
+  assert.throws(() => updateMicBindings(defaults, { button_a: "Ctrl+F25", button_b: "F15" }), /F1 through F24/);
 });
 
 test("status and sessions payloads conform to v1", async () => {
@@ -397,10 +397,10 @@ test("dashboard exposes an explicit online ASR provider test without returning s
   assert.deepEqual(await mic.json(), { ok: true, restart_required: true, button_a: "F13", button_b: "F24" });
   const invalidMic = await fetch(`http://127.0.0.1:${server.port}/api/settings/mic-bindings`, {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ button_a: "F12", button_b: "F15" }),
+    body: JSON.stringify({ button_a: "Ctrl+F25", button_b: "F15" }),
   });
   assert.equal(invalidMic.status, 400);
-  assert.match(String((await invalidMic.json()).error), /F13 through F24/);
+  assert.match(String((await invalidMic.json()).error), /F1 through F24/);
   const download = await fetch(`http://127.0.0.1:${server.port}/api/settings/asr/local/download`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ local_model: "medium" }),
   });

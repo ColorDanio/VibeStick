@@ -14,11 +14,15 @@
 // GATT service is created, before advertising starts).
 void hidInit(NimBLEServer* pServer);
 
-// Send one key press (pressed=true) or release. No-ops when not connected.
-void hidKey(uint8_t keycode, bool pressed);
+// Send one shortcut press (pressed=true) or release. Modifiers use the HID
+// bitmap (Ctrl=0x01, Shift=0x02, Alt=0x04). No-ops when disconnected.
+void hidKey(uint8_t keycode, uint8_t modifiers, bool pressed);
 
-// Host-configurable Vibe Mic shortcut usages (F13..F24). Invalid values are
-// ignored, keeping the corresponding default binding intact.
-void hidSetBindings(uint8_t buttonA, uint8_t buttonB);
+// Host-configurable Vibe Mic shortcuts (F1..F24 plus Ctrl/Alt/Shift). Invalid
+// values are ignored, keeping the corresponding default binding intact.
+void hidSetBindings(uint8_t buttonA, uint8_t modifiersA, uint8_t buttonB,
+                    uint8_t modifiersB);
 uint8_t hidKeyForButtonA();
 uint8_t hidKeyForButtonB();
+uint8_t hidModifiersForButtonA();
+uint8_t hidModifiersForButtonB();

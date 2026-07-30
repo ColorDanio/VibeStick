@@ -318,7 +318,37 @@ static uint8_t functionKeyUsage(const char* value) {
   char* end = nullptr;
   long key = strtol(value + 1, &end, 10);
   if (end == value + 1 || *end != '\0') return 0;
-  return key >= 13 && key <= 24 ? (uint8_t)(key + 0x5B) : 0;
+  return key >= 1 && key <= 24 ? (uint8_t)(key + 0x39) : 0;
+}
+
+static bool hidShortcut(const char* value, uint8_t* key, uint8_t* modifiers) {
+  if (value == nullptr || key == nullptr || modifiers == nullptr) return false;
+  char text[40];
+  strlcpy(text, value, sizeof(text));
+  uint8_t parsedKey = 0;
+  uint8_t parsedModifiers = 0;
+  char* save = nullptr;
+  for (char* part = strtok_r(text, "+", &save); part != nullptr;
+       part = strtok_r(nullptr, "+", &save)) {
+    if (!strcmp(part, "Ctrl")) {
+      if (parsedModifiers & 0x01) return false;
+      parsedModifiers |= 0x01;
+    } else if (!strcmp(part, "Shift")) {
+      if (parsedModifiers & 0x02) return false;
+      parsedModifiers |= 0x02;
+    } else if (!strcmp(part, "Alt")) {
+      if (parsedModifiers & 0x04) return false;
+      parsedModifiers |= 0x04;
+    } else {
+      if (parsedKey) return false;
+      parsedKey = functionKeyUsage(part);
+      if (!parsedKey) return false;
+    }
+  }
+  if (!parsedKey) return false;
+  *key = parsedKey;
+  *modifiers = parsedModifiers;
+  return true;
 }
 
 class DeviceConfigCB : public NimBLECharacteristicCallbacks {
@@ -327,9 +357,10 @@ class DeviceConfigCB : public NimBLECharacteristicCallbacks {
     if (deserializeJson(doc, pChar->getValue().c_str())) return;
     JsonObject hid = doc["hid"].as<JsonObject>();
     if (hid.isNull()) return;
-    uint8_t a = functionKeyUsage(hid["button_a"] | "");
-    uint8_t b = functionKeyUsage(hid["button_b"] | "");
-    hidSetBindings(a, b);
+    uint8_t a = 0, b = 0, aModifiers = 0, bModifiers = 0;
+    if (!hidShortcut(hid["button_a"] | "", &a, &aModifiers)) return;
+    if (!hidShortcut(hid["button_b"] | "", &b, &bModifiers)) return;
+    hidSetBindings(a, aModifiers, b, bModifiers);
   }
 };
 

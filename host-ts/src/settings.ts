@@ -47,11 +47,17 @@ export function updateSessionLauncher(config: Config, input: unknown): Config {
 
 export function updateMicBindings(config: Config, input: unknown): Config {
   const values = typeof input === "object" && input !== null && !Array.isArray(input) ? input as { button_a?: unknown; button_b?: unknown } : {};
-  const valid = new Set(["F13", "F14", "F15", "F16", "F17", "F18", "F19", "F20", "F21", "F22", "F23", "F24"]);
-  const buttonA = typeof values.button_a === "string" ? values.button_a.toUpperCase() : "";
-  const buttonB = typeof values.button_b === "string" ? values.button_b.toUpperCase() : "";
-  if (!valid.has(buttonA) || !valid.has(buttonB)) throw new TypeError("Vibe Mic buttons must be F13 through F24");
-  return { ...config, mic: { ...config.mic, buttonA: buttonA as Config["mic"]["buttonA"], buttonB: buttonB as Config["mic"]["buttonB"] } };
+  const normalize = (value: unknown): string | undefined => {
+    const parts = typeof value === "string" ? value.trim().split("+").map((part) => part.trim().toUpperCase()).filter(Boolean) : [];
+    const modifierOrder = ["CTRL", "ALT", "SHIFT"];
+    const key = parts.find((part) => /^F(?:[1-9]|1\d|2[0-4])$/.test(part));
+    if (!key || parts.length !== new Set(parts).size || parts.some((part) => part !== key && !modifierOrder.includes(part))) return undefined;
+    return [...modifierOrder.filter((modifier) => parts.includes(modifier)).map((modifier) => modifier === "CTRL" ? "Ctrl" : modifier[0] + modifier.slice(1).toLowerCase()), key].join("+");
+  };
+  const buttonA = normalize(values.button_a);
+  const buttonB = normalize(values.button_b);
+  if (!buttonA || !buttonB) throw new TypeError("Vibe Mic buttons must be F1 through F24, optionally with Ctrl, Alt, and Shift");
+  return { ...config, mic: { ...config.mic, buttonA, buttonB } };
 }
 
 export function updateToolCwd(config: Config, input: unknown): Config {

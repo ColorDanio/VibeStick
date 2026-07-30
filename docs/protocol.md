@@ -222,13 +222,13 @@ optional event must ignore it.
 
 ### DEVICE_CONFIG (daemon -> device)
 
-Firmware 0.2.1 accepts the Vibe Mic HID bindings as named function keys. Both
-keys must be in the inclusive `F13`–`F24` range; invalid or missing values
-leave the existing binding unchanged. Defaults are Button A = `F14` and
-Button B = `F15`.
+Firmware 0.2.1 accepts Vibe Mic HID shortcuts. Each shortcut is `F1` through
+`F24`, optionally prefixed by `Ctrl`, `Alt`, and/or `Shift` (for example
+`Ctrl+F2` or `Ctrl+Alt+F8`). Invalid or missing values leave the existing
+binding unchanged. Defaults are Button A = `F14` and Button B = `F15`.
 
 ```json
-{"hid":{"button_a":"F14","button_b":"F15"}}
+{"hid":{"button_a":"Ctrl+F2","button_b":"Alt+F14"}}
 ```
 
 - `fn.activate` with a custom binding id makes the host send that key

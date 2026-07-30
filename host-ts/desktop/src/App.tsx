@@ -1018,9 +1018,10 @@ function Settings(props: {
         </div>
       </form>
       <form className="form-block inline" onSubmit={props.onSaveMicBindings}>
-        <div><h3>{t("Vibe Mic buttons", "Vibe Mic 按键")}</h3><p>{t("Buttons emit configurable F13–F24 keys only while Vibe Mic is active. Default: A = F14, B = F15.", "仅在 Vibe Mic 激活时发送可配置的 F13–F24 按键。默认：A = F14，B = F15。")}</p></div>
-        <label>{t("Button A", "按键 A")}<select value={props.micButtonA} onChange={(e) => props.onMicButtonA(e.target.value)}>{functionKeyOptions()}</select></label>
-        <label>{t("Button B", "按键 B")}<select value={props.micButtonB} onChange={(e) => props.onMicButtonB(e.target.value)}>{functionKeyOptions()}</select></label>
+        <div><h3>{t("Vibe Mic buttons", "Vibe Mic 按键")}</h3><p>{t("Buttons can emit F1–F24, optionally with Ctrl, Alt, or Shift, while Vibe Mic is active. Examples: Ctrl+F2, Alt+F14, Ctrl+Alt+F8.", "仅在 Vibe Mic 激活时发送 F1–F24，且可组合 Ctrl、Alt 或 Shift。示例：Ctrl+F2、Alt+F14、Ctrl+Alt+F8。")}</p></div>
+        <label>{t("Button A", "按键 A")}<input list="vibe-mic-shortcuts" value={props.micButtonA} onChange={(e) => props.onMicButtonA(e.target.value)} placeholder="Ctrl+F2" /></label>
+        <label>{t("Button B", "按键 B")}<input list="vibe-mic-shortcuts" value={props.micButtonB} onChange={(e) => props.onMicButtonB(e.target.value)} placeholder="Alt+F14" /></label>
+        <datalist id="vibe-mic-shortcuts">{shortcutOptions()}</datalist>
         <button className="secondary" disabled={props.busy === "mic-bindings"}>{props.busy === "mic-bindings" ? t("Saving…", "正在保存…") : t("Save", "保存")}</button>
       </form>
       {yolo?.testable && (
@@ -1065,8 +1066,11 @@ function Settings(props: {
     </section>
   );
 }
-function functionKeyOptions(): ReactElement[] {
-  return Array.from({ length: 12 }, (_, index) => <option key={index} value={`F${index + 13}`}>{`F${index + 13}`}</option>);
+function shortcutOptions(): ReactElement[] {
+  return ["", "Ctrl+", "Alt+", "Ctrl+Alt+"].flatMap((prefix) => Array.from({ length: 24 }, (_, index) => {
+    const value = `${prefix}F${index + 1}`;
+    return <option key={value} value={value} />;
+  }));
 }
 function modelStatusLabel(status: LocalModelStatus, selected: string, t: Translate): string {
   if (status.model !== selected || status.state === "idle") return t("Not downloaded in this session", "本次运行尚未下载");

@@ -40,8 +40,10 @@ static const uint8_t sReportMap[] = {
 static NimBLECharacteristic* sInput = nullptr;
 static uint8_t sKeyA = VIBESTICK_HID_KEY_A;
 static uint8_t sKeyB = VIBESTICK_HID_KEY_B;
+static uint8_t sModifiersA = 0;
+static uint8_t sModifiersB = 0;
 
-static bool validFunctionKey(uint8_t usage) { return usage >= 0x68 && usage <= 0x73; }
+static bool validFunctionKey(uint8_t usage) { return usage >= 0x3A && usage <= 0x73; }
 
 class HidReportCallbacks : public NimBLECharacteristicCallbacks {
   void onSubscribe(NimBLECharacteristic* /*characteristic*/,
@@ -77,25 +79,34 @@ void hidInit(NimBLEServer* pServer) {
   Serial.println("[HID] keyboard service up (Vibe Mic: A=F14, B=F15)");
 }
 
-void hidSetBindings(uint8_t buttonA, uint8_t buttonB) {
+void hidSetBindings(uint8_t buttonA, uint8_t modifiersA, uint8_t buttonB,
+                    uint8_t modifiersB) {
   if (validFunctionKey(buttonA)) sKeyA = buttonA;
   if (validFunctionKey(buttonB)) sKeyB = buttonB;
-  Serial.printf("[HID] Vibe Mic bindings A=F%d B=F%d\n", sKeyA - 0x5B,
-                sKeyB - 0x5B);
+  if (validFunctionKey(buttonA)) sModifiersA = modifiersA & 0x07;
+  if (validFunctionKey(buttonB)) sModifiersB = modifiersB & 0x07;
+  Serial.printf("[HID] Vibe Mic bindings A=0x%02X+F%d B=0x%02X+F%d\n",
+                sModifiersA, sKeyA - 0x39, sModifiersB, sKeyB - 0x39);
 }
 
 uint8_t hidKeyForButtonA() { return sKeyA; }
 uint8_t hidKeyForButtonB() { return sKeyB; }
+uint8_t hidModifiersForButtonA() { return sModifiersA; }
+uint8_t hidModifiersForButtonB() { return sModifiersB; }
 
-void hidKey(uint8_t keycode, bool pressed) {
+void hidKey(uint8_t keycode, uint8_t modifiers, bool pressed) {
   if (!bleConnected() || sInput == nullptr) return;
   // HOGP report body: modifier, reserved, six key usages.  Report ID 1 is
   // supplied by the Report Reference descriptor, not by this notification.
   uint8_t report[8] = {0};
-  if (pressed) report[2] = keycode;
+  if (pressed) {
+    report[0] = modifiers & 0x07;
+    report[2] = keycode;
+  }
   const size_t subscribers = sInput->getSubscribedCount();
   sInput->setValue(report, sizeof(report));
   sInput->notify();
-  Serial.printf("[HID] F%d %s (subscribers=%u)\n", keycode - 0x5B,
+  Serial.printf("[HID] 0x%02X+F%d %s (subscribers=%u)\n", modifiers & 0x07,
+                keycode - 0x39,
                 pressed ? "press" : "release", (unsigned)subscribers);
 }
