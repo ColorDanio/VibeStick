@@ -7,8 +7,10 @@ import {
 } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import stickCPlusImage from "./assets/m5stickc-plus-product-v2.png";
+import stickS3Image from "./assets/m5sticks3-concept.png";
 
-type Page = "overview" | "sessions" | "settings";
+type Page = "overview" | "sessions" | "voice" | "settings";
 type ThemePreference = "system" | "light" | "dark";
 type Capability = { available: boolean; reason?: string; testable?: boolean };
 type Session = {
@@ -26,7 +28,10 @@ type Snapshot = {
   active_session: string | null;
   audio_route: "asr" | "mic";
   device_mode: "home" | "agent" | "mic" | "yolo";
+  device: { model: string; firmware: string };
+  foreground_target?: { app: string };
   voice: { state: "idle" | "recording" | "transcribing" | "ready" | "error"; mode: "agent" | "mic" | "yolo"; recorded_ms: number; level: number; text: string };
+  transcriptions: { at: number; source: "agent" | "yolo"; text: string }[];
   transfers: { at: number; kind: "recording" | "transcript" | "delivery" | "audio" | "error"; text: string }[];
   queued: number;
   status: { state: string; session: string; tool: string; model: string };
@@ -50,6 +55,8 @@ type Snapshot = {
       asr_model: string;
       asr_online_model?: string;
       online_asr_configured: boolean;
+      mic_button_a?: string;
+      mic_button_b?: string;
       session_launcher: "auto" | "tmux" | "zellij";
       tools: { id: string; name: string; cwd: string }[];
     };
@@ -66,7 +73,9 @@ const demo: Snapshot = {
   active_session: "design",
   audio_route: "asr",
   device_mode: "home",
+  device: { model: "M5StickC-Plus", firmware: "" },
   voice: { state: "idle", mode: "agent", recorded_ms: 0, level: 0, text: "" },
+  transcriptions: [],
   transfers: [],
   queued: 0,
   status: {
@@ -119,6 +128,8 @@ const demo: Snapshot = {
       asr_model: "small",
       asr_online_model: "whisper-large-v3-turbo",
       online_asr_configured: false,
+      mic_button_a: "F14",
+      mic_button_b: "F15",
       session_launcher: "auto",
       tools: [{ id: "opencode", name: "OpenCode", cwd: "" }],
     },
@@ -144,6 +155,8 @@ export function App(): ReactElement {
   const [asrMode, setAsrMode] = useState<"local" | "online">("local");
   const [asrDirty, setAsrDirty] = useState(false);
   const [apiKey, setApiKey] = useState("");
+  const [micButtonA, setMicButtonA] = useState("F14");
+  const [micButtonB, setMicButtonB] = useState("F15");
   const [saving, setSaving] = useState(false);
   const [launcher, setLauncher] = useState<"auto" | "tmux" | "zellij">("auto");
   const [cwdTool, setCwdTool] = useState("");
@@ -211,6 +224,8 @@ export function App(): ReactElement {
         data.environment.config.asr_engine === "online" ? "online" : "local",
       );
     setLauncher(data.environment.config.session_launcher);
+    setMicButtonA(data.environment.config.mic_button_a ?? "F14");
+    setMicButtonB(data.environment.config.mic_button_b ?? "F15");
     if (!initialized.current && data.environment.config.tools.length) {
       const tool = data.environment.config.tools[0]!;
       setCwdTool(tool.id);
@@ -337,6 +352,19 @@ export function App(): ReactElement {
       setBusy(undefined);
     }
   };
+  const saveMicBindings = async (event: FormEvent): Promise<void> => {
+    event.preventDefault();
+    setBusy("mic-bindings");
+    try {
+      const response = await fetch("http://127.0.0.1:7861/api/settings/mic-bindings", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ button_a: micButtonA, button_b: micButtonB }),
+      });
+      if (!response.ok) throw new Error();
+      setNotice("Vibe Mic buttons saved. Restart VibeConn 2.0 to send them to the Stick.");
+    } catch { setNotice("Could not save Vibe Mic button bindings."); }
+    finally { setBusy(undefined); }
+  };
   const login = async (action: "install" | "uninstall"): Promise<void> => {
     if (!isTauri()) return;
     setBusy(action);
@@ -403,6 +431,7 @@ export function App(): ReactElement {
   const title: Record<Page, string> = {
     overview: "Overview",
     sessions: "Sessions",
+    voice: "Voice",
     settings: "Settings",
   };
   return (
@@ -430,6 +459,13 @@ export function App(): ReactElement {
           />
           <Nav
             page={page}
+            target="voice"
+            label="Voice"
+            icon="◌"
+            onClick={setPage}
+          />
+          <Nav
+            page={page}
             target="settings"
             label="Settings"
             icon="⚙"
@@ -437,8 +473,7 @@ export function App(): ReactElement {
           />
         </nav>
         <div className="rail-status">
-          <i className={connected ? "online" : ""} />
-          {connected ? "Host reachable" : "Host offline"}
+          {connected ? "VibeConn desktop" : "Connecting to host…"}
         </div>
       </aside>
       <section className="canvas">
@@ -474,6 +509,7 @@ export function App(): ReactElement {
             ownerBlocked={ownerBlocked}
             busy={busy}
             onRelease={() => void release()}
+            onReconnect={() => void restart()}
           />
         )}
         {page === "sessions" && (
@@ -496,6 +532,7 @@ export function App(): ReactElement {
             onSaveCwd={saveCwd}
           />
         )}
+        {page === "voice" && <Voice transcriptions={data.transcriptions} />}
         {page === "settings" && (
           <Settings
             data={data}
@@ -504,6 +541,8 @@ export function App(): ReactElement {
             localModel={localModel}
             asrMode={asrMode}
             apiKey={apiKey}
+            micButtonA={micButtonA}
+            micButtonB={micButtonB}
             saving={saving}
             busy={busy}
             testing={testing}
@@ -519,6 +558,9 @@ export function App(): ReactElement {
               setAsrDirty(true);
             }}
             onApiKey={setApiKey}
+            onMicButtonA={setMicButtonA}
+            onMicButtonB={setMicButtonB}
+            onSaveMicBindings={saveMicBindings}
             onSaveAsr={saveAsr}
             onTestAsr={() => void testProvider("asr")}
             onTestYolo={() => void testProvider("yolo")}
@@ -559,41 +601,34 @@ function Overview({
   ownerBlocked,
   busy,
   onRelease,
+  onReconnect,
 }: {
   data: Snapshot;
   selected?: Session;
   ownerBlocked: boolean;
   busy?: string;
   onRelease(): void;
+  onReconnect(): void;
 }): ReactElement {
   const caps = data.environment.capabilities;
   const agents = data.tools.list;
   return (
     <div className="overview-dashboard">
       <section className="device-card dashboard-hero">
-        <div className="stick">
-          <i />
-          <i />
-          <b>V</b>
-        </div>
+        <DeviceImage model={data.device.model} />
         <div className="device-copy">
           <span className="section-label">STICK STATUS</span>
-          <h2>M5StickC Plus</h2>
+          <h2>{deviceName(data.device.model)}</h2>
           <p>
             {data.environment.owner === "active"
               ? "Connected, synchronized, and ready for voice input."
               : "Waiting to become the active VibeConn device."}
           </p>
           <div className="device-facts">
-            <span>
-              BLE <b>{caps.ble.available ? "Ready" : "Unavailable"}</b>
-            </span>
-            <span>
-              ASR <b>{caps.asr.available ? "Ready" : "Setup needed"}</b>
-            </span>
-            <span>
-              Mode <b>{modeName(data.device_mode)}</b>
-            </span>
+            <StatusFact label="BLE" value={caps.ble.available ? "Ready" : "Unavailable"} />
+            <StatusFact label="ASR" value={caps.asr.available ? "Ready" : "Setup needed"} />
+            <StatusFact label="Mode" value={modeName(data.device_mode)} />
+            {data.device.firmware && <StatusFact label="Firmware" value={data.device.firmware} />}
           </div>
         </div>
         {ownerBlocked ? (
@@ -609,48 +644,63 @@ function Overview({
             </button>
           </div>
         ) : (
-          <div className="device-state">
-            <b>
-              {data.environment.owner === "active" ? "Connected" : "Waiting"}
-            </b>
+          <div className="device-state device-actions">
+            <b>{data.environment.owner === "active" ? "Connected" : "Waiting"}</b>
             <span>{data.environment.runtime}</span>
+            <button className="secondary" onClick={onReconnect} disabled={busy === "restart"}>
+              {busy === "restart" ? "Reconnecting…" : "Reconnect"}
+            </button>
           </div>
         )}
       </section>
       <section className="dashboard-grid">
-        <VoiceActivity voice={data.voice} />
-        <div className="dashboard-side">
-          <div className="panel location-panel">
-            <span className="section-label">LOCATION / MODE</span>
-            <h2>{modeName(data.device_mode)}</h2>
-            {data.device_mode === "home" && <p className="lede">At the Stick main menu. Choose Agent CLI, Vibe Mic, or YOLO.</p>}
-            {data.device_mode !== "home" && <p className="lede">The Stick is currently operating in this mode.</p>}
-            <div className="mode-rail">
-              <ModeRow name="Agent CLI" detail="Transcript to selected session" active={data.device_mode === "agent"} />
-              <ModeRow name="Vibe Mic" detail="Raw audio to system input" active={data.device_mode === "mic"} />
-              <ModeRow name="YOLO" detail="Transcript to focused window" active={data.device_mode === "yolo"} />
-            </div>
-          </div>
-          <div className="panel target-panel">
-            <span className="section-label">CURRENT TARGET</span>
-            <h2>{selected ? sessionTitle(selected) : "No session selected"}</h2>
-            <p className="lede">
-              {selected
-                ? `${agentName(agents, selected.tool)} · ${selected.last || "Ready for your next prompt"}`
-                : "Select an Agent CLI session in Sessions before sending a transcript."}
-            </p>
-          </div>
-        </div>
+        <LiveActivity data={data} selected={selected} />
+        <CurrentTarget data={data} selected={selected} agents={agents} />
       </section>
-      <TransferLog transfers={data.transfers} status={data.status} />
     </div>
   );
+}
+function StatusFact({ label, value }: { label: string; value: string }): ReactElement {
+  return <span className="status-fact"><small>{label}</small><b>{value}</b></span>;
+}
+function LiveActivity({ data, selected }: { data: Snapshot; selected?: Session }): ReactElement {
+  const rows = data.transcriptions.slice(0, 6).map((item) => ({ at: item.at, mode: item.source === "yolo" ? "YOLO" : "Agent", text: item.text }));
+  if (!rows.length && selected) rows.push({ at: 0, mode: modeName(data.device_mode), text: selected.last || "Ready for your next prompt" });
+  return <section className="panel live-activity"><div className="panel-head"><div><span className="section-label">LIVE ACTIVITY</span><h2>Latest</h2></div></div>{rows.length ? <div className="latest-list">{rows.map((row, index) => <article className="latest-row" key={`${row.at}-${index}`}><time>{row.at ? formatTime(row.at) : "Now"}</time><span>Latest ·</span><b className={`mode-chip ${row.mode.toLowerCase().replaceAll(" ", "-")}`}>{row.mode}</b><p>{row.text}</p></article>)}</div> : <Empty text="Activity from the Stick will appear here." />}</section>;
+}
+function CurrentTarget({ data, selected, agents }: { data: Snapshot; selected?: Session; agents: Agent[] }): ReactElement {
+  return <section className="panel current-target"><span className="section-label">CURRENT TARGET</span><div className="target-mark">›_</div><h2>{currentTarget(data, selected)}</h2><p className="lede">{targetDetail(data, selected, agents)}</p><div className="target-mode"><i className={data.environment.owner === "active" ? "online" : "warn"} />{modeName(data.device_mode)}</div></section>;
+}
+function deviceName(model: string): string {
+  return model === "M5StickS3" ? "M5StickS3" : "M5StickC Plus";
+}
+function DeviceImage({ model }: { model: string }): ReactElement {
+  if (model === "M5StickS3") return <div className="stick stick-s3" aria-label="M5StickS3 product image"><img src={stickS3Image} alt="M5StickS3" /></div>;
+  return <div className="stick stick-cplus" aria-label="M5StickC Plus product image"><img src={stickCPlusImage} alt="M5StickC Plus" /></div>;
 }
 function ModeRow({ name, detail, active }: { name: string; detail: string; active: boolean }): ReactElement {
   return <div className={active ? "mode-row active" : "mode-row"}><i /><div><b>{name}</b><span>{detail}</span></div>{active && <em>Now</em>}</div>;
 }
 function modeName(mode: Snapshot["device_mode"]): string {
   return mode === "agent" ? "Agent CLI" : mode === "mic" ? "Vibe Mic" : mode === "yolo" ? "YOLO" : "Main menu";
+}
+function currentTarget(data: Snapshot, selected?: Session): string {
+  if (data.device_mode === "mic" || data.device_mode === "yolo")
+    return data.foreground_target?.app ?? "Detecting focused application…";
+  return selected ? sessionTitle(selected) : "No session selected";
+}
+function targetDetail(data: Snapshot, selected: Session | undefined, agents: Agent[]): string {
+  if (data.device_mode === "mic")
+    return data.foreground_target
+      ? "Foreground application only — its window content is not read or shown."
+      : "Move the cursor to an application window to identify it. Window content is never read."
+  if (data.device_mode === "yolo")
+    return data.foreground_target
+      ? "YOLO sends text to this focused application. Window content is not read or shown."
+      : "Move the cursor to the intended application window before using YOLO."
+  return selected
+    ? `${agentName(agents, selected.tool)} · ${selected.last || "Ready for your next prompt"}`
+    : "Select an Agent CLI session in Sessions before sending a transcript.";
 }
 function Sessions({
   data,
@@ -764,36 +814,28 @@ function Sessions({
     </section>
   );
 }
-function Voice({ data }: { data: Snapshot }): ReactElement {
-  const yolo = data.environment.capabilities.yolo;
+
+function Voice({ transcriptions }: { transcriptions: Snapshot["transcriptions"] }): ReactElement {
   return (
-    <section className="wide-panel">
-      <span className="section-label">MODE GUIDE</span>
-      <h2>Voice modes live on the Stick</h2>
-      <p className="lede">
-        Select a mode on VibeStick. This view explains exactly where audio and
-        text go.
-      </p>
-      <div className="voice-grid">
-        <Mode
-          name="Agent CLI"
-          icon="⌁"
-          detail="Hold A to record. Release, review the transcript, then press A again to deliver it to the selected session."
-          state={data.environment.capabilities.asr}
-        />
-        <Mode
-          name="Vibe Mic"
-          icon="◉"
-          detail="A sends F15 and raw audio to the system Vibe Mic input. B sends F14."
-          state={data.environment.capabilities.mic}
-        />
-        <Mode
-          name="YOLO"
-          icon="◎"
-          detail="Transcribe into the currently focused application. A confirms Enter; B sends Escape twice."
-          state={yolo}
-        />
+    <section className="wide-panel voice-history">
+      <div className="panel-head">
+        <div>
+          <span className="section-label">TRANSCRIPTION HISTORY</span>
+          <h2>Voice</h2>
+          <p>Recognized speech is kept here with its entry point. Vibe Mic raw audio is never saved.</p>
+        </div>
       </div>
+      {transcriptions.length ? (
+        <div className="voice-history-list">
+          {transcriptions.map((item, index) => (
+            <article className="voice-history-row" key={`${item.at}-${index}`}>
+              <span className={`voice-source ${item.source}`}>{item.source === "yolo" ? "YOLO" : "Agent CLI"}</span>
+              <p>{item.text}</p>
+              <time>{formatTime(item.at)}</time>
+            </article>
+          ))}
+        </div>
+      ) : <Empty text="New Agent CLI and YOLO transcriptions will appear here." />}
     </section>
   );
 }
@@ -804,6 +846,8 @@ function Settings(props: {
   localModel: string;
   asrMode: "local" | "online";
   apiKey: string;
+  micButtonA: string;
+  micButtonB: string;
   saving: boolean;
   busy?: string;
   testing?: "asr" | "yolo";
@@ -816,6 +860,9 @@ function Settings(props: {
   onLocalModel(v: string): void;
   onAsrMode(v: "local" | "online"): void;
   onApiKey(v: string): void;
+  onMicButtonA(v: string): void;
+  onMicButtonB(v: string): void;
+  onSaveMicBindings(e: FormEvent): void;
   onSaveAsr(e: FormEvent): void;
   onTestAsr(): void;
   onTestYolo(): void;
@@ -824,13 +871,13 @@ function Settings(props: {
 }): ReactElement {
   const { data } = props;
   const yolo = data.environment.capabilities.yolo;
+  const [language, setLanguage] = useState("system");
   return (
     <section className="settings-view">
       <div className="settings-heading">
         <div>
-          <span className="section-label">HOST SETUP</span>
           <h2>Settings</h2>
-          <p className="lede">VibeConn 1.x and 2.0 share this configuration.</p>
+          <p className="lede">Manage your Stick and how VibeConn runs on this computer.</p>
         </div>
         <div className="settings-actions">
           <a
@@ -851,6 +898,15 @@ function Settings(props: {
           )}
         </div>
       </div>
+      <section className="setup-section">
+        <div><span className="section-label">DEVICE SETUP</span><h3>VibeStick devices</h3><p>Manage paired Sticks and their connection state.</p></div>
+        <div className="device-manager"><DeviceImage model={data.device.model} /><div><b>{deviceName(data.device.model)}</b><span><i className={data.environment.owner === "active" ? "online" : "warn"} />{data.environment.owner === "active" ? "Connected" : "Disconnected"}</span><small>{data.device.firmware || "Firmware detected automatically"}</small></div><button className="secondary" onClick={props.onRestart} disabled={props.busy === "restart"}>{props.busy === "restart" ? "Reconnecting…" : "Reconnect"}</button></div>
+        <button className="quiet" onClick={() => window.alert("Pair an additional Stick from your system Bluetooth settings, then open VibeConn to connect it.")}>+ Add Stick</button>
+      </section>
+      <section className="setup-section host-setup">
+        <span className="section-label">HOST SETUP</span>
+        <div className="form-block inline language-setting"><div><h3>App language</h3><p>Choose a display language, or follow the system setting.</p></div><select value={language} onChange={(event) => setLanguage(event.target.value)} aria-label="App language"><option value="system">Follow system</option><option value="en">English</option><option value="zh">中文</option></select></div>
+      </section>
       <div className="form-block inline theme-setting">
         <div>
           <h3>Appearance</h3>
@@ -881,6 +937,12 @@ function Settings(props: {
           <button className="primary" disabled={props.saving}>{props.saving ? "Saving…" : `Use ${props.asrMode === "local" ? "Local" : "Online"} ASR`}</button>
           {props.asrMode === "online" && <button type="button" className="secondary" onClick={props.onTestAsr} disabled={props.testing === "asr"}>{props.testing === "asr" ? "Testing…" : "Test provider"}</button>}
         </div>
+      </form>
+      <form className="form-block inline" onSubmit={props.onSaveMicBindings}>
+        <div><h3>Vibe Mic buttons</h3><p>Buttons emit configurable F13–F24 keys only while Vibe Mic is active. Default: A = F14, B = F15.</p></div>
+        <label>Button A<select value={props.micButtonA} onChange={(e) => props.onMicButtonA(e.target.value)}>{functionKeyOptions()}</select></label>
+        <label>Button B<select value={props.micButtonB} onChange={(e) => props.onMicButtonB(e.target.value)}>{functionKeyOptions()}</select></label>
+        <button className="secondary" disabled={props.busy === "mic-bindings"}>{props.busy === "mic-bindings" ? "Saving…" : "Save"}</button>
       </form>
       {yolo?.testable && (
         <div className="form-block inline">
@@ -923,6 +985,9 @@ function Settings(props: {
       )}
     </section>
   );
+}
+function functionKeyOptions(): ReactElement[] {
+  return Array.from({ length: 12 }, (_, index) => <option key={index} value={`F${index + 13}`}>{`F${index + 13}`}</option>);
 }
 const agentSymbols: Record<string, string> = {
   "claude-code": "✺",
@@ -989,12 +1054,14 @@ function Route({
     </div>
   );
 }
-function VoiceActivity({ voice }: { voice: Snapshot["voice"] }): ReactElement {
+function VoiceActivity({ voice, latest }: { voice: Snapshot["voice"]; latest?: Snapshot["transcriptions"][number] }): ReactElement {
   const seconds = (voice.recorded_ms / 1000).toFixed(1);
   const mode = voice.mode === "mic" ? "Vibe Mic" : voice.mode === "yolo" ? "YOLO" : "Agent CLI";
   const heading = voice.state === "recording" ? `Recording · ${mode}` : voice.state === "transcribing" ? "Transcribing" : voice.state === "ready" ? "Transcript ready" : voice.state === "error" ? "Voice error" : "Listening for the Stick";
   const detail = voice.state === "recording" ? `${seconds}s captured from the Stick` : voice.mode === "mic" ? "Raw audio is routed to the system Vibe Mic input." : voice.state === "idle" ? "Hold A on the Stick to begin recording." : "Audio is being processed on the paired host.";
-  return <section className="panel voice-activity"><div className="voice-copy"><span className="section-label">LIVE ACTIVITY</span><h2>{heading}</h2><p className="lede">{detail}</p></div><span className={`voice-state ${voice.state}`}>{voice.state === "recording" ? `${seconds}s` : mode}</span><div className="voice-wave" aria-label={`Audio level ${Math.round(voice.level * 100)} percent`}>{Array.from({ length: 32 }, (_, index) => <i key={index} style={{ height: `${voice.state === "recording" ? 18 + ((index * 29 + Math.round(voice.level * 100) * 7) % 66) : 16 + ((index * 17) % 32)}%` }} />)}</div>{voice.text && <div className={voice.state === "error" ? "voice-preview error" : "voice-preview"}>{voice.text}</div>}</section>;
+  const displayedText = voice.text || (voice.state === "idle" ? latest?.text : "");
+  const displayedSource = voice.text ? voice.mode : latest?.source === "yolo" ? "YOLO" : latest ? "Agent CLI" : "";
+  return <section className="panel voice-activity"><div className="voice-copy"><span className="section-label">LIVE ACTIVITY</span><h2>{heading}</h2><p className="lede">{detail}</p></div><span className={`voice-state ${voice.state}`}>{voice.state === "recording" ? `${seconds}s` : mode}</span><div className="voice-wave" aria-label={`Audio level ${Math.round(voice.level * 100)} percent`}>{Array.from({ length: 40 }, (_, index) => <i key={index} style={{ height: `${voice.state === "recording" ? 18 + ((index * 29 + Math.round(voice.level * 100) * 7) % 66) : 16 + ((index * 17) % 32)}%` }} />)}</div>{displayedText && <div className={voice.state === "error" ? "voice-preview error" : "voice-preview"}>{displayedSource && <small>Latest · {displayedSource}</small>}{displayedText}</div>}</section>;
 }
 function TransferLog({ transfers, status }: { transfers: Snapshot["transfers"]; status: Snapshot["status"] }): ReactElement {
   return <section className="panel transfer-log"><div className="panel-head"><div><span className="section-label">TRANSMISSION RECORD</span><h2>Recent activity</h2></div><span className="transfer-target">{status.state === "idle" ? "Host ready" : status.state}</span></div>{transfers.length ? <div className="transfer-list">{transfers.map((item, index) => <div className="transfer-row" key={`${item.at}-${index}`}><span className={`transfer-kind ${item.kind}`}>{transferLabel(item.kind)}</span><p>{item.text}</p><time>{formatTime(item.at)}</time></div>)}</div> : <Empty text="Voice recordings, transcripts, and deliveries from the Stick will appear here." />}</section>;
