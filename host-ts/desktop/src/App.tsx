@@ -176,6 +176,7 @@ export function App(): ReactElement {
   const [apiKey, setApiKey] = useState("");
   const [micButtonA, setMicButtonA] = useState("F14");
   const [micButtonB, setMicButtonB] = useState("F15");
+  const [micBindingsDirty, setMicBindingsDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [launcher, setLauncher] = useState<"auto" | "tmux" | "zellij">("auto");
   const [cwdTool, setCwdTool] = useState("");
@@ -261,15 +262,20 @@ export function App(): ReactElement {
       );
     }
     setLauncher(data.environment.config.session_launcher);
-    setMicButtonA(data.environment.config.mic_button_a ?? "F14");
-    setMicButtonB(data.environment.config.mic_button_b ?? "F15");
+    // Settings polling must not overwrite a shortcut while its modifier
+    // checkbox is being edited. The Host snapshot only becomes authoritative
+    // again after a successful save.
+    if (!micBindingsDirty) {
+      setMicButtonA(data.environment.config.mic_button_a ?? "F14");
+      setMicButtonB(data.environment.config.mic_button_b ?? "F15");
+    }
     if (!initialized.current && data.environment.config.tools.length) {
       const tool = data.environment.config.tools[0]!;
       setCwdTool(tool.id);
       setCwd(tool.cwd);
       initialized.current = true;
     }
-  }, [data.environment.config, asrDirty]);
+  }, [data.environment.config, asrDirty, micBindingsDirty]);
   useEffect(() => {
     if (!isTauri()) return;
     void invoke<{ enabled: boolean }>("login_startup", { action: "status" })
@@ -419,6 +425,7 @@ export function App(): ReactElement {
         body: JSON.stringify({ button_a: micButtonA, button_b: micButtonB }),
       });
       if (!response.ok) throw new Error();
+      setMicBindingsDirty(false);
       setNotice(t("Vibe Mic buttons saved. Restart Vibe Stick to send them to the device.", "Vibe Mic 按键已保存。请重启 Vibe Stick 将设置发送到设备。"));
     } catch { setNotice(t("Could not save Vibe Mic button bindings.", "无法保存 Vibe Mic 按键映射。")); }
     finally { setBusy(undefined); }
@@ -625,8 +632,8 @@ export function App(): ReactElement {
               setAsrDirty(true);
             }}
             onApiKey={(value) => { setApiKey(value); setAsrDirty(true); }}
-            onMicButtonA={setMicButtonA}
-            onMicButtonB={setMicButtonB}
+            onMicButtonA={(value) => { setMicButtonA(value); setMicBindingsDirty(true); }}
+            onMicButtonB={(value) => { setMicButtonB(value); setMicBindingsDirty(true); }}
             onSaveMicBindings={saveMicBindings}
             onSaveAsr={saveAsr}
             onTestAsr={() => void testProvider("asr")}
