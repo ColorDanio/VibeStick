@@ -2,6 +2,7 @@
   "name": "@vibestick/host-desktop",
   "version": "0.2.1",
   "private": true,
+  "license": "MIT",
   "description": "Cross-platform Vibe Stick desktop companion",
   "author": "VibeStick contributors",
   "type": "module",

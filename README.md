@@ -157,6 +157,4 @@ and build both firmware targets when modifying shared firmware code.
 
 ## License
 
-A license file has not yet been added to this repository. Before redistributing
-Vibe Stick as an open-source project, the maintainers need to choose and add an
-explicit license; until then, normal copyright restrictions apply.
+Vibe Stick is released under the [MIT License](LICENSE).

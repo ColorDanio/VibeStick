@@ -2,6 +2,7 @@
   "name": "@vibestick/host-core",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "VibeStick cross-platform TypeScript host domain core",
   "type": "module",
   "scripts": {

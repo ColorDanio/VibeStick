@@ -2,6 +2,7 @@
 name = "vibeconn"
 version = "0.2.1"
 description = "Vibe Stick desktop shell"
+license = "MIT"
 authors = ["VibeStick contributors"]
 edition = "2021"
 
