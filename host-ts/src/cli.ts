@@ -11,7 +11,8 @@ import { startDashboardServer } from "./server.js";
 import { VibeBridge } from "./bridge.js";
 import type { DashboardEnvironment } from "./dashboard.js";
 import { VoicePipeline, onlineTranscriber } from "./asr.js";
-import { preparePythonLocalAsr, pythonLocalTranscriber } from "./local-asr.js";
+import { applyPythonLocalAsr, downloadPythonLocalAsr, pythonLocalTranscriber } from "./local-asr.js";
+import type { LocalAsrModelStatus } from "./server.js";
 import { pythonSessionDiscovery } from "./session-discovery.js";
 import { NodeProcessInspector, discoverProcessSessions, mergeSessions } from "./process-discovery.js";
 import { publicAsrSettings, updateMicBindings, updateOnlineAsr, updateSessionLauncher, updateToolCwd, verifyOnlineAsr } from "./settings.js";
@@ -63,6 +64,9 @@ async function main(): Promise<void> {
   await loadSessions();
   let runtime: HostRuntime | undefined;
   let testYoloFocused: (() => Promise<{ available: boolean; detail: string }>) | undefined;
+  let localModelStatus: LocalAsrModelStatus = config.asr.engine === "faster-whisper"
+    ? { model: config.asr.model, state: "applied", progress: 100, detail: "Active model" }
+    : { model: config.asr.model, state: "idle", progress: 0 };
   const environment = (): DashboardEnvironment => {
     const diagnostics = runtime?.diagnostics();
     return {
@@ -84,11 +88,38 @@ async function main(): Promise<void> {
   const dashboard = await startDashboardServer(core, args.port, environment, {
     async updateOnlineAsr(body) {
       const candidate = updateOnlineAsr(config, body);
-      if (candidate.asr.engine === "faster-whisper")
-        await preparePythonLocalAsr(localAsrExecutable, localAsrHelper, candidate.asr);
       config = candidate;
       await saveConfigFile(args.config, config);
       return publicAsrSettings(config);
+    },
+    async startLocalAsrDownload(body) {
+      const candidate = updateOnlineAsr(config, body);
+      if (localModelStatus.state === "downloading") throw new Error(`Already downloading ${localModelStatus.model}`);
+      localModelStatus = { model: candidate.asr.model, state: "downloading", progress: 0, detail: "Starting download…" };
+      void downloadPythonLocalAsr(localAsrExecutable, localAsrHelper, candidate.asr, (progress) => {
+        if (localModelStatus.model === candidate.asr.model && localModelStatus.state === "downloading")
+          localModelStatus = { ...localModelStatus, progress, detail: `Downloading ${candidate.asr.model}…` };
+      }).then(() => {
+        localModelStatus = { model: candidate.asr.model, state: "ready", progress: 100, detail: "Downloaded and ready to apply" };
+      }).catch((error) => {
+        localModelStatus = { model: candidate.asr.model, state: "error", progress: 0, detail: error instanceof Error ? error.message : String(error) };
+      });
+      return localModelStatus;
+    },
+    localAsrDownloadStatus() { return localModelStatus; },
+    async applyLocalAsr(body) {
+      const candidate = updateOnlineAsr(config, body);
+      localModelStatus = { model: candidate.asr.model, state: "applying", progress: 100, detail: "Validating local model…" };
+      try {
+        await applyPythonLocalAsr(localAsrExecutable, localAsrHelper, candidate.asr);
+        config = candidate;
+        await saveConfigFile(args.config, config);
+        localModelStatus = { model: candidate.asr.model, state: "applied", progress: 100, detail: "Applied · restart required" };
+        return publicAsrSettings(config);
+      } catch (error) {
+        localModelStatus = { model: candidate.asr.model, state: "error", progress: 0, detail: error instanceof Error ? error.message : String(error) };
+        throw error;
+      }
     },
     async testOnlineAsr() { return verifyOnlineAsr(config); },
     async testYoloFocused() {

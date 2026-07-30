@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
 import type { Config } from "./config.js";
 import type { AsrTranscriber } from "./asr.js";
 
@@ -10,9 +11,12 @@ export interface LocalAsrRequest {
 }
 export type LocalAsrRunner = (request: LocalAsrRequest) => Promise<string>;
 
-/** Download/load a local faster-whisper model before it becomes active. */
-export function preparePythonLocalAsr(executable: string, helper: string, asr: LocalAsrRequest["asr"]): Promise<void> {
-  return runPythonHelper(executable, helper, { action: "prepare", asr }, 10 * 60_000, "local ASR model download timed out").then(() => undefined);
+export function downloadPythonLocalAsr(executable: string, helper: string, asr: LocalAsrRequest["asr"], onProgress: (progress: number) => void): Promise<void> {
+  return runPythonHelper(executable, helper, { action: "download", asr }, 30 * 60_000, "local ASR model download timed out", onProgress).then(() => undefined);
+}
+
+export function applyPythonLocalAsr(executable: string, helper: string, asr: LocalAsrRequest["asr"]): Promise<void> {
+  return runPythonHelper(executable, helper, { action: "apply", asr }, 5 * 60_000, "local ASR model validation timed out").then(() => undefined);
 }
 
 /**
@@ -40,7 +44,7 @@ function runPythonLocalAsr(request: LocalAsrRequest): Promise<string> {
   }, 180_000, "local ASR transcription timed out").then((result) => result.text ?? "");
 }
 
-function runPythonHelper(executable: string, helper: string, body: Record<string, unknown>, timeoutMs: number, timeoutMessage: string): Promise<{ text?: string }> {
+function runPythonHelper(executable: string, helper: string, body: Record<string, unknown>, timeoutMs: number, timeoutMessage: string, onProgress?: (progress: number) => void): Promise<{ text?: string }> {
   return new Promise((resolve, reject) => {
     let child;
     try {
@@ -54,7 +58,16 @@ function runPythonHelper(executable: string, helper: string, body: Record<string
       child.kill(); reject(new Error(timeoutMessage));
     }, timeoutMs);
     child.stdout.on("data", (data) => { stdout += String(data); });
-    child.stderr.on("data", (data) => { stderr = (stderr + String(data)).slice(-300); });
+    createInterface({ input: child.stderr }).on("line", (line) => {
+      try {
+        const event: unknown = JSON.parse(line);
+        if (typeof event === "object" && event !== null && (event as { event?: unknown }).event === "progress" && typeof (event as { progress?: unknown }).progress === "number") {
+          onProgress?.(Math.max(0, Math.min(100, (event as { progress: number }).progress)));
+          return;
+        }
+      } catch { /* retain ordinary helper diagnostics below */ }
+      stderr = (stderr + line + "\n").slice(-600);
+    });
     child.once("error", (error) => { clearTimeout(timer); reject(error); });
     child.once("close", (code) => {
       clearTimeout(timer);

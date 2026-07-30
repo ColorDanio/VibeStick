@@ -79,11 +79,6 @@ fn start_connection_indicator(app: AppHandle, status: MenuItem<tauri::Wry>) {
         let _ = status.set_text(label);
         if let Some(tray) = app.tray_by_id(TRAY_ID) {
             let _ = tray.set_icon(Some(connection_icon(color)));
-            let _ = tray.set_title(Some(match label {
-                "VibeConn: Stick connected" => "●",
-                "VibeConn: connecting to Stick…" => "…",
-                _ => "!",
-            }));
         }
         std::thread::sleep(Duration::from_secs(2));
     });
@@ -96,7 +91,6 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let menu = Menu::with_items(app, &[&status, &open, &quit])?;
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(connection_icon([230, 167, 40, 255]))
-        .title("…")
         .menu(&menu)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open" => show_main_window(app),

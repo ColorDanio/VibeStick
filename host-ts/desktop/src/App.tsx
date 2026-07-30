@@ -12,6 +12,7 @@ import stickS3Image from "./assets/m5sticks3-concept.png";
 
 type Page = "overview" | "sessions" | "voice" | "settings";
 type ThemePreference = "system" | "light" | "dark";
+type LocalModelStatus = { model: string; state: "idle" | "downloading" | "ready" | "applying" | "applied" | "error"; progress: number; detail?: string };
 type Capability = { available: boolean; reason?: string; testable?: boolean };
 type Session = {
   id: string;
@@ -154,6 +155,7 @@ export function App(): ReactElement {
   );
   const [asrMode, setAsrMode] = useState<"local" | "online">("local");
   const [asrDirty, setAsrDirty] = useState(false);
+  const [localModelStatus, setLocalModelStatus] = useState<LocalModelStatus>({ model: "", state: "idle", progress: 0 });
   const [apiKey, setApiKey] = useState("");
   const [micButtonA, setMicButtonA] = useState("F14");
   const [micButtonB, setMicButtonB] = useState("F15");
@@ -170,6 +172,19 @@ export function App(): ReactElement {
     document.title = "VibeConn";
     if (isTauri()) void getCurrentWindow().setTitle("VibeConn");
   }, []);
+  useEffect(() => {
+    if (page !== "settings" || asrMode !== "local") return;
+    let alive = true;
+    const refresh = async (): Promise<void> => {
+      try {
+        const response = await fetch("http://127.0.0.1:7861/api/settings/asr/local/download");
+        if (response.ok && alive) setLocalModelStatus(await response.json() as LocalModelStatus);
+      } catch { /* host availability is shown elsewhere */ }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), localModelStatus.state === "downloading" || localModelStatus.state === "applying" ? 500 : 1600);
+    return () => { alive = false; window.clearInterval(timer); };
+  }, [page, asrMode, localModelStatus.state]);
   useEffect(() => {
     if (data.device_mode === "agent" && previousDeviceMode.current !== "agent") {
       setPage("sessions");
@@ -286,7 +301,7 @@ export function App(): ReactElement {
     event.preventDefault();
     setSaving(true);
     try {
-      const response = await fetch("http://127.0.0.1:7861/api/settings/asr", {
+      const response = await fetch(asrMode === "local" ? "http://127.0.0.1:7861/api/settings/asr/local/apply" : "http://127.0.0.1:7861/api/settings/asr", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(
@@ -310,11 +325,25 @@ export function App(): ReactElement {
       // Keep the chosen values stable until the restarted Host reports its
       // new configuration; an older polling snapshot must not reset the menu.
       setAsrDirty(true);
-      setNotice("ASR model is ready and saved. Restart Vibe Stick to apply it.");
+      setNotice(asrMode === "local" ? "Local model applied. Restart Vibe Stick to activate it." : "Online ASR saved. Restart Vibe Stick to activate it.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not prepare and save ASR settings.");
     } finally {
       setSaving(false);
+    }
+  };
+  const downloadLocalModel = async (): Promise<void> => {
+    setLocalModelStatus({ model: localModel, state: "downloading", progress: 0, detail: "Starting download…" });
+    try {
+      const response = await fetch("http://127.0.0.1:7861/api/settings/asr/local/download", {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "local", local_model: localModel }),
+      });
+      const result: unknown = await response.json().catch(() => undefined);
+      if (!response.ok) throw new Error(typeof result === "object" && result !== null && typeof (result as { error?: unknown }).error === "string" ? (result as { error: string }).error : "Could not start model download");
+      setLocalModelStatus(result as LocalModelStatus);
+    } catch (error) {
+      setLocalModelStatus({ model: localModel, state: "error", progress: 0, detail: error instanceof Error ? error.message : String(error) });
     }
   };
   const saveLauncher = async (event: FormEvent): Promise<void> => {
@@ -544,6 +573,7 @@ export function App(): ReactElement {
             apiBase={apiBase}
             onlineModel={onlineModel}
             localModel={localModel}
+            localModelStatus={localModelStatus}
             asrMode={asrMode}
             apiKey={apiKey}
             micButtonA={micButtonA}
@@ -554,18 +584,20 @@ export function App(): ReactElement {
             theme={theme}
             desktopShell={isTauri()}
             loginEnabled={loginEnabled}
-            onApiBase={setApiBase}
+            onApiBase={(value) => { setApiBase(value); setAsrDirty(true); }}
             onTheme={setTheme}
-            onOnlineModel={setOnlineModel}
+            onOnlineModel={(value) => { setOnlineModel(value); setAsrDirty(true); }}
             onLocalModel={(model) => {
               setLocalModel(model);
               setAsrDirty(true);
+              if (model !== localModelStatus.model) setLocalModelStatus({ model, state: "idle", progress: 0 });
             }}
+            onDownloadLocalModel={() => void downloadLocalModel()}
             onAsrMode={(mode) => {
               setAsrMode(mode);
               setAsrDirty(true);
             }}
-            onApiKey={setApiKey}
+            onApiKey={(value) => { setApiKey(value); setAsrDirty(true); }}
             onMicButtonA={setMicButtonA}
             onMicButtonB={setMicButtonB}
             onSaveMicBindings={saveMicBindings}
@@ -852,6 +884,7 @@ function Settings(props: {
   apiBase: string;
   onlineModel: string;
   localModel: string;
+  localModelStatus: LocalModelStatus;
   asrMode: "local" | "online";
   apiKey: string;
   micButtonA: string;
@@ -866,6 +899,7 @@ function Settings(props: {
   onTheme(v: ThemePreference): void;
   onOnlineModel(v: string): void;
   onLocalModel(v: string): void;
+  onDownloadLocalModel(): void;
   onAsrMode(v: "local" | "online"): void;
   onApiKey(v: string): void;
   onMicButtonA(v: string): void;
@@ -935,14 +969,20 @@ function Settings(props: {
         </div>
         {props.asrMode === "local" ? <>
           <label>Local model<select value={props.localModel} onChange={(e) => props.onLocalModel(e.target.value)}><option value="tiny">Tiny — fastest</option><option value="base">Base</option><option value="small">Small — recommended</option><option value="medium">Medium — highest quality</option></select></label>
-          <div className="asr-local-note">Audio stays on this computer. Save verifies the selected model and downloads it on first use; large models can take several minutes. The configured model is used after restart.</div>
+          <div className="asr-local-note">Audio stays on this computer. Download the selected model first, then apply it. Large models can take several minutes.</div>
+          <div className={`model-download ${props.localModelStatus.state}`}>
+            <div className="model-download-head"><span>{modelStatusLabel(props.localModelStatus, props.localModel)}</span><b>{props.localModelStatus.model === props.localModel && props.localModelStatus.state === "downloading" ? `${Math.round(props.localModelStatus.progress)}%` : ""}</b></div>
+            <div className="model-progress" role="progressbar" aria-label="Model download progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={props.localModelStatus.model === props.localModel ? props.localModelStatus.progress : 0}><i style={{ width: `${props.localModelStatus.model === props.localModel ? props.localModelStatus.progress : 0}%` }} /></div>
+            {props.localModelStatus.detail && props.localModelStatus.model === props.localModel && <small>{props.localModelStatus.detail}</small>}
+          </div>
+          <button type="button" className="secondary model-download-button" onClick={props.onDownloadLocalModel} disabled={props.localModelStatus.state === "downloading" || props.localModelStatus.state === "applying"}>{props.localModelStatus.state === "downloading" && props.localModelStatus.model === props.localModel ? "Downloading…" : `Download ${props.localModel}`}</button>
         </> : <>
           <label>API base<input value={props.apiBase} onChange={(e) => props.onApiBase(e.target.value)} /></label>
           <label>Model<input value={props.onlineModel} onChange={(e) => props.onOnlineModel(e.target.value)} /></label>
           <label>API key<input type="password" value={props.apiKey} placeholder="Leave blank to keep it" onChange={(e) => props.onApiKey(e.target.value)} /></label>
         </>}
         <div className="form-actions">
-          <button className="primary" disabled={props.saving}>{props.saving ? (props.asrMode === "local" ? "Preparing model…" : "Saving…") : props.asrMode === "local" ? `Prepare & use ${props.localModel}` : "Use Online ASR"}</button>
+          <button className="primary" disabled={props.saving || (props.asrMode === "local" && (props.localModelStatus.state === "downloading" || props.localModelStatus.state === "applying"))}>{props.saving ? (props.asrMode === "local" ? "Applying model…" : "Saving…") : props.asrMode === "local" ? `Apply ${props.localModel}` : "Use Online ASR"}</button>
           {props.asrMode === "online" && <button type="button" className="secondary" onClick={props.onTestAsr} disabled={props.testing === "asr"}>{props.testing === "asr" ? "Testing…" : "Test provider"}</button>}
         </div>
       </form>
@@ -996,6 +1036,17 @@ function Settings(props: {
 }
 function functionKeyOptions(): ReactElement[] {
   return Array.from({ length: 12 }, (_, index) => <option key={index} value={`F${index + 13}`}>{`F${index + 13}`}</option>);
+}
+function modelStatusLabel(status: LocalModelStatus, selected: string): string {
+  if (status.model !== selected || status.state === "idle") return "Not downloaded in this session";
+  return {
+    downloading: `Downloading ${selected}`,
+    ready: `${selected} downloaded`,
+    applying: `Applying ${selected}`,
+    applied: `${selected} applied`,
+    error: `${selected} needs attention`,
+    idle: "Not downloaded in this session",
+  }[status.state];
 }
 const agentSymbols: Record<string, string> = {
   "claude-code": "✺",

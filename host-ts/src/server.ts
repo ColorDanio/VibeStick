@@ -4,12 +4,17 @@ import { dashboardRequest, type DashboardEnvironment } from "./dashboard.js";
 
 export interface SettingsService {
   updateOnlineAsr(body: unknown): Promise<{ engine: string; api_base: string; model: string; configured: boolean }>;
+  startLocalAsrDownload?(body: unknown): Promise<LocalAsrModelStatus>;
+  localAsrDownloadStatus?(): LocalAsrModelStatus;
+  applyLocalAsr?(body: unknown): Promise<{ engine: string; api_base: string; model: string; configured: boolean }>;
   testOnlineAsr(): Promise<{ provider: "reachable"; model_available: boolean | null }>;
   testYoloFocused(): Promise<{ available: boolean; detail: string }>;
   updateSessionLauncher(body: unknown): Promise<{ session_launcher: "auto" | "tmux" | "zellij" }>;
   updateToolCwd(body: unknown): Promise<{ id: string; cwd: string }>;
   updateMicBindings?(body: unknown): Promise<{ button_a: string; button_b: string }>;
 }
+
+export type LocalAsrModelStatus = { model: string; state: "idle" | "downloading" | "ready" | "applying" | "applied" | "error"; progress: number; detail?: string };
 
 export type DiagnosticsService = () => Record<string, unknown>;
 
@@ -51,6 +56,30 @@ export async function startDashboardServer(core: HostCore, port = 7861, environm
     if (request.method === "POST" && request.url === "/api/settings/asr" && settings) {
       try {
         const result = await settings.updateOnlineAsr(body);
+        response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+        response.end(JSON.stringify({ ok: true, restart_required: true, asr: result })); return;
+      } catch (error) {
+        response.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) })); return;
+      }
+    }
+    if (request.method === "POST" && request.url === "/api/settings/asr/local/download" && settings?.startLocalAsrDownload) {
+      try {
+        const result = await settings.startLocalAsrDownload(body);
+        response.writeHead(202, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+        response.end(JSON.stringify({ ok: true, ...result })); return;
+      } catch (error) {
+        response.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) })); return;
+      }
+    }
+    if (request.method === "GET" && request.url === "/api/settings/asr/local/download" && settings?.localAsrDownloadStatus) {
+      response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+      response.end(JSON.stringify({ ok: true, ...settings.localAsrDownloadStatus() })); return;
+    }
+    if (request.method === "POST" && request.url === "/api/settings/asr/local/apply" && settings?.applyLocalAsr) {
+      try {
+        const result = await settings.applyLocalAsr(body);
         response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
         response.end(JSON.stringify({ ok: true, restart_required: true, asr: result })); return;
       } catch (error) {

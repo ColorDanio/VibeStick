@@ -21,7 +21,7 @@ import { HostRuntime } from "../runtime.js";
 import { LinuxCommandAdapter } from "../linux-bridge.js";
 import { LinuxVibeMicSink } from "../mic-sink.js";
 import { PipeWireVibeMicSink, applyGain } from "../pipewire-mic.js";
-import { startDashboardServer } from "../server.js";
+import { startDashboardServer, type LocalAsrModelStatus } from "../server.js";
 import { VoicePipeline, wav, type AsrTranscriber } from "../asr.js";
 import { pythonLocalTranscriber } from "../local-asr.js";
 import { pythonSessionDiscovery } from "../session-discovery.js";
@@ -365,6 +365,7 @@ test("loopback dashboard permits development and Tauri desktop origins", async (
 
 test("dashboard exposes an explicit online ASR provider test without returning secrets", async () => {
   const core = new HostCore(normalizeConfig({ tools: [] }));
+  let localModelState: LocalAsrModelStatus = { model: "small", state: "idle", progress: 0 };
   const server = await startDashboardServer(core, 0, undefined, {
     async updateOnlineAsr() { return { engine: "online", api_base: "https://example.test", model: "whisper", configured: true }; },
     async testOnlineAsr() { return { provider: "reachable", model_available: null }; },
@@ -374,6 +375,15 @@ test("dashboard exposes an explicit online ASR provider test without returning s
     async updateMicBindings(body) {
       const config = updateMicBindings(normalizeConfig({}), body);
       return { button_a: config.mic.buttonA, button_b: config.mic.buttonB };
+    },
+    async startLocalAsrDownload() {
+      localModelState = { model: "medium", state: "downloading" as const, progress: 12 };
+      return localModelState;
+    },
+    localAsrDownloadStatus() { return localModelState; },
+    async applyLocalAsr() {
+      localModelState = { model: "medium", state: "applied" as const, progress: 100 };
+      return { engine: "faster-whisper", api_base: "", model: "medium", configured: true };
     },
   });
   const response = await fetch(`http://127.0.0.1:${server.port}/api/settings/asr/test`, { method: "POST" });
@@ -391,6 +401,17 @@ test("dashboard exposes an explicit online ASR provider test without returning s
   });
   assert.equal(invalidMic.status, 400);
   assert.match(String((await invalidMic.json()).error), /F13 through F24/);
+  const download = await fetch(`http://127.0.0.1:${server.port}/api/settings/asr/local/download`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ local_model: "medium" }),
+  });
+  assert.equal(download.status, 202);
+  assert.deepEqual(await download.json(), { ok: true, model: "medium", state: "downloading", progress: 12 });
+  const progress = await fetch(`http://127.0.0.1:${server.port}/api/settings/asr/local/download`);
+  assert.deepEqual(await progress.json(), { ok: true, model: "medium", state: "downloading", progress: 12 });
+  const applied = await fetch(`http://127.0.0.1:${server.port}/api/settings/asr/local/apply`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ local_model: "medium" }),
+  });
+  assert.deepEqual(await applied.json(), { ok: true, restart_required: true, asr: { engine: "faster-whisper", api_base: "", model: "medium", configured: true } });
   await server.close();
 });
 
