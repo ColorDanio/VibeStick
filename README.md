@@ -43,11 +43,28 @@ and a live system-tray connection indicator.
 The firmware advertises as **VibeStick**. That is the BLE device name; the
 project is named **Vibe Stick**.
 
-## Get started on Linux
+## Install the desktop app
 
-### 1. Install the desktop app
+Download the installer matching your platform from a GitHub Release. Every
+release builds the desktop app natively for Linux AMD64/ARM64, macOS Intel,
+macOS Apple Silicon, and Windows x64 (for Windows 11).
 
-Download the matching `.deb` from a release, then install it.
+| Platform | Release artifact | Install |
+| --- | --- | --- |
+| Debian/Ubuntu AMD64 | `VibeStick_<version>_amd64.deb` | `sudo apt install "./VibeStick_<version>_amd64.deb"` |
+| Debian/Ubuntu ARM64 | `VibeStick_<version>_arm64.deb` | `sudo apt install "./VibeStick_<version>_arm64.deb"` |
+| macOS Intel | `.dmg` | Open the disk image and drag **Vibe Stick** to Applications. |
+| macOS Apple Silicon | `.dmg` | Open the disk image and drag **Vibe Stick** to Applications. |
+| Windows 11 x64 | `.msi` or `-setup.exe` | Run the installer, then launch **Vibe Stick** from Start. |
+
+GitHub-hosted Actions does not offer a Windows 11 runner image; the Windows
+installer is built on the stable Windows Server 2022 image and targets 64-bit
+Windows 11. macOS artifacts are built separately on Intel and Apple Silicon
+runners, rather than cross-compiled.
+
+### Linux
+
+Install the matching `.deb` from a release:
 
 ```sh
 sudo apt install "./VibeStick_0.2.1_amd64.deb"
@@ -57,7 +74,7 @@ Launch **Vibe Stick** from your application menu. The app starts its local host
 runtime, provides a connection indicator in the system tray, and opens the
 Overview screen. It does not need a browser or a development server.
 
-### 2. Flash the firmware
+## Flash the firmware
 
 With the Stick attached by USB, build and upload the firmware for your board:
 
@@ -72,7 +89,7 @@ firmware/.venv/bin/pio run -d firmware -e m5stick-s3 -t upload
 If your serial device is not detected automatically, add `--upload-port
 /dev/ttyUSB0` (or the appropriate device path).
 
-### 3. Pair and connect
+## Pair and connect
 
 1. Turn on the Stick; it advertises as `VibeStick`.
 2. Pair it in your operating system's Bluetooth settings.
@@ -111,8 +128,9 @@ a second Vibe Stick GUI or daemon that users need to launch separately.
 
 ## Development
 
-Prerequisites: Node.js 24+, Rust, PlatformIO, and the Linux desktop build
-dependencies required by Tauri/WebKitGTK.
+Prerequisites: Node.js 24+, Rust and PlatformIO. Linux desktop builds also
+need Tauri/WebKitGTK development packages; macOS builds require Xcode Command
+Line Tools; Windows 11 builds require the MSVC C++ build tools.
 
 ```sh
 # HostCore checks
@@ -127,6 +145,11 @@ npm run dev
 
 # Production desktop package
 npm run package
+
+# Platform-specific installers are produced by the native OS:
+# Linux: .deb (npm run package:deb), macOS: .dmg, Windows 11: .msi/.exe.
+# The GitHub Actions matrices build macOS Intel, macOS Apple Silicon and
+# Windows x64 on their respective native runners.
 
 # Firmware builds
 cd ../../firmware

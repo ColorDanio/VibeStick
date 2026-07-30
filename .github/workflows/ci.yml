@@ -34,13 +34,16 @@ jobs:
           - os: ubuntu-24.04-arm
             label: Linux ARM64
             linux: true
-          - os: macos-latest
-            label: macOS
+          - os: macos-13
+            label: macOS Intel
+            linux: false
+          - os: macos-14
+            label: macOS Apple Silicon
             linux: false
           # windows-latest has moved to the VS 2026 image. node-gyp cannot
           # currently detect that preview installation while compiling noble.
           - os: windows-2022
-            label: Windows
+            label: Windows x64 (Windows 11)
             linux: false
     runs-on: ${{ matrix.os }}
     steps:
