@@ -37,7 +37,9 @@ jobs:
           - os: macos-latest
             label: macOS
             linux: false
-          - os: windows-latest
+          # windows-latest has moved to the VS 2026 image. node-gyp cannot
+          # currently detect that preview installation while compiling noble.
+          - os: windows-2022
             label: Windows
             linux: false
     runs-on: ${{ matrix.os }}

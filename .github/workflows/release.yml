@@ -71,7 +71,9 @@ jobs:
           - os: macos-latest
             label: macOS
             linux: false
-          - os: windows-latest
+          # Keep the release build aligned with CI: VS 2022 is detected by
+          # node-gyp when compiling the native BLE dependency.
+          - os: windows-2022
             label: Windows
             linux: false
     runs-on: ${{ matrix.os }}
