@@ -271,7 +271,27 @@ async function main(): Promise<void> {
       if (!/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/i.test(address)) throw new Error("Invalid Stick address");
       return address;
     };
-    pairStick = async (body) => { await linux.transport.pair(deviceAddress(body)); };
+    pairStick = async (body) => {
+      const address = deviceAddress(body);
+      // Bluetooth/BlueZ is allowed one active GATT client. Release the old
+      // Stick before pairing a different one so "Pair & Use" is atomic from
+      // the user's perspective and never leaves two candidates active.
+      const previousAddress = linux.transport.address;
+      await runtime?.stop();
+      linux.transport.setTargetAddress("");
+      try {
+        await linux.transport.pair(address);
+      } catch (error) {
+        // A failed pairing attempt must not strand the already active Stick.
+        // Restore it only after the temporary pairing operation has released
+        // the BlueZ lock, preserving the one-active-device invariant.
+        if (previousAddress) {
+          linux.transport.setTargetAddress(previousAddress);
+          await runtime?.start();
+        }
+        throw error;
+      }
+    };
     unpairStick = async (body) => {
       const address = deviceAddress(body);
       if (linux.transport.address?.toUpperCase() === address.toUpperCase()) {

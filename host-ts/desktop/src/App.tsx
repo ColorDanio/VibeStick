@@ -85,7 +85,7 @@ const demo: Snapshot = {
   active_session: "design",
   audio_route: "asr",
   device_mode: "home",
-  device: { name: "VibeStick", model: "M5StickC-Plus", firmware: "" },
+  device: { name: "", model: "", firmware: "" },
   voice: { state: "idle", mode: "agent", recorded_ms: 0, level: 0, text: "" },
   transcriptions: [],
   transfers: [],
@@ -699,9 +699,10 @@ function Overview({
   const t = useT();
   const caps = data.environment.capabilities;
   const agents = data.tools.list;
+  const hasActiveStick = data.environment.owner === "active" && Boolean(data.device.name || data.device.model);
   return (
     <div className="overview-dashboard">
-      <section className="device-card dashboard-hero">
+      {hasActiveStick ? <section className="device-card dashboard-hero">
         <DeviceImage model={data.device.model} />
         <div className="device-copy">
           <span className="section-label">{t("STICK STATUS", "设备状态")}</span>
@@ -739,7 +740,11 @@ function Overview({
             </button>
           </div>
         )}
-      </section>
+      </section> : <section className="panel empty-state">
+        <span className="section-label">{t("DEVICE SETUP", "设备设置")}</span>
+        <h2>{t("No VibeStick connected", "尚未连接 VibeStick")}</h2>
+        <p>{t("Scan and select a Stick in Settings to make it this host's active device.", "请在设置中扫描并选择一个设备，将它设为此主机的活动设备。")}</p>
+      </section>}
       <section className="dashboard-grid">
         <LiveActivity data={data} selected={selected} />
         <CurrentTarget data={data} selected={selected} agents={agents} />
@@ -968,7 +973,7 @@ function Settings(props: {
   const [deviceError, setDeviceError] = useState("");
   const deviceRequest = async (path: string, address?: string): Promise<Response> => {
     const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), 20_000);
+    const timer = window.setTimeout(() => controller.abort(), 35_000);
     try {
       return await fetch(`http://127.0.0.1:7861${path}`, { method: "POST", ...(address ? { headers: { "content-type": "application/json" }, body: JSON.stringify({ address }) } : {}), signal: controller.signal });
     } finally { window.clearTimeout(timer); }
@@ -988,7 +993,10 @@ function Settings(props: {
     setDeviceBusy(address);
     try {
       const response = await deviceRequest("/api/devices/connect", address);
-      if (!response.ok) throw new Error("Connect failed");
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(result.error ?? "Connect failed");
+      }
       setDeviceError("");
     } catch (error) { setDeviceError(error instanceof Error ? error.message : "Connect failed"); }
     finally { setDeviceBusy(undefined); }
@@ -997,9 +1005,15 @@ function Settings(props: {
     setDeviceBusy(address);
     try {
       const paired = await deviceRequest("/api/devices/pair", address);
-      if (!paired.ok) throw new Error("Pairing failed");
+      if (!paired.ok) {
+        const result = await paired.json().catch(() => ({})) as { error?: string };
+        throw new Error(result.error ?? "Pairing failed");
+      }
       const connected = await deviceRequest("/api/devices/connect", address);
-      if (!connected.ok) throw new Error("Pairing succeeded but connection failed");
+      if (!connected.ok) {
+        const result = await connected.json().catch(() => ({})) as { error?: string };
+        throw new Error(result.error ?? "Pairing succeeded but connection failed");
+      }
       await scan();
       setDeviceError("");
     } catch (error) { setDeviceError(error instanceof Error && error.name === "AbortError" ? t("Pairing timed out. Confirm Bluetooth is enabled, then scan again.", "配对超时。请确认蓝牙已开启后重新扫描。") : error instanceof Error ? error.message : t("Pairing failed", "配对失败")); }
@@ -1009,7 +1023,10 @@ function Settings(props: {
     setDeviceBusy(address);
     try {
       const response = await deviceRequest("/api/devices/unpair", address);
-      if (!response.ok) throw new Error("Remove failed");
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(result.error ?? "Remove failed");
+      }
       setSticks((items) => items.filter((item) => item.address !== address));
       setDeviceError("");
     } catch (error) { setDeviceError(error instanceof Error ? error.message : "Remove failed"); }
@@ -1044,7 +1061,7 @@ function Settings(props: {
       </div>
       <section className="setup-section">
         <div><span className="section-label">{t("DEVICE SETUP", "设备设置")}</span><h3>{t("VibeStick devices", "VibeStick 设备")}</h3><p>{t("Manage paired Sticks and their connection state.", "管理已配对设备及其连接状态。")}</p></div>
-        {(data.device.name || data.device.model || data.environment.owner === "active") && <div className="device-manager"><DeviceImage model={data.device.model} /><div><b>{data.device.name || deviceName(data.device.model)}</b><span><i className={data.environment.owner === "active" ? "online" : "warn"} />{data.environment.owner === "active" ? t("Connected", "已连接") : t("Disconnected", "未连接")}</span><small>{data.device.firmware || t("Firmware detected automatically", "自动检测固件版本")}</small></div><button className="secondary" onClick={props.onRestart} disabled={props.busy === "restart"}>{props.busy === "restart" ? t("Reconnecting…", "正在重连…") : t("Reconnect", "重新连接")}</button></div>}
+        {data.environment.owner === "active" && <div className="device-manager"><DeviceImage model={data.device.model} /><div><b>{data.device.name || deviceName(data.device.model)}</b><span><i className="online" />{t("Connected", "已连接")}</span><small>{data.device.firmware || t("Firmware detected automatically", "自动检测固件版本")}</small></div><button className="secondary" onClick={props.onRestart} disabled={props.busy === "restart"}>{props.busy === "restart" ? t("Reconnecting…", "正在重连…") : t("Reconnect", "重新连接")}</button></div>}
         <button className="quiet" onClick={() => void scan()} disabled={deviceBusy === "scan"}>{deviceBusy === "scan" ? t("Scanning…", "正在扫描…") : `+ ${t("Scan for Sticks", "扫描设备")}`}</button>
         {deviceError && <p className="notice">{deviceError}</p>}
         {sticks.map((stick) => <div className="device-manager" key={stick.address}><div /><div><b>{stick.name}</b><span><i className={stick.connected ? "online" : "warn"} />{stick.connected ? t("Active on this host", "此主机当前使用") : stick.paired ? t("Paired · ready to connect", "已配对 · 可连接") : t("Nearby · not paired", "附近 · 未配对")}</span><small>{stick.address}{typeof stick.rssi === "number" ? ` · ${stick.rssi} dBm` : ""} · {stick.connected ? (data.device.model || t("Identifying…", "正在识别型号…")) : t("Model identified on first connection", "首次连接后识别型号")}</small></div><div className="device-actions">{!stick.connected && <button className="secondary" onClick={() => void (stick.paired ? selectStick(stick.address) : pairAndUse(stick.address))} disabled={Boolean(deviceBusy)}>{deviceBusy === stick.address ? t("Working…", "处理中…") : stick.paired ? t("Use this Stick", "使用此设备") : t("Pair & Use", "配对并使用")}</button>}<button className="quiet" onClick={() => void unpair(stick.address)} disabled={Boolean(deviceBusy)}>{t("Remove", "移除")}</button></div></div>)}

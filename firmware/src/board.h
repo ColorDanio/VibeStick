@@ -22,7 +22,7 @@
 #define BOARD_MODEL "M5StickC-Plus"
 #endif
 
-#define FIRMWARE_VERSION "0.2.3"
+#define FIRMWARE_VERSION "0.2.4"
 
 // One-time board init (M5.begin + display brightness).
 void boardInit();

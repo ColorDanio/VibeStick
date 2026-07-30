@@ -52,24 +52,16 @@ class Helper:
         self.focused = yolo.FocusedInput()
 
     async def connect(self, address: str = "") -> str:
-        from bleak import BleakClient, BleakScanner
+        from bleak import BleakClient
         self._acquire_owner()
         target = address or self._cached()
-        client = None
-        if target:
-            try:
-                client = BleakClient(target, disconnected_callback=self._disconnected)
-                await client.connect()
-            except Exception:
-                client = None
+        if not target:
+            self._release_owner()
+            raise ConnectionError("No VibeStick selected. Choose one in Device Setup first.")
+        self._validate_address(target)
         try:
-            if client is None:
-                devices = await self.scan()
-                candidate = next((item for item in devices if item["name"].startswith("VibeStick_")), None)
-                if candidate is None:
-                    raise ConnectionError("VibeStick not found")
-                client = BleakClient(candidate["address"], disconnected_callback=self._disconnected)
-                await client.connect()
+            client = BleakClient(target, timeout=20.0, disconnected_callback=self._disconnected)
+            await asyncio.wait_for(client.connect(), timeout=25.0)
         except Exception:
             self._release_owner()
             raise
@@ -120,11 +112,37 @@ class Helper:
         return sorted(devices.values(), key=lambda item: item["name"])
 
     async def pair(self, address: str) -> None:
+        """Pair through the BlueZ D-Bus path used by Bleak, not an ephemeral CLI agent.
+
+        ``bluetoothctl pair`` starts an interactive agent that can disappear when
+        the short-lived command exits.  Bleak's ``pair=True`` keeps pairing and
+        the GATT connection in the same BlueZ operation, which makes the result
+        observable before the UI is told it succeeded.
+        """
+        from bleak import BleakClient
         self._validate_address(address)
-        output = await self._bluetoothctl(f"pair {address}", timeout=15)
-        if "Paired: yes" not in output and "successful" not in output.lower() and "already exists" not in output.lower():
-            raise RuntimeError(output.strip() or "Bluetooth pairing failed")
-        await self._bluetoothctl(f"trust {address}", timeout=5)
+        if self.client is not None:
+            raise RuntimeError("Disconnect the active VibeStick before pairing another one")
+        self._acquire_owner()
+        client = None
+        try:
+            client = BleakClient(address, pair=True, timeout=25.0)
+            await asyncio.wait_for(client.connect(), timeout=30.0)
+        except asyncio.TimeoutError as exc:
+            raise RuntimeError("Pairing timed out. Put the Stick next to this computer and try again.") from exc
+        except Exception as exc:
+            raise RuntimeError(f"Bluetooth pairing failed: {exc}") from exc
+        finally:
+            if client is not None and client.is_connected:
+                await client.disconnect()
+            self._release_owner()
+
+        # Trust is persistent policy rather than an interactive pairing step;
+        # bluetoothctl is reliable for it and is available on all supported
+        # Linux BlueZ installations.
+        output = await self._bluetoothctl(f"trust {address}", timeout=8)
+        if "failed" in output.lower():
+            raise RuntimeError(output.strip() or "Bluetooth paired but could not be trusted")
 
     async def unpair(self, address: str) -> None:
         self._validate_address(address)
