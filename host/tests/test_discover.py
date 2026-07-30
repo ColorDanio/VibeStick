@@ -301,17 +301,18 @@ def test_tools_payload_uses_discovered_state(tmp_path):
     assert tools["list"][0]["state"] == "running"
 
 
-def test_tools_payload_presence_does_not_override_idle_discovered(tmp_path):
+def test_tools_payload_presence_marks_idle_discovered_as_ready(tmp_path):
     # A live process must not force "running" when discovery reports the
     # session as idle (open but quiet) — precedence adapter > discovered >
-    # presence applies to the aggregate tool state too.
+    # presence applies to the inference state; the tool picker exposes a
+    # selectable idle session as ready.
     stub = StubDiscovery({"codex": [disc_session("u1", "codex", "a", NOW - 120)]})
     watcher = StubWatcher({"codex": ProcInfo(pid=1, name="codex", cwd="/x")})
     store = make_store(tmp_path, stub, watcher=watcher)
     store.refresh_presence()
     store.refresh_discovery()
     tools = json.loads(store.tools_payload())
-    assert tools["list"][0]["state"] == "idle"
+    assert tools["list"][0]["state"] == "ready"
 
 
 def test_adapter_record_absorbs_discovered_tail(tmp_path):

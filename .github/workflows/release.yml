@@ -8,12 +8,6 @@ on:
       tag:
         description: "Release tag (e.g. v0.2.0)"
         required: true
-      vibeconn_implementation:
-        description: "Artifact implementation (1 = stable Python VibeConn, 2 = TypeScript VibeConn refactor)"
-        required: true
-        default: "1"
-        type: choice
-        options: ["1", "2"]
 
 permissions:
   contents: write
@@ -61,8 +55,7 @@ jobs:
           if-no-files-found: error
 
   host-ts-desktop:
-    name: VibeConn 2.0 desktop (${{ matrix.label }})
-    if: github.event_name == 'workflow_dispatch' && inputs.vibeconn_implementation == '2'
+    name: Vibe Stick desktop (${{ matrix.label }})
     strategy:
       fail-fast: false
       matrix:
@@ -78,12 +71,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
           cache: npm
           cache-dependency-path: |
             host-ts/package-lock.json
             host-ts/desktop/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          python-version: "3.12"
+          cache: pip
       - name: Install Linux Tauri prerequisites
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libsoup-3.0-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
@@ -91,11 +89,20 @@ jobs:
         run: |
           npm ci --prefix host-ts
           npm run build --prefix host-ts
+      - name: Prepare Linux BLE helper runtime
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          python -m venv host/.venv
+          host/.venv/bin/python -m pip install -e ./host
       - name: Install desktop dependencies
         run: npm ci --prefix host-ts/desktop
-      - name: Package Host 2.0 for native platform
+      - name: Package Vibe Stick for Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: npm run package:deb --prefix host-ts/desktop
+      - name: Package Vibe Stick for native platform
+        if: matrix.os != 'ubuntu-latest'
         run: npm run package --prefix host-ts/desktop
-      - name: Upload Host 2.0 release artifacts
+      - name: Upload Vibe Stick release artifacts
         uses: actions/upload-artifact@v4
         with:
           name: vibestick-host-2-${{ matrix.label }}-release
@@ -110,7 +117,7 @@ jobs:
   release:
     name: Create GitHub Release
     needs: [base-artifacts, host-ts-desktop]
-    if: ${{ always() && needs.base-artifacts.result == 'success' && (needs.host-ts-desktop.result == 'success' || needs.host-ts-desktop.result == 'skipped') }}
+    if: ${{ always() && needs.base-artifacts.result == 'success' && needs.host-ts-desktop.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Download release artifacts

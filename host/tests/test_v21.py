@@ -339,11 +339,19 @@ def test_voice_confirm_delivers_to_discovered_session_tty(tmp_path, monkeypatch)
         return True
 
     monkeypatch.setattr(delivery, "deliver_text", fake_deliver)
+    # Exercise direct discovered-TTY delivery as it behaves on kernels where
+    # TIOCSTI is available. Restricted kernels use the tested tmux handoff.
+    monkeypatch.setattr(delivery, "tiocsti_probe", lambda: True)
     transport = FakeTransport()
 
     async def body():
         store.refresh_presence()
         store.refresh_discovery()
+        discovered = next(
+            record for record in store.sessions_for_tool("codex")
+            if record.id.startswith("disc:")
+        )
+        store.apply_command({"cmd": "session.select", "id": discovered.id})
         transport.notify("COMMAND", b'{"cmd":"voice.start"}')
         transport.notify("AUDIO", b"\x90" * 800)
         transport.notify("COMMAND", b'{"cmd":"voice.stop"}')

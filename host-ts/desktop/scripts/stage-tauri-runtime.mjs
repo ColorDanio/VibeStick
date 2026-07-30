@@ -10,7 +10,10 @@ const coreRuntime = join(root, "src-tauri", "host-core-runtime");
 const runtimeModules = join(coreRuntime, "node_modules");
 const legacyRuntimeModules = join(root, "src-tauri", "resources", "host-core-node_modules");
 const helperRuntime = join(root, "src-tauri", "host-tools");
-const staleAppImageDirectory = join(root, "src-tauri", "target", "release", "bundle", "appimage", "VibeConn.AppDir");
+const staleAppImageDirectories = [
+  join(root, "src-tauri", "target", "release", "bundle", "appimage", "VibeConn.AppDir"),
+  join(root, "src-tauri", "target", "release", "bundle", "appimage", "Vibe Stick.AppDir"),
+];
 
 await stat(hostCore);
 await mkdir(dirname(destination), { recursive: true });
@@ -42,25 +45,50 @@ await rm(legacyRuntimeModules, { recursive: true, force: true });
 // linuxdeploy reuses an existing AppDir. Remove only this generated staging
 // directory so a changed resource set cannot leave stale development modules
 // in a later AppImage build.
-await rm(staleAppImageDirectory, { recursive: true, force: true });
+for (const directory of staleAppImageDirectories)
+  await rm(directory, { recursive: true, force: true });
 await cp(join(root, "..", "dist"), coreRuntime, { recursive: true, dereference: true });
 await mkdir(runtimeModules, { recursive: true });
 await stagePackage("@abandonware/noble");
 // Noble marks the Linux HCI backend optional so macOS/Windows installs work,
 // but it is a supported Linux native-BLE path and must ship in the desktop app.
-await stagePackage("@abandonware/bluetooth-hci-socket");
+if (process.platform === "linux")
+  await stagePackage("@abandonware/bluetooth-hci-socket");
 await mkdir(helperRuntime, { recursive: true });
 for (const helper of ["ble_gatt_helper.py", "asr_helper.py", "session_discovery_helper.py"])
   await copyFile(join(root, "..", "..", "host", "tools", helper), join(helperRuntime, helper));
 // Linux packages use the stable BlueZ/D-Bus helper instead of requiring
 // CAP_NET_RAW on the user's Node executable. Ship the small Python runtime
 // closure it needs, while leaving the OS Python interpreter unmodified.
-await cp(join(root, "..", "..", "host", "vibestick"), join(helperRuntime, "vibestick"), { recursive: true, dereference: true });
-const pythonLibraries = join(root, "..", "..", "host", ".venv", "lib", "python3.14", "site-packages");
-const helperSitePackages = join(helperRuntime, "site-packages");
-await mkdir(helperSitePackages, { recursive: true });
-for (const name of await readdir(pythonLibraries)) {
-  if (/^(bleak|dbus_fast|typing_extensions)(-|\.|$)/.test(name))
-    await cp(join(pythonLibraries, name), join(helperSitePackages, name), { recursive: true, dereference: true });
+if (process.platform === "linux") {
+  await cp(join(root, "..", "..", "host", "vibestick"), join(helperRuntime, "vibestick"), { recursive: true, dereference: true });
+  const configuredSitePackages = process.env.VIBESTICK_HELPER_SITE_PACKAGES;
+  const virtualEnvironmentLibraries = join(root, "..", "..", "host", ".venv", "lib");
+  let pythonLibraries = configuredSitePackages;
+  if (!pythonLibraries) {
+    const pythonDirectories = (await readdir(virtualEnvironmentLibraries, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory() && /^python\d/.test(entry.name))
+      .map((entry) => entry.name)
+      .sort()
+      .reverse();
+    for (const directory of pythonDirectories) {
+      const candidate = join(virtualEnvironmentLibraries, directory, "site-packages");
+      try {
+        await stat(candidate);
+        pythonLibraries = candidate;
+        break;
+      } catch {
+        // Try the next interpreter directory.
+      }
+    }
+  }
+  if (!pythonLibraries)
+    throw new Error("Linux packaging needs host/.venv site-packages. Create it with `python3 -m venv host/.venv && host/.venv/bin/pip install -e ./host`.");
+  const helperSitePackages = join(helperRuntime, "site-packages");
+  await mkdir(helperSitePackages, { recursive: true });
+  for (const name of await readdir(pythonLibraries)) {
+    if (/^(bleak|dbus_fast|typing_extensions)(-|\.|$)/.test(name))
+      await cp(join(pythonLibraries, name), join(helperSitePackages, name), { recursive: true, dereference: true });
+  }
 }
 console.log(`Staged ${copied.size} HostCore runtime packages: ${runtimeModules}`);
