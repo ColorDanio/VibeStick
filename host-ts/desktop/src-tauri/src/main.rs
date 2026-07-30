@@ -107,7 +107,10 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .menu(&menu)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "open" => show_main_window(app),
-            "quit" => app.exit(0),
+            "quit" => {
+                stop_own_host(app);
+                app.exit(0);
+            }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
@@ -204,6 +207,62 @@ fn node_runtime(app: &AppHandle) -> Result<PathBuf, String> {
     }
 }
 
+/// A package update replaces files on disk but cannot replace a detached Node
+/// child that was started by an older desktop instance. Before starting our
+/// fixed loopback HostCore, terminate only prior Vibe Stick/VibeConn HostCore
+/// commands (never arbitrary owners of port 7861) and give BlueZ/Node a brief
+/// window to release the listener.
+#[cfg(target_os = "linux")]
+fn clear_stale_hostcores() {
+    let stale = fs::read_dir("/proc")
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.flatten())
+        .filter_map(|entry| entry.file_name().to_string_lossy().parse::<u32>().ok())
+        .filter(|pid| *pid != std::process::id())
+        .filter(|pid| {
+            let Ok(command) = fs::read(format!("/proc/{pid}/cmdline")) else {
+                return false;
+            };
+            let args = command
+                .split(|byte| *byte == 0)
+                .filter_map(|part| std::str::from_utf8(part).ok())
+                .collect::<Vec<_>>();
+            args.iter().any(|arg| arg.ends_with("/host-core/cli.js"))
+                && args.windows(2).any(|pair| pair == ["--port", "7861"])
+        })
+        .collect::<Vec<_>>();
+    if stale.is_empty() {
+        return;
+    }
+    let _ = Command::new("kill")
+        .arg("-TERM")
+        .args(stale.iter().map(u32::to_string))
+        .status();
+    for _ in 0..15 {
+        let listening = TcpStream::connect_timeout(
+            &"127.0.0.1:7861".parse().expect("fixed loopback address"),
+            Duration::from_millis(50),
+        )
+        .is_ok();
+        if !listening {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn clear_stale_hostcores() {}
+
+fn stop_own_host(app: &AppHandle) {
+    if let Ok(mut current) = app.state::<HostProcess>().0.lock() {
+        if let Some(mut child) = current.take() {
+            let _ = child.kill();
+        }
+    }
+}
+
 fn start_host(app: &AppHandle, state: &HostProcess) -> Result<(), String> {
     let mut current = state
         .0
@@ -216,6 +275,7 @@ fn start_host(app: &AppHandle, state: &HostProcess) -> Result<(), String> {
     if !cli.exists() {
         return Err(format!("HostCore executable is missing: {}", cli.display()));
     }
+    clear_stale_hostcores();
     let node = node_runtime(app)?;
     let mut command = Command::new(node);
     command.arg(cli).arg("--port").arg("7861");
