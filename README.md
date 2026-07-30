@@ -1,147 +1,154 @@
-# VibeStick — a vibe-coding key on M5StickC Plus
+# Vibe Stick
 
-A pocket companion for AI coding CLIs (Claude Code, Codex, opencode,
-Kimi CLI, …). VibeStick shows live session status on the StickC Plus
-display over Bluetooth, lets you browse sessions and read the
-conversation tail, cancel inference, and talk to your CLI with the
-built-in microphone — speech is transcribed on the host and injected
-into the session as text. It can also act as a plain Bluetooth
-microphone for your desktop apps (openwhispr, ChatGPT app, …).
+**Vibe Stick** turns an M5Stick into a small, tactile companion for AI coding
+agents. It connects over Bluetooth Low Energy (BLE), surfaces the active
+session on the device, and lets you navigate targets, control a session and
+send voice input without leaving your keyboard.
 
-Hardware: [M5StickC Plus](https://docs.m5stack.com/en/core/m5stickc_plus)
-(ESP32-PICO, 240x135 LCD, 2 buttons + power button, mic, IMU, IR, PMU).
+The project consists of a native desktop application and open firmware for
+supported M5Stick boards. The current release line is **0.2.x** for both.
 
-## Architecture
+> Vibe Stick is an independent community project. It is not affiliated with
+> Anthropic, OpenAI, M5Stack, or any supported CLI project.
 
-```
-                 ┌────────────────────────── host ───────────────────────────┐
-                 │                                                           │
-┌──────────────┐ │  ┌─────────────┐   ┌──────────────┐   ┌────────────────┐  │
-│ M5StickC Plus│ │  │ adapters    │   │ discovery    │   │ dashboard      │  │
-│              │ │  │ statusline/ │   │ on-disk CLI  │   │ Overview       │  │
-│  firmware/   │ │  │ hook/wrapper│   │ session scan │   │ Agents         │  │
-│  mic ──audio──┼─┼►│  state files│   │ /proc watch  │   │ Voice & Mic    │  │
-│  LCD ◄─status─┼─┼┤└──────┬──────┘   └──────┬───────┘   │ Settings       │  │
-│  buttons ─cmd─┼─┼►│       └────────┬─────────┘          └──────▲─────────┘  │
-└──────────────┘ │                  ▼                          │ HTTP :7860  │
-      BLE GATT   │           ┌─────────────┐    ┌────────────────┴───┐        │
-    "VibeStick"  │           │ store       ├───►│ vibestickd daemon  │        │
-                 │           │ (sessions,  │    │ bridge/queue/ASR   │        │
-                 │           │  selection) │    └───────┬────────────┘        │
-                 │           └─────────────┘            │                     │
-                 │                    ┌─────────────────┼─────────────────┐   │
-                 │                    ▼                 ▼                 ▼   │
-                 │          tmux / zellij      TIOCSTI tty inject   virtual │
-                 │          (multiplexers)      (plain terminals)   mic source│
-                 └───────────────────────────────────────────────────────────┘
-```
+## Highlights
 
-- **firmware/** — PlatformIO project for the StickC Plus. BLE GATT
-  client UI: tool carousel, session picker, conversation reader,
-  voice recorder with RMS meter, virtual-mic mode. See `docs/protocol.md`
-  for the wire protocol (single source of truth).
-- **host/** — Python daemon (`vibestickd`). Collects session state from
-  three sources (adapter files > on-disk discovery > /proc presence),
-  owns tool/session selection, queues and delivers messages
-  (tmux `send-keys`, zellij actions, or TIOCSTI tty injection),
-  transcribes voice
-  (faster-whisper or an external command), feeds the virtual microphone,
-  and serves the dashboard at `http://127.0.0.1:7860`.
-- **docs/** — protocol spec and architecture notes.
-- **host/adapters/** — Claude Code statusLine adapter, Kimi Code hooks
-  adapter, generic wrapper for other CLIs.
+- Native **Vibe Stick** desktop app built with Tauri and React — install it from
+  your application menu, with a tray indicator for the Stick connection.
+- BLE device status, current target and recent activity in one overview.
+- Integration-oriented session discovery for Claude Code, Codex, OpenCode and
+  Kimi CLI.
+- On-device controls, display, microphone capture and local/online speech
+  recognition routing.
+- Firmware for **M5StickC Plus** and **M5StickS3**.
+- Local-first operation: the desktop dashboard is served on loopback only;
+  diagnostics deliberately redact paths, commands, transcripts and audio.
 
-A deeper dive lives in [docs/architecture.md](docs/architecture.md).
+## Hardware support
 
-## Features
+| Board | PlatformIO environment | Release firmware |
+| --- | --- | --- |
+| M5StickC Plus | `m5stick-c` | `vibestick-m5stick-c-0.2.1.bin` |
+| M5StickS3 | `m5stick-s3` | `vibestick-m5stick-s3-0.2.1.bin` |
 
-- **Live status** — per-tool session state (idle / thinking / waiting),
-  conversation tail, foreground dots; BLE + battery in the status bar.
-- **Session browser** — per-tool session list with a "new session"
-  entry; open one to read its message history (paged, newest-first).
-- **Voice input** — long-press to record on the stick, host ASR
-  transcribes (simplified-Chinese/English biased), single-click to send.
-  Busy session? Messages queue host-side (FIFO ×8) and flush when the
-  session goes idle — the stick shows a queue indicator.
-- **Inference cancel** — single-click A while a session is thinking
-  sends the tool's cancel key (Escape by default).
-- **Microphone mode** — the stick registers as a system input device
-  ("Vibe Mic", PipeWire virtual source); press A to talk into any
-  desktop app that binds a microphone.
-- **Dashboard** — local web app: Overview cards, master-detail Agents
-  monitor, modern Settings center, Voice & Mic diagnostics with recent
-  transcriptions. Also available as a desktop app (`vibestick-app`).
-- **Adaptive UI** — portrait/landscape auto-rotation from the IMU,
-  double-shake to refresh, auto-dim, battery gauge.
+The firmware advertises as **VibeStick**. That is the BLE device name; the
+project is named **Vibe Stick**.
 
-## Controls
+## Get started on Linux
 
-| Screen      | Button A                                  | Button B        | Power button          |
-|-------------|-------------------------------------------|-----------------|-----------------------|
-| Home        | select tool / enter Microphone            | next tool       | —                     |
-| Sessions    | open session (entry 0 = new session)      | next session    | back                  |
-| Conversation| older message · thinking: **cancel** · transcript ready: **send** | newer message | back |
-| Recording   | **hold to record**, release to transcribe | discard draft   | back (cancels)        |
-| Transcript  | 2×A: discard · A: send                    | discard         | back                  |
-| Microphone  | **PTT + F13** (press/release)             | **F14**          | back                  |
-| Anywhere    | —                                         | long-press: back| short: back · **2×: home** |
+### 1. Install the desktop app
 
-Double-shake the stick to force a status refresh.
-
-## Quick start
-
-1. Stable VibeConn 1.x: `pip install -e "host/[dev,asr]"`, then `vibeconn`
-   (daemon + desktop UI; `vibeconnd` is daemon-only). It is the default
-   release and dashboard owner at http://127.0.0.1:7860. See `host/README.md`.
-2. Firmware: `firmware/.venv/bin/pio run -d firmware -t upload`
-   (device on `/dev/ttyUSB0`).
-3. Optional: register the adapters — Claude Code statusLine and Kimi
-   hooks give the richest state; other CLIs work via on-disk discovery
-   and process presence with no setup.
-4. Optional desktop integration: `vibeconn --install-desktop`
-   (VibeConn 1.x GNOME launcher entry + daemon autostart).
-
-### Select an implementation
-
-VibeConn 1.x is the supported default. The repository launcher makes the
-choice explicit and keeps both versions runnable without renaming the stable
-daemon:
+Download the matching `.deb` from a release, then install it. (The current
+artifact filename remains `VibeConn` during the packaging-name transition.)
 
 ```sh
-tools/vibeconn                           # VibeConn 1.x: daemon + UI
-tools/vibeconn --implementation 1 --daemon
-tools/vibeconn --implementation 2        # VibeConn 2.0 Tauri UI + daemon
-VIBECONN_IMPLEMENTATION=2 make vibeconn
+sudo apt install ./VibeConn_0.2.1_amd64.deb
 ```
 
-The VibeConn 2.0 UI asks before taking BLE from 1.x. On Linux it defaults to
-the audited compatibility adapter so a 2.0 test has the full, known-good
-Linux device boundary; use `VIBECONN_LINUX_BACKEND=native` when explicitly
-validating the TypeScript-native BLE path. CI and tag releases
-build VibeConn 1.x by default; manually dispatch a workflow with implementation
-`2` to package the refactor.
+Launch **Vibe Stick** from your application menu. The app starts its local host
+runtime, provides a connection indicator in the system tray, and opens the
+Overview screen. It does not need a browser or a development server.
 
-> tty delivery (voice messages and cancel into CLIs running in plain
-> terminals) uses the TIOCSTI ioctl. Recent kernels (~6.15+) restrict
-> TIOCSTI to the caller's controlling terminal, which a background
-> daemon can never satisfy — on such systems tty delivery is
-> unavailable and the dashboard shows a warning. The reliable path is
-> to run your CLI inside tmux (`tmux new -s vibe`, then start the CLI);
-> delivery then uses `tmux send-keys` and works everywhere.
+### 2. Flash the firmware
+
+With the Stick attached by USB, build and upload the firmware for your board:
+
+```sh
+# M5StickC Plus
+firmware/.venv/bin/pio run -d firmware -e m5stick-c -t upload
+
+# M5StickS3
+firmware/.venv/bin/pio run -d firmware -e m5stick-s3 -t upload
+```
+
+If your serial device is not detected automatically, add `--upload-port
+/dev/ttyUSB0` (or the appropriate device path).
+
+### 3. Pair and connect
+
+1. Turn on the Stick; it advertises as `VibeStick`.
+2. Pair it in your operating system's Bluetooth settings.
+3. Open Vibe Stick and use **Reconnect** from Overview or Device setup if it
+   does not connect automatically.
+
+When the header indicator is green and Overview reports **BLE Ready**, the
+device is connected. The local diagnostics endpoint is available at
+`http://127.0.0.1:7861/api/diagnostics` for troubleshooting.
+
+## How it works
+
+```text
+M5Stick firmware  ←──── BLE GATT ────→  Vibe Stick HostCore  ←→  Agent CLI sessions
+   display, keys, mic                       desktop app              Claude Code
+                                                                       Codex
+                                                                       OpenCode
+                                                                       Kimi CLI
+```
+
+The TypeScript HostCore owns session state, routing and BLE synchronization.
+On Linux it uses a small BlueZ/PipeWire compatibility helper for the platform
+capabilities that require those system APIs; this is a backend component, not
+a second Vibe Stick GUI or daemon that users need to launch separately.
+
+## Repository layout
+
+- [`firmware/`](firmware/) — PlatformIO firmware for both supported boards.
+- [`host-ts/`](host-ts/) — TypeScript HostCore, BLE protocol implementation,
+  tests and desktop app.
+- [`host-ts/desktop/`](host-ts/desktop/) — Tauri desktop application.
+- [`contracts/v1/`](contracts/v1/) — versioned cross-runtime contract
+  fixtures.
+- [`docs/protocol.md`](docs/protocol.md) — BLE GATT protocol reference.
+- [`release/0.2.1/`](release/0.2.1/) — locally built release artifacts.
 
 ## Development
 
+Prerequisites: Node.js 24+, Rust, PlatformIO, and the Linux desktop build
+dependencies required by Tauri/WebKitGTK.
+
 ```sh
-host/.venv/bin/python -m pytest host/tests/   # host test suite
-firmware/.venv/bin/pio run -d firmware        # firmware build
+# HostCore checks
+cd host-ts
+npm install
+npm test
+
+# Desktop app in development mode
+cd desktop
+npm install
+npm run dev
+
+# Production desktop package
+npm run package
+
+# Firmware builds
+cd ../../firmware
+.venv/bin/pio run -e m5stick-c
+.venv/bin/pio run -e m5stick-s3
 ```
 
-CI builds both on every push (`.github/workflows/ci.yml`).
+`npm run dev` is only for contributors. It starts Vite on port 5174 while
+developing; released Vibe Stick packages do not depend on that server.
 
-## Layout
+## Troubleshooting
 
-- `docs/protocol.md` — BLE GATT protocol v2 (single source of truth).
-- `docs/architecture.md` — component and data-flow deep dive.
-- `docs/host-2-migration.md` — Host 2.0 owner handoff, capability matrix, rollback, and uninstall guide.
-- `firmware/` — PlatformIO project for the StickC Plus.
-- `host/` — Python daemon, dashboard, desktop app, CLI adapters, tests.
+- Use the **Reconnect** action in Vibe Stick before re-pairing the device.
+- If pairing is stale, remove `VibeStick` in the OS Bluetooth settings, pair
+  it again, then reopen Vibe Stick.
+- For firmware logs: `firmware/.venv/bin/pio device monitor --port
+  /dev/ttyUSB0 --baud 115200`.
+- For host diagnostics: `curl -s http://127.0.0.1:7861/api/diagnostics`.
+
+Please remove API keys, transcripts, machine paths and device identifiers
+before posting logs in an issue.
+
+## Contributing
+
+Issues and pull requests are welcome. Please keep protocol changes compatible
+with [`docs/protocol.md`](docs/protocol.md), include tests for HostCore changes,
+and build both firmware targets when modifying shared firmware code.
+
+## License
+
+A license file has not yet been added to this repository. Before redistributing
+Vibe Stick as an open-source project, the maintainers need to choose and add an
+explicit license; until then, normal copyright restrictions apply.
