@@ -1,7 +1,7 @@
 [package]
 name = "vibeconn"
 version = "0.2.1"
-description = "VibeConn 2.0 desktop shell"
+description = "Vibe Stick desktop shell"
 authors = ["VibeStick contributors"]
 edition = "2021"
 

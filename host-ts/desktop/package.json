@@ -2,7 +2,7 @@
   "name": "@vibestick/host-desktop",
   "version": "0.2.1",
   "private": true,
-  "description": "Cross-platform VibeConn 2.0 desktop companion",
+  "description": "Cross-platform Vibe Stick desktop companion",
   "author": "VibeStick contributors",
   "type": "module",
   "scripts": {
@@ -12,7 +12,8 @@
     "prepare:runtime": "npm run build --prefix .. && node scripts/stage-tauri-runtime.mjs",
     "build": "npm run prepare:runtime && tauri build",
     "preview": "vite preview",
-    "package": "npm run build"
+    "package": "npm run build",
+    "package:deb": "npm run prepare:runtime && tauri build --bundles deb"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1"

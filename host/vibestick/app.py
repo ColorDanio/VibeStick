@@ -1,4 +1,4 @@
-"""VibeConn 1.x: native desktop window for the stable dashboard.
+"""Vibe Stick legacy host: native desktop window for the stable dashboard.
 
 Modes:
 - attach: the dashboard (127.0.0.1:7860) is already served by a running
@@ -30,7 +30,7 @@ from . import setupui
 
 log = logging.getLogger(__name__)
 
-APP_NAME = "VibeConn 1.x"
+APP_NAME = "Vibe Stick (Legacy Host)"
 WINDOW_SIZE = (1100, 750)
 ICON_NAME = "vibestick.png"
 CHROME_PROFILE = Path.home() / ".vibestick" / "chrome-app"
@@ -188,8 +188,8 @@ def install_desktop(home: Path | None = None) -> list[Path]:
     desktop.write_text(
         "[Desktop Entry]\n"
         "Type=Application\n"
-        "Name=VibeConn 1.x\n"
-        "Comment=Stable VibeConn companion for AI coding CLIs\n"
+        f"Name={APP_NAME}\n"
+        "Comment=Legacy Vibe Stick companion for AI coding CLIs\n"
         f"Exec={_entry_point('vibeconn')}\n"
         f"Icon={icon}\n"
         "Terminal=false\n"
@@ -204,8 +204,8 @@ def install_desktop(home: Path | None = None) -> list[Path]:
     autostart.write_text(
         "[Desktop Entry]\n"
         "Type=Application\n"
-        "Name=VibeConn 1.x daemon\n"
-        "Comment=Stable VibeConn host daemon (background)\n"
+        "Name=Vibe Stick legacy host daemon\n"
+        "Comment=Legacy Vibe Stick host daemon (background)\n"
         f"Exec={_entry_point('vibeconnd')}\n"
         f"Icon={icon}\n"
         "Terminal=false\n"
@@ -227,7 +227,7 @@ def install_desktop(home: Path | None = None) -> list[Path]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        prog="vibeconn", description="VibeConn 1.x desktop app (daemon + dashboard window)"
+        prog="vibeconn", description="Vibe Stick legacy desktop app (daemon + dashboard window)"
     )
     parser.add_argument("--setup-port", type=int, default=setupui.DEFAULT_PORT,
                         help="dashboard port (default 7860)")

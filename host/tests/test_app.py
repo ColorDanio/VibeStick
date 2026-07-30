@@ -39,13 +39,13 @@ def test_install_desktop_files(tmp_path):
     assert icon.name == "vibestick.png" and icon.exists()
     assert desktop == tmp_path / ".local/share/applications/vibestick.desktop"
     d = desktop.read_text()
-    assert "Name=VibeStick" in d
+    assert "Name=Vibe Stick (Legacy Host)" in d
     assert "vibestick-app" in d.split("Exec=")[1]
     assert "Terminal=false" in d
     assert "Categories=Development;Utility;" in d
     a = autostart.read_text()
     assert autostart == tmp_path / ".config/autostart/vibestickd.desktop"
-    assert "vibestickd" in a.split("Exec=")[1]
+    assert "vibeconnd" in a.split("Exec=")[1]
 
 
 @pytest.fixture

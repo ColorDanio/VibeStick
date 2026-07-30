@@ -41,28 +41,35 @@ fn connection_icon(color: [u8; 4]) -> Image<'static> {
 }
 
 fn dashboard_connection_state() -> (&'static str, [u8; 4]) {
-    let address = match "127.0.0.1:7861".to_socket_addrs().ok().and_then(|mut it| it.next()) {
+    let address = match "127.0.0.1:7861"
+        .to_socket_addrs()
+        .ok()
+        .and_then(|mut it| it.next())
+    {
         Some(address) => address,
-        None => return ("VibeConn: host unavailable", [120, 124, 130, 255]),
+        None => return ("Vibe Stick: host unavailable", [120, 124, 130, 255]),
     };
     let mut stream = match TcpStream::connect_timeout(&address, Duration::from_millis(700)) {
         Ok(stream) => stream,
-        Err(_) => return ("VibeConn: starting host", [230, 167, 40, 255]),
+        Err(_) => return ("Vibe Stick: starting host", [230, 167, 40, 255]),
     };
     let _ = stream.set_read_timeout(Some(Duration::from_millis(700)));
-    if stream.write_all(b"GET /api/diagnostics HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n").is_err() {
-        return ("VibeConn: starting host", [230, 167, 40, 255]);
+    if stream
+        .write_all(b"GET /api/diagnostics HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+        .is_err()
+    {
+        return ("Vibe Stick: starting host", [230, 167, 40, 255]);
     }
     let mut response = String::new();
     if stream.read_to_string(&mut response).is_err() {
-        return ("VibeConn: starting host", [230, 167, 40, 255]);
+        return ("Vibe Stick: starting host", [230, 167, 40, 255]);
     }
     if response.contains("\"host_2\": \"active\"") && response.contains("\"state\": \"ready\"") {
-        ("VibeConn: Stick connected", [47, 179, 87, 255])
+        ("Vibe Stick: Stick connected", [47, 179, 87, 255])
     } else if response.contains("\"state\": \"starting\"") {
-        ("VibeConn: connecting to Stick…", [230, 167, 40, 255])
+        ("Vibe Stick: connecting to Stick…", [230, 167, 40, 255])
     } else {
-        ("VibeConn: Stick disconnected", [216, 75, 75, 255])
+        ("Vibe Stick: Stick disconnected", [216, 75, 75, 255])
     }
 }
 
@@ -85,8 +92,14 @@ fn start_connection_indicator(app: AppHandle, status: MenuItem<tauri::Wry>) {
 }
 
 fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
-    let status = MenuItem::with_id(app, "connection-state", "VibeConn: starting host", false, None::<&str>)?;
-    let open = MenuItem::with_id(app, "open", "Open VibeConn", true, None::<&str>)?;
+    let status = MenuItem::with_id(
+        app,
+        "connection-state",
+        "Vibe Stick: starting host",
+        false,
+        None::<&str>,
+    )?;
+    let open = MenuItem::with_id(app, "open", "Open Vibe Stick", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&status, &open, &quit])?;
     TrayIconBuilder::with_id(TRAY_ID)
@@ -98,7 +111,11 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click { button: MouseButton::Left, .. } = event {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                ..
+            } = event
+            {
                 show_main_window(tray.app_handle());
             }
         })
@@ -231,13 +248,12 @@ fn start_host(app: &AppHandle, state: &HostProcess) -> Result<(), String> {
         compatibility_root.join("tools")
     };
     let python_path = if cfg!(debug_assertions) {
-        format!(
-            "{}:{}",
-            compatibility_root.display(),
-            compatibility_root.join(".venv/lib/python3.14/site-packages").display()
-        )
+        compatibility_root.to_string_lossy().into_owned()
     } else {
-        compatibility.join("site-packages").to_string_lossy().into_owned()
+        compatibility
+            .join("site-packages")
+            .to_string_lossy()
+            .into_owned()
     };
     command
         .env("PYTHONPATH", python_path)
@@ -279,7 +295,7 @@ fn post_owner_release() -> Result<CommandResult, String> {
     if response.starts_with("HTTP/1.0 200") || response.starts_with("HTTP/1.1 200") {
         Ok(CommandResult {
             ok: true,
-            detail: "Python 1.x released BLE. VibeConn 2.0 will retry shortly.".to_string(),
+            detail: "Python 1.x released BLE. Vibe Stick will retry shortly.".to_string(),
         })
     } else {
         Err("Python 1.x refused owner release.".to_string())
@@ -333,7 +349,7 @@ fn restart_host(app: AppHandle, state: State<'_, HostProcess>) -> Result<Command
     start_host(&app, &state)?;
     Ok(CommandResult {
         ok: true,
-        detail: "VibeConn 2.0 restarted.".to_string(),
+        detail: "Vibe Stick restarted.".to_string(),
     })
 }
 
@@ -348,7 +364,7 @@ fn main() {
             Ok(())
         })
         .on_page_load(|webview, _| {
-            let _ = webview.window().set_title("VibeConn");
+            let _ = webview.window().set_title("Vibe Stick");
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
@@ -362,5 +378,5 @@ fn main() {
             login_startup
         ])
         .run(tauri::generate_context!())
-        .expect("error while running VibeConn");
+        .expect("error while running Vibe Stick");
 }

@@ -1,5 +1,7 @@
 import {
+  createContext,
   useEffect,
+  useContext,
   useRef,
   useState,
   type FormEvent,
@@ -12,6 +14,14 @@ import stickS3Image from "./assets/m5sticks3-concept.png";
 
 type Page = "overview" | "sessions" | "voice" | "settings";
 type ThemePreference = "system" | "light" | "dark";
+type LanguagePreference = "system" | "en" | "zh";
+type Locale = "en" | "zh";
+type Translate = (english: string, chinese: string) => string;
+const LocaleContext = createContext<Locale>("en");
+function useT(): Translate {
+  const locale = useContext(LocaleContext);
+  return (english, chinese) => locale === "zh" ? chinese : english;
+}
 type LocalModelStatus = { model: string; state: "idle" | "downloading" | "ready" | "applying" | "applied" | "error"; progress: number; detail?: string };
 type Capability = { available: boolean; reason?: string; testable?: boolean };
 type Session = {
@@ -115,7 +125,7 @@ const demo: Snapshot = {
     owner: "inactive",
     runtime: "stopped",
     capabilities: {
-      ble: { available: false, reason: "Start VibeConn 2.0" },
+      ble: { available: false, reason: "Start Vibe Stick" },
       keyboard: { available: false, reason: "Waiting for handoff" },
       mic: { available: false, reason: "Waiting for handoff" },
       asr: { available: false, reason: "Configure ASR" },
@@ -146,6 +156,13 @@ export function App(): ReactElement {
     const saved = window.localStorage.getItem("vibeconn-theme");
     return saved === "light" || saved === "dark" || saved === "system" ? saved : "system";
   });
+  const [language, setLanguage] = useState<LanguagePreference>(() => {
+    const saved = window.localStorage.getItem("vibestick-language");
+    return saved === "en" || saved === "zh" || saved === "system" ? saved : "system";
+  });
+  const [systemLocale, setSystemLocale] = useState<Locale>(() => navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en");
+  const locale: Locale = language === "system" ? systemLocale : language;
+  const t: Translate = (english, chinese) => locale === "zh" ? chinese : english;
   const [apiBase, setApiBase] = useState(demo.environment.config.asr_api_base);
   const [onlineModel, setOnlineModel] = useState(
     demo.environment.config.asr_online_model ?? "",
@@ -169,9 +186,16 @@ export function App(): ReactElement {
   const initialized = useRef(false);
   const previousDeviceMode = useRef<Snapshot["device_mode"]>(demo.device_mode);
   useEffect(() => {
-    document.title = "VibeConn";
-    if (isTauri()) void getCurrentWindow().setTitle("VibeConn");
-  }, []);
+    document.title = "Vibe Stick";
+    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+    if (isTauri()) void getCurrentWindow().setTitle("Vibe Stick");
+  }, [locale]);
+  useEffect(() => {
+    const update = (): void => setSystemLocale(navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en");
+    window.addEventListener("languagechange", update);
+    window.localStorage.setItem("vibestick-language", language);
+    return () => window.removeEventListener("languagechange", update);
+  }, [language]);
   useEffect(() => {
     if (page !== "settings" || asrMode !== "local") return;
     let alive = true;
@@ -262,7 +286,7 @@ export function App(): ReactElement {
         }),
       );
     } catch {
-      setNotice("This action needs a running VibeConn host.");
+      setNotice(t("This action needs a running Vibe Stick host.", "此操作需要正在运行的 Vibe Stick 主机。"));
     }
   };
   const release = async (): Promise<void> => {
@@ -285,13 +309,13 @@ export function App(): ReactElement {
           `Python 1.x refused owner release (${response.status}).`,
         );
       setNotice(
-        "Python 1.x released BLE. Host 2.0 will retry the connection shortly.",
+        t("Python 1.x released BLE. Vibe Stick will retry the connection shortly.", "Python 1.x 已释放 BLE，Vibe Stick 将很快重试连接。"),
       );
     } catch (error) {
       setNotice(
         error instanceof Error
           ? error.message
-          : "Could not release the Python 1.x owner.",
+          : t("Could not release the Python 1.x owner.", "无法释放 Python 1.x 的连接。"),
       );
     } finally {
       setBusy(undefined);
@@ -318,16 +342,16 @@ export function App(): ReactElement {
       const result: unknown = await response.json().catch(() => undefined);
       if (!response.ok) {
         const detail = typeof result === "object" && result !== null && typeof (result as { error?: unknown }).error === "string"
-          ? (result as { error: string }).error : "Could not prepare and save ASR settings.";
+          ? (result as { error: string }).error : t("Could not prepare and save ASR settings.", "无法准备并保存 ASR 设置。");
         throw new Error(detail);
       }
       setApiKey("");
       // Keep the chosen values stable until the restarted Host reports its
       // new configuration; an older polling snapshot must not reset the menu.
       setAsrDirty(true);
-      setNotice(asrMode === "local" ? "Local model applied. Restart Vibe Stick to activate it." : "Online ASR saved. Restart Vibe Stick to activate it.");
+      setNotice(asrMode === "local" ? t("Local model applied. Restart Vibe Stick to activate it.", "本地模型已应用。请重启 Vibe Stick 使其生效。") : t("Online ASR saved. Restart Vibe Stick to activate it.", "在线 ASR 已保存。请重启 Vibe Stick 使其生效。"));
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Could not prepare and save ASR settings.");
+      setNotice(error instanceof Error ? error.message : t("Could not prepare and save ASR settings.", "无法准备并保存 ASR 设置。"));
     } finally {
       setSaving(false);
     }
@@ -359,9 +383,9 @@ export function App(): ReactElement {
         },
       );
       if (!response.ok) throw new Error();
-      setNotice("New-session launcher saved.");
+      setNotice(t("New-session launcher saved.", "新会话启动方式已保存。"));
     } catch {
-      setNotice("Could not save launcher.");
+      setNotice(t("Could not save launcher.", "无法保存启动方式。"));
     } finally {
       setBusy(undefined);
     }
@@ -379,9 +403,9 @@ export function App(): ReactElement {
         },
       );
       if (!response.ok) throw new Error();
-      setNotice("Working directory saved.");
+      setNotice(t("Working directory saved.", "工作目录已保存。"));
     } catch {
-      setNotice("Could not save directory.");
+      setNotice(t("Could not save directory.", "无法保存工作目录。"));
     } finally {
       setBusy(undefined);
     }
@@ -395,8 +419,8 @@ export function App(): ReactElement {
         body: JSON.stringify({ button_a: micButtonA, button_b: micButtonB }),
       });
       if (!response.ok) throw new Error();
-      setNotice("Vibe Mic buttons saved. Restart VibeConn 2.0 to send them to the Stick.");
-    } catch { setNotice("Could not save Vibe Mic button bindings."); }
+      setNotice(t("Vibe Mic buttons saved. Restart Vibe Stick to send them to the device.", "Vibe Mic 按键已保存。请重启 Vibe Stick 将设置发送到设备。"));
+    } catch { setNotice(t("Could not save Vibe Mic button bindings.", "无法保存 Vibe Mic 按键映射。")); }
     finally { setBusy(undefined); }
   };
   const login = async (action: "install" | "uninstall"): Promise<void> => {
@@ -413,7 +437,7 @@ export function App(): ReactElement {
       setNotice(
         error instanceof Error
           ? error.message
-          : "Could not update startup registration.",
+          : t("Could not update startup registration.", "无法更新开机启动设置。"),
       );
     } finally {
       setBusy(undefined);
@@ -423,13 +447,13 @@ export function App(): ReactElement {
     setBusy("restart");
     try {
       if (!isTauri())
-        throw new Error("Restart is available from the VibeConn desktop app.");
+        throw new Error(t("Restart is available from the Vibe Stick desktop app.", "只能从 Vibe Stick 桌面应用重启。"));
       setNotice((await invoke<{ detail: string }>("restart_host")).detail);
     } catch (error) {
       setNotice(
         error instanceof Error
           ? error.message
-          : "Could not restart VibeConn 2.0.",
+          : t("Could not restart Vibe Stick.", "无法重启 Vibe Stick。"),
       );
     } finally {
       setBusy(undefined);
@@ -463,51 +487,52 @@ export function App(): ReactElement {
     data.environment.traditional_owner.state === "running" &&
     data.environment.owner === "inactive";
   const title: Record<Page, string> = {
-    overview: "Overview",
-    sessions: "Sessions",
-    voice: "Voice",
-    settings: "Settings",
+    overview: t("Overview", "概览"),
+    sessions: t("Sessions", "会话"),
+    voice: t("Voice", "语音"),
+    settings: t("Settings", "设置"),
   };
   return (
+    <LocaleContext.Provider value={locale}>
     <main className="vibe-app">
       <aside className="rail">
         <button className="wordmark" onClick={() => setPage("overview")}>
           <span>V</span>
-          <b>VibeConn</b>
-          <small>2.0</small>
+          <b>Vibe Stick</b>
+          <small>0.2</small>
         </button>
-        <nav aria-label="Primary navigation">
+        <nav aria-label={t("Primary navigation", "主导航")}>
           <Nav
             page={page}
             target="overview"
-            label="Overview"
+            label={t("Overview", "概览")}
             icon="⌂"
             onClick={setPage}
           />
           <Nav
             page={page}
             target="sessions"
-            label="Sessions"
+            label={t("Sessions", "会话")}
             icon="▤"
             onClick={setPage}
           />
           <Nav
             page={page}
             target="voice"
-            label="Voice"
+            label={t("Voice", "语音")}
             icon="◌"
             onClick={setPage}
           />
           <Nav
             page={page}
             target="settings"
-            label="Settings"
+            label={t("Settings", "设置")}
             icon="⚙"
             onClick={setPage}
           />
         </nav>
         <div className="rail-status">
-          {connected ? "VibeConn desktop" : "Connecting to host…"}
+          {connected ? t("Vibe Stick desktop", "Vibe Stick 桌面端") : t("Connecting to host…", "正在连接主机…")}
         </div>
       </aside>
       <section className="canvas">
@@ -521,17 +546,17 @@ export function App(): ReactElement {
             />
             <span>
               {data.environment.owner === "active"
-                ? "VibeStick connected"
+                ? t("VibeStick connected", "VibeStick 已连接")
                 : ownerBlocked
-                  ? "Handoff required"
-                  : "Standby"}
+                  ? t("Handoff required", "需要移交连接")
+                  : t("Standby", "待机")}
             </span>
           </div>
         </header>
         {notice && (
           <div className="notice">
             <span>{notice}</span>
-            <button onClick={() => setNotice("")} aria-label="Dismiss">
+            <button onClick={() => setNotice("")} aria-label={t("Dismiss", "关闭")}>
               ×
             </button>
           </div>
@@ -582,10 +607,12 @@ export function App(): ReactElement {
             busy={busy}
             testing={testing}
             theme={theme}
+            language={language}
             desktopShell={isTauri()}
             loginEnabled={loginEnabled}
             onApiBase={(value) => { setApiBase(value); setAsrDirty(true); }}
             onTheme={setTheme}
+            onLanguage={setLanguage}
             onOnlineModel={(value) => { setOnlineModel(value); setAsrDirty(true); }}
             onLocalModel={(model) => {
               setLocalModel(model);
@@ -610,6 +637,7 @@ export function App(): ReactElement {
         )}
       </section>
     </main>
+    </LocaleContext.Provider>
   );
 }
 function Nav({
@@ -650,6 +678,7 @@ function Overview({
   onRelease(): void;
   onReconnect(): void;
 }): ReactElement {
+  const t = useT();
   const caps = data.environment.capabilities;
   const agents = data.tools.list;
   return (
@@ -657,38 +686,38 @@ function Overview({
       <section className="device-card dashboard-hero">
         <DeviceImage model={data.device.model} />
         <div className="device-copy">
-          <span className="section-label">STICK STATUS</span>
+          <span className="section-label">{t("STICK STATUS", "设备状态")}</span>
           <h2>{deviceName(data.device.model)}</h2>
           <p>
             {data.environment.owner === "active"
-              ? "Connected, synchronized, and ready for voice input."
-              : "Waiting to become the active VibeConn device."}
+              ? t("Connected, synchronized, and ready for voice input.", "已连接并同步，可以开始语音输入。")
+              : t("Waiting to become the active Vibe Stick device.", "正在等待成为当前活动设备。")}
           </p>
           <div className="device-facts">
-            <StatusFact label="BLE" value={caps.ble.available ? "Ready" : "Unavailable"} />
-            <StatusFact label="ASR" value={caps.asr.available ? "Ready" : "Setup needed"} />
-            <StatusFact label="Mode" value={modeName(data.device_mode)} />
-            {data.device.firmware && <StatusFact label="Firmware" value={data.device.firmware} />}
+            <StatusFact label="BLE" value={caps.ble.available ? t("Ready", "就绪") : t("Unavailable", "不可用")} />
+            <StatusFact label="ASR" value={caps.asr.available ? t("Ready", "就绪") : t("Setup needed", "需要设置")} />
+            <StatusFact label={t("Mode", "模式")} value={modeName(data.device_mode, t)} />
+            {data.device.firmware && <StatusFact label={t("Firmware", "固件")} value={data.device.firmware} />}
           </div>
         </div>
         {ownerBlocked ? (
           <div className="handoff-panel">
-            <span>Python 1.x owns the Stick</span>
-            <p>Release it once; VibeConn 2.0 will reconnect automatically.</p>
+            <span>{t("Python 1.x owns the Stick", "Python 1.x 正在占用设备")}</span>
+            <p>{t("Release it once; Vibe Stick will reconnect automatically.", "释放后，Vibe Stick 会自动重新连接。")}</p>
             <button
               className="primary"
               onClick={onRelease}
               disabled={busy === "release"}
             >
-              {busy === "release" ? "Releasing…" : "Release to VibeConn 2.0"}
+              {busy === "release" ? t("Releasing…", "正在释放…") : t("Release to Vibe Stick", "释放给 Vibe Stick")}
             </button>
           </div>
         ) : (
           <div className="device-state device-actions">
-            <b>{data.environment.owner === "active" ? "Connected" : "Waiting"}</b>
+            <b>{data.environment.owner === "active" ? t("Connected", "已连接") : t("Waiting", "等待中")}</b>
             <span>{data.environment.runtime}</span>
             <button className="secondary" onClick={onReconnect} disabled={busy === "restart"}>
-              {busy === "restart" ? "Reconnecting…" : "Reconnect"}
+              {busy === "restart" ? t("Reconnecting…", "正在重连…") : t("Reconnect", "重新连接")}
             </button>
           </div>
         )}
@@ -704,12 +733,14 @@ function StatusFact({ label, value }: { label: string; value: string }): ReactEl
   return <span className="status-fact"><small>{label}</small><b>{value}</b></span>;
 }
 function LiveActivity({ data, selected }: { data: Snapshot; selected?: Session }): ReactElement {
-  const rows = data.transcriptions.slice(0, 6).map((item) => ({ at: item.at, mode: item.source === "yolo" ? "YOLO" : "Agent", text: item.text }));
-  if (!rows.length && selected) rows.push({ at: 0, mode: modeName(data.device_mode), text: selected.last || "Ready for your next prompt" });
-  return <section className="panel live-activity"><div className="panel-head"><div><span className="section-label">LIVE ACTIVITY</span><h2>Latest</h2></div></div>{rows.length ? <div className="latest-list">{rows.map((row, index) => <article className="latest-row" key={`${row.at}-${index}`}><time>{row.at ? formatTime(row.at) : "Now"}</time><span>Latest ·</span><b className={`mode-chip ${row.mode.toLowerCase().replaceAll(" ", "-")}`}>{row.mode}</b><p>{row.text}</p></article>)}</div> : <Empty text="Activity from the Stick will appear here." />}</section>;
+  const t = useT();
+  const rows = data.transcriptions.slice(0, 6).map((item) => ({ at: item.at, mode: item.source === "yolo" ? "YOLO" : t("Agent", "智能体"), text: item.text }));
+  if (!rows.length && selected) rows.push({ at: 0, mode: modeName(data.device_mode, t), text: selected.last || t("Ready for your next prompt", "可以开始下一次输入") });
+  return <section className="panel live-activity"><div className="panel-head"><div><span className="section-label">{t("LIVE ACTIVITY", "实时活动")}</span><h2>{t("Latest", "最近")}</h2></div></div>{rows.length ? <div className="latest-list">{rows.map((row, index) => <article className="latest-row" key={`${row.at}-${index}`}><time>{row.at ? formatTime(row.at) : t("Now", "现在")}</time><span>{t("Latest ·", "最近 ·")}</span><b className={`mode-chip ${row.mode.toLowerCase().replaceAll(" ", "-")}`}>{row.mode}</b><p>{row.text}</p></article>)}</div> : <Empty text={t("Activity from the Stick will appear here.", "设备活动会显示在这里。")} />}</section>;
 }
 function CurrentTarget({ data, selected, agents }: { data: Snapshot; selected?: Session; agents: Agent[] }): ReactElement {
-  return <section className="panel current-target"><span className="section-label">CURRENT TARGET</span><div className="target-mark">›_</div><h2>{currentTarget(data, selected)}</h2><p className="lede">{targetDetail(data, selected, agents)}</p><div className="target-mode"><i className={data.environment.owner === "active" ? "online" : "warn"} />{modeName(data.device_mode)}</div></section>;
+  const t = useT();
+  return <section className="panel current-target"><span className="section-label">{t("CURRENT TARGET", "当前目标")}</span><div className="target-mark">›_</div><h2>{currentTarget(data, selected, t)}</h2><p className="lede">{targetDetail(data, selected, agents, t)}</p><div className="target-mode"><i className={data.environment.owner === "active" ? "online" : "warn"} />{modeName(data.device_mode, t)}</div></section>;
 }
 function deviceName(model: string): string {
   return model === "M5StickS3" ? "M5StickS3" : "M5StickC Plus";
@@ -718,29 +749,26 @@ function DeviceImage({ model }: { model: string }): ReactElement {
   if (model === "M5StickS3") return <div className="stick stick-s3" aria-label="M5StickS3 product image"><img src={stickS3Image} alt="M5StickS3" /></div>;
   return <div className="stick stick-cplus" aria-label="M5StickC Plus product image"><img src={stickCPlusImage} alt="M5StickC Plus" /></div>;
 }
-function ModeRow({ name, detail, active }: { name: string; detail: string; active: boolean }): ReactElement {
-  return <div className={active ? "mode-row active" : "mode-row"}><i /><div><b>{name}</b><span>{detail}</span></div>{active && <em>Now</em>}</div>;
+function modeName(mode: Snapshot["device_mode"], t: Translate = (english) => english): string {
+  return mode === "agent" ? "Agent CLI" : mode === "mic" ? "Vibe Mic" : mode === "yolo" ? "YOLO" : t("Main menu", "主菜单");
 }
-function modeName(mode: Snapshot["device_mode"]): string {
-  return mode === "agent" ? "Agent CLI" : mode === "mic" ? "Vibe Mic" : mode === "yolo" ? "YOLO" : "Main menu";
-}
-function currentTarget(data: Snapshot, selected?: Session): string {
+function currentTarget(data: Snapshot, selected: Session | undefined, t: Translate): string {
   if (data.device_mode === "mic" || data.device_mode === "yolo")
-    return data.foreground_target?.app ?? "Detecting focused application…";
-  return selected ? sessionTitle(selected) : "No session selected";
+    return data.foreground_target?.app ?? t("Detecting focused application…", "正在检测当前应用…");
+  return selected ? sessionTitle(selected, t) : t("No session selected", "未选择会话");
 }
-function targetDetail(data: Snapshot, selected: Session | undefined, agents: Agent[]): string {
+function targetDetail(data: Snapshot, selected: Session | undefined, agents: Agent[], t: Translate): string {
   if (data.device_mode === "mic")
     return data.foreground_target
-      ? "Foreground application only — its window content is not read or shown."
-      : "Move the cursor to an application window to identify it. Window content is never read."
+      ? t("Foreground application only — its window content is not read or shown.", "仅识别前台应用，不读取或显示窗口内容。")
+      : t("Move the cursor to an application window to identify it. Window content is never read.", "将焦点移到目标应用窗口；Vibe Stick 不会读取窗口内容。")
   if (data.device_mode === "yolo")
     return data.foreground_target
-      ? "YOLO sends text to this focused application. Window content is not read or shown."
-      : "Move the cursor to the intended application window before using YOLO."
+      ? t("YOLO sends text to this focused application. Window content is not read or shown.", "YOLO 会向当前应用输入文字，不读取或显示窗口内容。")
+      : t("Move the cursor to the intended application window before using YOLO.", "使用 YOLO 前，请先切换到目标应用窗口。")
   return selected
-    ? `${agentName(agents, selected.tool)} · ${selected.last || "Ready for your next prompt"}`
-    : "Select an Agent CLI session in Sessions before sending a transcript.";
+    ? `${agentName(agents, selected.tool)} · ${selected.last || t("Ready for your next prompt", "可以开始下一次输入")}`
+    : t("Select an Agent CLI session in Sessions before sending a transcript.", "发送转写前，请先在“会话”中选择 Agent CLI 会话。");
 }
 function Sessions({
   data,
@@ -771,6 +799,7 @@ function Sessions({
   onCwd(value: string): void;
   onSaveCwd(event: FormEvent): void;
 }): ReactElement {
+  const t = useT();
   const sessions = data.sessions.list.filter(
     (session) => session.tool === data.selected_tool,
   );
@@ -779,14 +808,13 @@ function Sessions({
       <div className="panel-head">
         <div>
           <span className="section-label">AGENT CLI</span>
-          <h2>Sessions</h2>
+          <h2>{t("Sessions", "会话")}</h2>
           <p>
-            Choose an agent first, then select where its transcripts are
-            delivered.
+            {t("Choose an agent first, then select where its transcripts are delivered.", "先选择智能体，再选择转写内容要发送到的会话。")}
           </p>
         </div>
         <button className="primary" onClick={onNew}>
-          ＋ New session
+          ＋ {t("New session", "新建会话")}
         </button>
       </div>
       <AgentBar
@@ -808,7 +836,7 @@ function Sessions({
             >
               <Status state={session.state} />
               <div>
-                <b>{sessionTitle(session)}</b>
+                <b>{sessionTitle(session, t)}</b>
                 <span>
                   {agentName(data.tools.list, session.tool)}
                   {session.last ? ` · ${session.last}` : ""}
@@ -816,39 +844,39 @@ function Sessions({
               </div>
               <em>
                 {session.id === data.active_session
-                  ? "Selected"
+                  ? t("Selected", "已选择")
                   : session.state === "idle"
-                    ? "Ready"
+                    ? t("Ready", "就绪")
                     : session.state}
               </em>
             </button>
           ))
         ) : (
           <Empty
-            text={`No ${agentName(data.tools.list, data.selected_tool)} session is available yet.`}
+            text={t(`No ${agentName(data.tools.list, data.selected_tool)} session is available yet.`, `暂时没有可用的 ${agentName(data.tools.list, data.selected_tool)} 会话。`)}
           />
         )}
       </div>
       <div className="session-preferences">
         <div>
-          <span className="section-label">SESSION PREFERENCES</span>
-          <h3>New sessions</h3>
-          <p className="lede">Controls where Stick-created Agent CLI sessions open.</p>
+          <span className="section-label">{t("SESSION PREFERENCES", "会话偏好")}</span>
+          <h3>{t("New sessions", "新建会话")}</h3>
+          <p className="lede">{t("Controls where Stick-created Agent CLI sessions open.", "控制设备创建的 Agent CLI 会话在哪里打开。")}</p>
         </div>
         <form className="form-block inline" onSubmit={onSaveLauncher}>
-          <div><h3>Launcher</h3><p>Terminal multiplexer for new sessions.</p></div>
+          <div><h3>{t("Launcher", "启动方式")}</h3><p>{t("Terminal multiplexer for new sessions.", "新会话使用的终端复用器。")}</p></div>
           <select value={launcher} onChange={(event) => onLauncher(event.target.value as "auto" | "tmux" | "zellij")}>
-            <option value="auto">Auto</option><option value="tmux">tmux</option><option value="zellij">zellij</option>
+            <option value="auto">{t("Auto", "自动")}</option><option value="tmux">tmux</option><option value="zellij">zellij</option>
           </select>
-          <button className="secondary" disabled={busy === "launcher"}>Save</button>
+          <button className="secondary" disabled={busy === "launcher"}>{t("Save", "保存")}</button>
         </form>
         <form className="form-block inline" onSubmit={onSaveCwd}>
-          <div><h3>Working directory</h3><p>Used when a new session is created for this Agent CLI.</p></div>
+          <div><h3>{t("Working directory", "工作目录")}</h3><p>{t("Used when a new session is created for this Agent CLI.", "为此 Agent CLI 创建新会话时使用。")}</p></div>
           <select value={cwdTool} onChange={(event) => onCwdTool(event.target.value)}>
             {data.environment.config.tools.map((tool) => <option key={tool.id} value={tool.id}>{tool.name}</option>)}
           </select>
-          <input value={cwd} placeholder="Empty: inherit pane / home" onChange={(event) => onCwd(event.target.value)} />
-          <button className="secondary" disabled={busy === "cwd"}>Save</button>
+          <input value={cwd} placeholder={t("Empty: inherit pane / home", "留空：继承窗格或主目录")} onChange={(event) => onCwd(event.target.value)} />
+          <button className="secondary" disabled={busy === "cwd"}>{t("Save", "保存")}</button>
         </form>
       </div>
     </section>
@@ -856,13 +884,14 @@ function Sessions({
 }
 
 function Voice({ transcriptions }: { transcriptions: Snapshot["transcriptions"] }): ReactElement {
+  const t = useT();
   return (
     <section className="wide-panel voice-history">
       <div className="panel-head">
         <div>
-          <span className="section-label">TRANSCRIPTION HISTORY</span>
-          <h2>Voice</h2>
-          <p>Recognized speech is kept here with its entry point. Vibe Mic raw audio is never saved.</p>
+          <span className="section-label">{t("TRANSCRIPTION HISTORY", "转写历史")}</span>
+          <h2>{t("Voice", "语音")}</h2>
+          <p>{t("Recognized speech is kept here with its entry point. Vibe Mic raw audio is never saved.", "识别出的语音会与来源一起保存在这里；Vibe Mic 原始音频不会保存。")}</p>
         </div>
       </div>
       {transcriptions.length ? (
@@ -875,7 +904,7 @@ function Voice({ transcriptions }: { transcriptions: Snapshot["transcriptions"] 
             </article>
           ))}
         </div>
-      ) : <Empty text="New Agent CLI and YOLO transcriptions will appear here." />}
+      ) : <Empty text={t("New Agent CLI and YOLO transcriptions will appear here.", "新的 Agent CLI 和 YOLO 转写会显示在这里。")} />}
     </section>
   );
 }
@@ -893,10 +922,12 @@ function Settings(props: {
   busy?: string;
   testing?: "asr" | "yolo";
   theme: ThemePreference;
+  language: LanguagePreference;
   desktopShell: boolean;
   loginEnabled?: boolean;
   onApiBase(v: string): void;
   onTheme(v: ThemePreference): void;
+  onLanguage(v: LanguagePreference): void;
   onOnlineModel(v: string): void;
   onLocalModel(v: string): void;
   onDownloadLocalModel(): void;
@@ -911,15 +942,15 @@ function Settings(props: {
   onRestart(): void;
   onLogin(v: "install" | "uninstall"): void;
 }): ReactElement {
+  const t = useT();
   const { data } = props;
   const yolo = data.environment.capabilities.yolo;
-  const [language, setLanguage] = useState("system");
   return (
     <section className="settings-view">
       <div className="settings-heading">
         <div>
-          <h2>Settings</h2>
-          <p className="lede">Manage your Stick and how VibeConn runs on this computer.</p>
+          <h2>{t("Settings", "设置")}</h2>
+          <p className="lede">{t("Manage your Stick and how Vibe Stick runs on this computer.", "管理设备以及 Vibe Stick 在此电脑上的运行方式。")}</p>
         </div>
         <div className="settings-actions">
           <a
@@ -927,7 +958,7 @@ function Settings(props: {
             href="http://127.0.0.1:7861/api/diagnostics"
             download
           >
-            Download diagnostics
+            {t("Download diagnostics", "下载诊断信息")}
           </a>
           {props.desktopShell && (
             <button
@@ -935,84 +966,84 @@ function Settings(props: {
               onClick={props.onRestart}
               disabled={props.busy === "restart"}
             >
-              {props.busy === "restart" ? "Restarting…" : "Restart host"}
+              {props.busy === "restart" ? t("Restarting…", "正在重启…") : t("Restart host", "重启主机")}
             </button>
           )}
         </div>
       </div>
       <section className="setup-section">
-        <div><span className="section-label">DEVICE SETUP</span><h3>VibeStick devices</h3><p>Manage paired Sticks and their connection state.</p></div>
-        <div className="device-manager"><DeviceImage model={data.device.model} /><div><b>{deviceName(data.device.model)}</b><span><i className={data.environment.owner === "active" ? "online" : "warn"} />{data.environment.owner === "active" ? "Connected" : "Disconnected"}</span><small>{data.device.firmware || "Firmware detected automatically"}</small></div><button className="secondary" onClick={props.onRestart} disabled={props.busy === "restart"}>{props.busy === "restart" ? "Reconnecting…" : "Reconnect"}</button></div>
-        <button className="quiet" onClick={() => window.alert("Pair an additional Stick from your system Bluetooth settings, then open VibeConn to connect it.")}>+ Add Stick</button>
+        <div><span className="section-label">{t("DEVICE SETUP", "设备设置")}</span><h3>{t("VibeStick devices", "VibeStick 设备")}</h3><p>{t("Manage paired Sticks and their connection state.", "管理已配对设备及其连接状态。")}</p></div>
+        <div className="device-manager"><DeviceImage model={data.device.model} /><div><b>{deviceName(data.device.model)}</b><span><i className={data.environment.owner === "active" ? "online" : "warn"} />{data.environment.owner === "active" ? t("Connected", "已连接") : t("Disconnected", "未连接")}</span><small>{data.device.firmware || t("Firmware detected automatically", "自动检测固件版本")}</small></div><button className="secondary" onClick={props.onRestart} disabled={props.busy === "restart"}>{props.busy === "restart" ? t("Reconnecting…", "正在重连…") : t("Reconnect", "重新连接")}</button></div>
+        <button className="quiet" onClick={() => window.alert(t("Pair an additional Stick from your system Bluetooth settings, then open Vibe Stick to connect it.", "请先在系统蓝牙设置中配对其他 Stick，然后打开 Vibe Stick 连接。"))}>+ {t("Add Stick", "添加设备")}</button>
       </section>
       <section className="setup-section host-setup">
-        <span className="section-label">HOST SETUP</span>
-        <div className="form-block inline language-setting"><div><h3>App language</h3><p>Choose a display language, or follow the system setting.</p></div><select value={language} onChange={(event) => setLanguage(event.target.value)} aria-label="App language"><option value="system">Follow system</option><option value="en">English</option><option value="zh">中文</option></select></div>
+        <span className="section-label">{t("HOST SETUP", "主机设置")}</span>
+        <div className="form-block inline language-setting"><div><h3>{t("App language", "应用语言")}</h3><p>{t("Choose a display language, or follow the system setting.", "选择显示语言，或跟随系统设置。")}</p></div><select value={props.language} onChange={(event) => props.onLanguage(event.target.value as LanguagePreference)} aria-label={t("App language", "应用语言")}><option value="system">{t("Follow system", "跟随系统")}</option><option value="en">English</option><option value="zh">中文</option></select></div>
       </section>
       <div className="form-block inline theme-setting">
         <div>
-          <h3>Appearance</h3>
-          <p>Choose how VibeConn looks on this computer.</p>
+          <h3>{t("Appearance", "外观")}</h3>
+          <p>{t("Choose how Vibe Stick looks on this computer.", "选择 Vibe Stick 在此电脑上的显示样式。")}</p>
         </div>
-        <select value={props.theme} onChange={(e) => props.onTheme(e.target.value as ThemePreference)} aria-label="Appearance">
-          <option value="system">Follow system</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
+        <select value={props.theme} onChange={(e) => props.onTheme(e.target.value as ThemePreference)} aria-label={t("Appearance", "外观")}>
+          <option value="system">{t("Follow system", "跟随系统")}</option>
+          <option value="light">{t("Light", "亮色")}</option>
+          <option value="dark">{t("Dark", "暗色")}</option>
         </select>
       </div>
       <form className="form-block" onSubmit={props.onSaveAsr}>
-        <h3>Speech recognition</h3>
-        <p className="asr-intro">Choose where VibeConn transcribes Stick audio. Local is the default and needs no account.</p>
-        <div className="asr-mode" role="radiogroup" aria-label="ASR mode">
-          <button type="button" className={props.asrMode === "local" ? "selected" : ""} aria-pressed={props.asrMode === "local"} onClick={() => props.onAsrMode("local")}><b>Local</b><span>On this computer</span></button>
-          <button type="button" className={props.asrMode === "online" ? "selected" : ""} aria-pressed={props.asrMode === "online"} onClick={() => props.onAsrMode("online")}><b>Online</b><span>OpenAI-compatible API</span></button>
+        <h3>{t("Speech recognition", "语音识别")}</h3>
+        <p className="asr-intro">{t("Choose where Vibe Stick transcribes device audio. Local is the default and needs no account.", "选择设备音频的转写方式；默认使用本地识别，无需账号。")}</p>
+        <div className="asr-mode" role="radiogroup" aria-label={t("ASR mode", "语音识别模式")}>
+          <button type="button" className={props.asrMode === "local" ? "selected" : ""} aria-pressed={props.asrMode === "local"} onClick={() => props.onAsrMode("local")}><b>{t("Local", "本地")}</b><span>{t("On this computer", "在此电脑上运行")}</span></button>
+          <button type="button" className={props.asrMode === "online" ? "selected" : ""} aria-pressed={props.asrMode === "online"} onClick={() => props.onAsrMode("online")}><b>{t("Online", "在线")}</b><span>{t("OpenAI-compatible API", "兼容 OpenAI 的 API")}</span></button>
         </div>
         {props.asrMode === "local" ? <>
-          <label>Local model<select value={props.localModel} onChange={(e) => props.onLocalModel(e.target.value)}><option value="tiny">Tiny — fastest</option><option value="base">Base</option><option value="small">Small — recommended</option><option value="medium">Medium — highest quality</option></select></label>
-          <div className="asr-local-note">Audio stays on this computer. Download the selected model first, then apply it. Large models can take several minutes.</div>
+          <label>{t("Local model", "本地模型")}<select value={props.localModel} onChange={(e) => props.onLocalModel(e.target.value)}><option value="tiny">Tiny — {t("fastest", "最快")}</option><option value="base">Base</option><option value="small">Small — {t("recommended", "推荐")}</option><option value="medium">Medium — {t("highest quality", "最高质量")}</option></select></label>
+          <div className="asr-local-note">{t("Audio stays on this computer. Download the selected model first, then apply it. Large models can take several minutes.", "音频保留在本机。请先下载所选模型，再点击应用；大型模型可能需要数分钟。")}</div>
           <div className={`model-download ${props.localModelStatus.state}`}>
-            <div className="model-download-head"><span>{modelStatusLabel(props.localModelStatus, props.localModel)}</span><b>{props.localModelStatus.model === props.localModel && props.localModelStatus.state === "downloading" ? `${Math.round(props.localModelStatus.progress)}%` : ""}</b></div>
-            <div className="model-progress" role="progressbar" aria-label="Model download progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={props.localModelStatus.model === props.localModel ? props.localModelStatus.progress : 0}><i style={{ width: `${props.localModelStatus.model === props.localModel ? props.localModelStatus.progress : 0}%` }} /></div>
+            <div className="model-download-head"><span>{modelStatusLabel(props.localModelStatus, props.localModel, t)}</span><b>{props.localModelStatus.model === props.localModel && props.localModelStatus.state === "downloading" ? `${Math.round(props.localModelStatus.progress)}%` : ""}</b></div>
+            <div className="model-progress" role="progressbar" aria-label={t("Model download progress", "模型下载进度")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={props.localModelStatus.model === props.localModel ? props.localModelStatus.progress : 0}><i style={{ width: `${props.localModelStatus.model === props.localModel ? props.localModelStatus.progress : 0}%` }} /></div>
             {props.localModelStatus.detail && props.localModelStatus.model === props.localModel && <small>{props.localModelStatus.detail}</small>}
           </div>
-          <button type="button" className="secondary model-download-button" onClick={props.onDownloadLocalModel} disabled={props.localModelStatus.state === "downloading" || props.localModelStatus.state === "applying"}>{props.localModelStatus.state === "downloading" && props.localModelStatus.model === props.localModel ? "Downloading…" : `Download ${props.localModel}`}</button>
+          <button type="button" className="secondary model-download-button" onClick={props.onDownloadLocalModel} disabled={props.localModelStatus.state === "downloading" || props.localModelStatus.state === "applying"}>{props.localModelStatus.state === "downloading" && props.localModelStatus.model === props.localModel ? t("Downloading…", "正在下载…") : `${t("Download", "下载")} ${props.localModel}`}</button>
         </> : <>
-          <label>API base<input value={props.apiBase} onChange={(e) => props.onApiBase(e.target.value)} /></label>
-          <label>Model<input value={props.onlineModel} onChange={(e) => props.onOnlineModel(e.target.value)} /></label>
-          <label>API key<input type="password" value={props.apiKey} placeholder="Leave blank to keep it" onChange={(e) => props.onApiKey(e.target.value)} /></label>
+          <label>{t("API base", "API 地址")}<input value={props.apiBase} onChange={(e) => props.onApiBase(e.target.value)} /></label>
+          <label>{t("Model", "模型")}<input value={props.onlineModel} onChange={(e) => props.onOnlineModel(e.target.value)} /></label>
+          <label>{t("API key", "API 密钥")}<input type="password" value={props.apiKey} placeholder={t("Leave blank to keep it", "留空以保留现有密钥")} onChange={(e) => props.onApiKey(e.target.value)} /></label>
         </>}
         <div className="form-actions">
-          <button className="primary" disabled={props.saving || (props.asrMode === "local" && (props.localModelStatus.state === "downloading" || props.localModelStatus.state === "applying"))}>{props.saving ? (props.asrMode === "local" ? "Applying model…" : "Saving…") : props.asrMode === "local" ? `Apply ${props.localModel}` : "Use Online ASR"}</button>
-          {props.asrMode === "online" && <button type="button" className="secondary" onClick={props.onTestAsr} disabled={props.testing === "asr"}>{props.testing === "asr" ? "Testing…" : "Test provider"}</button>}
+          <button className="primary" disabled={props.saving || (props.asrMode === "local" && (props.localModelStatus.state === "downloading" || props.localModelStatus.state === "applying"))}>{props.saving ? (props.asrMode === "local" ? t("Applying model…", "正在应用模型…") : t("Saving…", "正在保存…")) : props.asrMode === "local" ? `${t("Apply", "应用")} ${props.localModel}` : t("Use Online ASR", "使用在线 ASR")}</button>
+          {props.asrMode === "online" && <button type="button" className="secondary" onClick={props.onTestAsr} disabled={props.testing === "asr"}>{props.testing === "asr" ? t("Testing…", "正在测试…") : t("Test provider", "测试服务")}</button>}
         </div>
       </form>
       <form className="form-block inline" onSubmit={props.onSaveMicBindings}>
-        <div><h3>Vibe Mic buttons</h3><p>Buttons emit configurable F13–F24 keys only while Vibe Mic is active. Default: A = F14, B = F15.</p></div>
-        <label>Button A<select value={props.micButtonA} onChange={(e) => props.onMicButtonA(e.target.value)}>{functionKeyOptions()}</select></label>
-        <label>Button B<select value={props.micButtonB} onChange={(e) => props.onMicButtonB(e.target.value)}>{functionKeyOptions()}</select></label>
-        <button className="secondary" disabled={props.busy === "mic-bindings"}>{props.busy === "mic-bindings" ? "Saving…" : "Save"}</button>
+        <div><h3>{t("Vibe Mic buttons", "Vibe Mic 按键")}</h3><p>{t("Buttons emit configurable F13–F24 keys only while Vibe Mic is active. Default: A = F14, B = F15.", "仅在 Vibe Mic 激活时发送可配置的 F13–F24 按键。默认：A = F14，B = F15。")}</p></div>
+        <label>{t("Button A", "按键 A")}<select value={props.micButtonA} onChange={(e) => props.onMicButtonA(e.target.value)}>{functionKeyOptions()}</select></label>
+        <label>{t("Button B", "按键 B")}<select value={props.micButtonB} onChange={(e) => props.onMicButtonB(e.target.value)}>{functionKeyOptions()}</select></label>
+        <button className="secondary" disabled={props.busy === "mic-bindings"}>{props.busy === "mic-bindings" ? t("Saving…", "正在保存…") : t("Save", "保存")}</button>
       </form>
       {yolo?.testable && (
         <div className="form-block inline">
           <div>
-            <h3>YOLO permission</h3>
-            <p>Check whether VibeConn can type into the focused app.</p>
+            <h3>{t("YOLO permission", "YOLO 权限")}</h3>
+            <p>{t("Check whether Vibe Stick can type into the focused app.", "检查 Vibe Stick 是否可以向当前应用输入文字。")}</p>
           </div>
           <button
             className="secondary"
             onClick={props.onTestYolo}
             disabled={props.testing === "yolo"}
           >
-            {props.testing === "yolo" ? "Testing…" : "Test permission"}
+            {props.testing === "yolo" ? t("Testing…", "正在测试…") : t("Test permission", "测试权限")}
           </button>
         </div>
       )}
       {props.desktopShell && (
         <div className="form-block inline">
           <div>
-            <h3>Start at login</h3>
+            <h3>{t("Start at login", "登录时启动")}</h3>
             <p>
-              {props.loginEnabled ? "Enabled for this user." : "Not enabled."}
+              {props.loginEnabled ? t("Enabled for this user.", "已为当前用户启用。") : t("Not enabled.", "尚未启用。")}
             </p>
           </div>
           <button
@@ -1020,14 +1051,14 @@ function Settings(props: {
             disabled={props.busy === "install" || props.loginEnabled}
             onClick={() => void props.onLogin("install")}
           >
-            Enable
+            {t("Enable", "启用")}
           </button>
           <button
             className="quiet"
             disabled={props.busy === "uninstall" || !props.loginEnabled}
             onClick={() => void props.onLogin("uninstall")}
           >
-            Remove
+            {t("Remove", "移除")}
           </button>
         </div>
       )}
@@ -1037,15 +1068,15 @@ function Settings(props: {
 function functionKeyOptions(): ReactElement[] {
   return Array.from({ length: 12 }, (_, index) => <option key={index} value={`F${index + 13}`}>{`F${index + 13}`}</option>);
 }
-function modelStatusLabel(status: LocalModelStatus, selected: string): string {
-  if (status.model !== selected || status.state === "idle") return "Not downloaded in this session";
+function modelStatusLabel(status: LocalModelStatus, selected: string, t: Translate): string {
+  if (status.model !== selected || status.state === "idle") return t("Not downloaded in this session", "本次运行尚未下载");
   return {
-    downloading: `Downloading ${selected}`,
-    ready: `${selected} downloaded`,
-    applying: `Applying ${selected}`,
-    applied: `${selected} applied`,
-    error: `${selected} needs attention`,
-    idle: "Not downloaded in this session",
+    downloading: `${t("Downloading", "正在下载")} ${selected}`,
+    ready: `${selected} ${t("downloaded", "已下载")}`,
+    applying: `${t("Applying", "正在应用")} ${selected}`,
+    applied: `${selected} ${t("applied", "已应用")}`,
+    error: `${selected} ${t("needs attention", "需要处理")}`,
+    idle: t("Not downloaded in this session", "本次运行尚未下载"),
   }[status.state];
 }
 const agentSymbols: Record<string, string> = {
@@ -1057,8 +1088,8 @@ const agentSymbols: Record<string, string> = {
 function agentName(agents: Agent[], id: string | null): string {
   return agents.find((agent) => agent.id === id)?.name ?? id ?? "Agent";
 }
-function sessionTitle(session: Session): string {
-  return session.name?.trim() || session.session?.trim() || "Untitled session";
+function sessionTitle(session: Session, t: Translate = (english) => english): string {
+  return session.name?.trim() || session.session?.trim() || t("Untitled session", "未命名会话");
 }
 function AgentBar({
   agents,
@@ -1096,62 +1127,8 @@ function AgentBar({
 function Status({ state }: { state: string }): ReactElement {
   return <i className={`status ${state}`} />;
 }
-function Route({
-  name,
-  description,
-  active,
-}: {
-  name: string;
-  description: string;
-  active?: boolean;
-}): ReactElement {
-  return (
-    <div className={active ? "route active" : "route"}>
-      <b>{name}</b>
-      <span>{description}</span>
-      {active && <em>Current</em>}
-    </div>
-  );
-}
-function VoiceActivity({ voice, latest }: { voice: Snapshot["voice"]; latest?: Snapshot["transcriptions"][number] }): ReactElement {
-  const seconds = (voice.recorded_ms / 1000).toFixed(1);
-  const mode = voice.mode === "mic" ? "Vibe Mic" : voice.mode === "yolo" ? "YOLO" : "Agent CLI";
-  const heading = voice.state === "recording" ? `Recording · ${mode}` : voice.state === "transcribing" ? "Transcribing" : voice.state === "ready" ? "Transcript ready" : voice.state === "error" ? "Voice error" : "Listening for the Stick";
-  const detail = voice.state === "recording" ? `${seconds}s captured from the Stick` : voice.mode === "mic" ? "Raw audio is routed to the system Vibe Mic input." : voice.state === "idle" ? "Hold A on the Stick to begin recording." : "Audio is being processed on the paired host.";
-  const displayedText = voice.text || (voice.state === "idle" ? latest?.text : "");
-  const displayedSource = voice.text ? voice.mode : latest?.source === "yolo" ? "YOLO" : latest ? "Agent CLI" : "";
-  return <section className="panel voice-activity"><div className="voice-copy"><span className="section-label">LIVE ACTIVITY</span><h2>{heading}</h2><p className="lede">{detail}</p></div><span className={`voice-state ${voice.state}`}>{voice.state === "recording" ? `${seconds}s` : mode}</span><div className="voice-wave" aria-label={`Audio level ${Math.round(voice.level * 100)} percent`}>{Array.from({ length: 40 }, (_, index) => <i key={index} style={{ height: `${voice.state === "recording" ? 18 + ((index * 29 + Math.round(voice.level * 100) * 7) % 66) : 16 + ((index * 17) % 32)}%` }} />)}</div>{displayedText && <div className={voice.state === "error" ? "voice-preview error" : "voice-preview"}>{displayedSource && <small>Latest · {displayedSource}</small>}{displayedText}</div>}</section>;
-}
-function TransferLog({ transfers, status }: { transfers: Snapshot["transfers"]; status: Snapshot["status"] }): ReactElement {
-  return <section className="panel transfer-log"><div className="panel-head"><div><span className="section-label">TRANSMISSION RECORD</span><h2>Recent activity</h2></div><span className="transfer-target">{status.state === "idle" ? "Host ready" : status.state}</span></div>{transfers.length ? <div className="transfer-list">{transfers.map((item, index) => <div className="transfer-row" key={`${item.at}-${index}`}><span className={`transfer-kind ${item.kind}`}>{transferLabel(item.kind)}</span><p>{item.text}</p><time>{formatTime(item.at)}</time></div>)}</div> : <Empty text="Voice recordings, transcripts, and deliveries from the Stick will appear here." />}</section>;
-}
-function transferLabel(kind: Snapshot["transfers"][number]["kind"]): string {
-  return { recording: "REC", transcript: "ASR", delivery: "SENT", audio: "AUDIO", error: "ERROR" }[kind];
-}
 function formatTime(value: number): string {
   return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-}
-function Mode({
-  name,
-  icon,
-  detail,
-  state,
-}: {
-  name: string;
-  icon: string;
-  detail: string;
-  state?: Capability;
-}): ReactElement {
-  return (
-    <article className="mode-card">
-      <span className="mode-icon">{icon}</span>
-      <h3>{name}</h3>
-      <p>{detail}</p>
-      <small className={state?.available ? "ready" : "needs"}>
-        {state?.available ? "Ready" : (state?.reason ?? "Setup required")}
-      </small>
-    </article>
-  );
 }
 function Empty({ text }: { text: string }): ReactElement {
   return <div className="empty">{text}</div>;
