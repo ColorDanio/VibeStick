@@ -121,8 +121,8 @@ class Helper:
 
     async def pair(self, address: str) -> None:
         self._validate_address(address)
-        output = await self._bluetoothctl(f"pair {address}", timeout=25)
-        if "Paired: yes" not in output and "successful" not in output.lower():
+        output = await self._bluetoothctl(f"pair {address}", timeout=15)
+        if "Paired: yes" not in output and "successful" not in output.lower() and "already exists" not in output.lower():
             raise RuntimeError(output.strip() or "Bluetooth pairing failed")
         await self._bluetoothctl(f"trust {address}", timeout=5)
 
