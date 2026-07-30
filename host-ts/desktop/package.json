@@ -14,7 +14,7 @@
     "build": "npm run prepare:runtime && tauri build",
     "preview": "vite preview",
     "package": "npm run build",
-    "package:deb": "npm run prepare:runtime && tauri build --bundles deb"
+    "package:deb": "npm run prepare:runtime && tauri build --bundles deb && node scripts/name-deb.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1"
