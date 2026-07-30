@@ -51,6 +51,8 @@ export class HostCore {
   constructor(public config: Config) { this.store = new HostSessionStore(config); }
   /** Runtime-only settings that the BLE bridge must use before a restart. */
   updateMicConfig(mic: Config["mic"]): void { this.config = { ...this.config, mic }; }
+  /** Forget transient device identity before activating a different Stick. */
+  clearDevice(): void { this.device = { name: "", model: "", firmware: "" }; }
   replaceSessions(records: SessionRecord[]): void { this.store.replace(records); }
 
   command(input: { cmd: string; id?: string; mode?: unknown; name?: unknown; model?: unknown; firmware?: unknown }): { changed: boolean; actions: RoutingAction[] } {

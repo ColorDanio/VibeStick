@@ -262,6 +262,7 @@ async function main(): Promise<void> {
       // The helper owns one BleakClient and HostRuntime owns one bridge: stop
       // the old link before selecting the new device, never two at once.
       await runtime?.stop();
+      core.clearDevice();
       linux.transport.setTargetAddress(address);
       await runtime?.start();
       return { address };
@@ -278,6 +279,7 @@ async function main(): Promise<void> {
       // the user's perspective and never leaves two candidates active.
       const previousAddress = linux.transport.address;
       await runtime?.stop();
+      core.clearDevice();
       linux.transport.setTargetAddress("");
       try {
         await linux.transport.pair(address);
@@ -296,6 +298,7 @@ async function main(): Promise<void> {
       const address = deviceAddress(body);
       if (linux.transport.address?.toUpperCase() === address.toUpperCase()) {
         await runtime?.stop();
+        core.clearDevice();
         linux.transport.setTargetAddress("");
       }
       await linux.transport.unpair(address);

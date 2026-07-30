@@ -766,11 +766,24 @@ function CurrentTarget({ data, selected, agents }: { data: Snapshot; selected?: 
   return <section className="panel current-target"><span className="section-label">{t("CURRENT TARGET", "当前目标")}</span><div className="target-mark">›_</div><h2>{currentTarget(data, selected, t)}</h2><p className="lede">{targetDetail(data, selected, agents, t)}</p><div className="target-mode"><i className={data.environment.owner === "active" ? "online" : "warn"} />{modeName(data.device_mode, t)}</div></section>;
 }
 function deviceName(model: string): string {
-  return model === "M5StickS3" ? "M5StickS3" : "M5StickC Plus";
+  const kind = stickKind(model);
+  if (kind === "s3") return "M5StickS3";
+  if (kind === "cplus") return "M5StickC Plus";
+  return model || "VibeStick";
 }
 function DeviceImage({ model }: { model: string }): ReactElement {
-  if (model === "M5StickS3") return <div className="stick stick-s3" aria-label="M5StickS3 product image"><img src={stickS3Image} alt="M5StickS3" /></div>;
-  return <div className="stick stick-cplus" aria-label="M5StickC Plus product image"><img src={stickCPlusImage} alt="M5StickC Plus" /></div>;
+  const kind = stickKind(model);
+  if (kind === "s3") return <div className="stick stick-s3" aria-label="M5StickS3 product image"><img src={stickS3Image} alt="M5StickS3" /></div>;
+  if (kind === "cplus") return <div className="stick stick-cplus" aria-label="M5StickC Plus product image"><img src={stickCPlusImage} alt="M5StickC Plus" /></div>;
+  // Do not make up a C Plus image while the firmware model notification is
+  // still in flight. The neutral marker prevents incorrect hardware art.
+  return <div className="stick stick-unknown" aria-label="VibeStick model pending identification">VS</div>;
+}
+function stickKind(model: string): "s3" | "cplus" | undefined {
+  const normalized = model.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
+  if (normalized.includes("sticks3")) return "s3";
+  if (normalized.includes("stickcplus")) return "cplus";
+  return undefined;
 }
 function modeName(mode: Snapshot["device_mode"], t: Translate = (english) => english): string {
   return mode === "agent" ? "Agent CLI" : mode === "mic" ? "Vibe Mic" : mode === "yolo" ? "YOLO" : t("Main menu", "主菜单");
