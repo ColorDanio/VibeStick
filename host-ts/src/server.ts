@@ -14,6 +14,8 @@ export interface SettingsService {
   updateMicBindings?(body: unknown): Promise<{ button_a: string; button_b: string }>;
   scanSticks?(): Promise<{ name: string; address: string; rssi?: number | null; paired?: boolean; connected?: boolean }[]>;
   connectStick?(body: unknown): Promise<{ name?: string; address: string }>;
+  pairStick?(body: unknown): Promise<void>;
+  unpairStick?(body: unknown): Promise<void>;
 }
 
 export type LocalAsrModelStatus = { model: string; state: "idle" | "downloading" | "ready" | "applying" | "applied" | "error"; progress: number; detail?: string };
@@ -146,6 +148,14 @@ export async function startDashboardServer(core: HostCore, port = 7861, environm
     if (request.method === "POST" && request.url === "/api/devices/connect" && settings?.connectStick) {
       try { response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }); response.end(JSON.stringify({ ok: true, device: await settings.connectStick(body) })); return; }
       catch (error) { response.writeHead(400, { "content-type": "application/json; charset=utf-8" }); response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) })); return; }
+    }
+    if (request.method === "POST" && request.url === "/api/devices/pair" && settings?.pairStick) {
+      try { await settings.pairStick(body); response.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}'); return; }
+      catch (error) { response.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) })); return; }
+    }
+    if (request.method === "POST" && request.url === "/api/devices/unpair" && settings?.unpairStick) {
+      try { await settings.unpairStick(body); response.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}'); return; }
+      catch (error) { response.writeHead(400, { "content-type": "application/json" }).end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) })); return; }
     }
     const result = dashboardRequest(core, request.method ?? "GET", request.url ?? "/", body, environment?.());
     response.writeHead(result.status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });

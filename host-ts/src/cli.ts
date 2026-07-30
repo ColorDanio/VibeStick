@@ -66,6 +66,8 @@ async function main(): Promise<void> {
   let bridge: VibeBridge | undefined;
   let scanSticks: (() => Promise<{ name: string; address: string; rssi?: number | null; paired?: boolean; connected?: boolean }[]>) | undefined;
   let connectStick: ((body: unknown) => Promise<{ address: string }>) | undefined;
+  let pairStick: ((body: unknown) => Promise<void>) | undefined;
+  let unpairStick: ((body: unknown) => Promise<void>) | undefined;
   let testYoloFocused: (() => Promise<{ available: boolean; detail: string }>) | undefined;
   let localModelStatus: LocalAsrModelStatus = config.asr.engine === "faster-whisper"
     ? { model: config.asr.model, state: "applied", progress: 100, detail: "Active model" }
@@ -159,6 +161,8 @@ async function main(): Promise<void> {
       if (!connectStick) throw new Error("Stick selection is available only with the Linux BLE helper");
       return connectStick(body);
     },
+    async pairStick(body) { if (!pairStick) throw new Error("Bluetooth pairing is available only with the Linux BLE helper"); await pairStick(body); },
+    async unpairStick(body) { if (!unpairStick) throw new Error("Bluetooth unpair is available only with the Linux BLE helper"); await unpairStick(body); },
   }, () => diagnosticsReport(core, environment(), { platform: process.platform, arch: process.arch, runtime: `node ${process.version}` }));
   console.log(`VibeConn 2.0 dashboard: http://127.0.0.1:${dashboard.port}`);
 
@@ -261,6 +265,20 @@ async function main(): Promise<void> {
       linux.transport.setTargetAddress(address);
       await runtime?.start();
       return { address };
+    };
+    const deviceAddress = (body: unknown): string => {
+      const address = typeof body === "object" && body !== null && typeof (body as { address?: unknown }).address === "string" ? (body as { address: string }).address.trim() : "";
+      if (!/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/i.test(address)) throw new Error("Invalid Stick address");
+      return address;
+    };
+    pairStick = async (body) => { await linux.transport.pair(deviceAddress(body)); };
+    unpairStick = async (body) => {
+      const address = deviceAddress(body);
+      if (linux.transport.address?.toUpperCase() === address.toUpperCase()) {
+        await runtime?.stop();
+        linux.transport.setTargetAddress("");
+      }
+      await linux.transport.unpair(address);
     };
     const { mic } = linux;
     const capabilities: Capabilities = {

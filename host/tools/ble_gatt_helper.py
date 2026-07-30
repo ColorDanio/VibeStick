@@ -14,6 +14,7 @@ import json
 import os
 import subprocess
 import sys
+import re
 from pathlib import Path
 
 from vibestick import protocol
@@ -118,6 +119,36 @@ class Helper:
             pass
         return sorted(devices.values(), key=lambda item: item["name"])
 
+    async def pair(self, address: str) -> None:
+        self._validate_address(address)
+        output = await self._bluetoothctl(f"pair {address}", timeout=25)
+        if "Paired: yes" not in output and "successful" not in output.lower():
+            raise RuntimeError(output.strip() or "Bluetooth pairing failed")
+        await self._bluetoothctl(f"trust {address}", timeout=5)
+
+    async def unpair(self, address: str) -> None:
+        self._validate_address(address)
+        if self.client is not None and str(self.client.address).upper() == address.upper():
+            await self.disconnect()
+        output = await self._bluetoothctl(f"remove {address}", timeout=8)
+        if "not available" in output.lower() or "failed" in output.lower():
+            raise RuntimeError(output.strip() or "Bluetooth unpair failed")
+        if self._cached().upper() == address.upper():
+            try:
+                CACHE.unlink()
+            except FileNotFoundError:
+                pass
+
+    @staticmethod
+    def _validate_address(address: str) -> None:
+        if not re.fullmatch(r"(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}", address):
+            raise ValueError("invalid Bluetooth address")
+
+    @staticmethod
+    async def _bluetoothctl(command: str, timeout: int) -> str:
+        result = await asyncio.to_thread(subprocess.run, ["bluetoothctl", "--timeout", str(timeout), *command.split()], capture_output=True, text=True, timeout=timeout + 3, check=False)
+        return result.stdout + result.stderr
+
     async def disconnect(self) -> None:
         try:
             if self.client is not None:
@@ -201,6 +232,10 @@ async def main() -> None:
                 result = {"address": await helper.connect(str(request.get("address") or ""))}
             elif command == "scan":
                 result = {"devices": await helper.scan()}
+            elif command == "pair":
+                await helper.pair(str(request.get("address") or "")); result = {}
+            elif command == "unpair":
+                await helper.unpair(str(request.get("address") or "")); result = {}
             elif command == "disconnect":
                 await helper.disconnect(); result = {}
             elif command == "write":

@@ -36,6 +36,8 @@ export class HelperGattTransport implements GattTransport {
     if (!this.child) this.start();
     return (await this.request({ cmd: "scan" })).result?.devices ?? [];
   }
+  async pair(address: string): Promise<void> { if (!this.child) this.start(); await this.request({ cmd: "pair", address }); }
+  async unpair(address: string): Promise<void> { if (!this.child) this.start(); await this.request({ cmd: "unpair", address }); }
   setTargetAddress(address: string): void { this.targetAddress = address; }
   async subscribe(_characteristic: Characteristic): Promise<void> { /* helper subscribes atomically on connect */ }
   async write(characteristic: "STATUS" | "SESSIONS" | "TOOLS" | "VOICE" | "DEVICE_CONFIG", data: Uint8Array): Promise<void> {
