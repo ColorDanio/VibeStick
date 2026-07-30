@@ -353,6 +353,38 @@ fn restart_host(app: AppHandle, state: State<'_, HostProcess>) -> Result<Command
     })
 }
 
+/// A package upgrade can replace an older HostCore while its loopback listener
+/// is still closing. The first child then exits with EADDRINUSE just after
+/// `spawn` succeeds. Retry only if that child has actually exited; a healthy
+/// HostCore is never restarted.
+fn retry_failed_host_start(app: AppHandle) {
+    std::thread::spawn(move || {
+        for _ in 0..3 {
+            std::thread::sleep(Duration::from_secs(1));
+            let state = app.state::<HostProcess>();
+            let needs_restart = {
+                let Ok(mut current) = state.0.lock() else {
+                    return;
+                };
+                match current.as_mut() {
+                    Some(child) => match child.try_wait() {
+                        Ok(Some(_)) | Err(_) => {
+                            *current = None;
+                            true
+                        }
+                        Ok(None) => false,
+                    },
+                    None => true,
+                }
+            };
+            if !needs_restart {
+                return;
+            }
+            let _ = start_host(&app, &state);
+        }
+    });
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -360,6 +392,7 @@ fn main() {
         .setup(|app| {
             start_host(&app.handle(), &app.state::<HostProcess>())
                 .map_err(std::io::Error::other)?;
+            retry_failed_host_start(app.handle().clone());
             setup_tray(&app.handle()).map_err(std::io::Error::other)?;
             Ok(())
         })
