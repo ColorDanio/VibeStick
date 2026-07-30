@@ -58,8 +58,10 @@ await mkdir(helperRuntime, { recursive: true });
 for (const helper of ["ble_gatt_helper.py", "asr_helper.py", "session_discovery_helper.py"])
   await copyFile(join(root, "..", "..", "host", "tools", helper), join(helperRuntime, helper));
 // Linux packages use the stable BlueZ/D-Bus helper instead of requiring
-// CAP_NET_RAW on the user's Node executable. Ship the small Python runtime
-// closure it needs, while leaving the OS Python interpreter unmodified.
+// CAP_NET_RAW on the user's Node executable. The local ASR helper is part of
+// the desktop product too: it must be able to fetch and run faster-whisper
+// models on a clean machine, rather than accidentally relying on the build
+// machine's virtual environment.
 if (process.platform === "linux") {
   await cp(join(root, "..", "..", "host", "vibestick"), join(helperRuntime, "vibestick"), { recursive: true, dereference: true });
   const configuredSitePackages = process.env.VIBESTICK_HELPER_SITE_PACKAGES;
@@ -86,8 +88,9 @@ if (process.platform === "linux") {
     throw new Error("Linux packaging needs host/.venv site-packages. Create it with `python3 -m venv host/.venv && host/.venv/bin/pip install -e ./host`.");
   const helperSitePackages = join(helperRuntime, "site-packages");
   await mkdir(helperSitePackages, { recursive: true });
+  const packagedPythonRuntime = /^(bleak|dbus_fast|typing_extensions|faster_whisper|ctranslate2|av|huggingface_hub|tokenizers|tqdm|numpy|onnxruntime|click|filelock|fsspec|hf_xet|httpx|httpcore|anyio|certifi|packaging|yaml|h11|idna|sniffio|flatbuffers|google)(-|\.|$)/;
   for (const name of await readdir(pythonLibraries)) {
-    if (/^(bleak|dbus_fast|typing_extensions)(-|\.|$)/.test(name))
+    if (packagedPythonRuntime.test(name))
       await cp(join(pythonLibraries, name), join(helperSitePackages, name), { recursive: true, dereference: true });
   }
 }
