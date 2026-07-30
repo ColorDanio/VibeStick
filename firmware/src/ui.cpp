@@ -126,6 +126,24 @@ static int textWidth16(const char* s) {
 #define TEXT16_MAX_W 240
 static uint16_t sLineBuf[TEXT16_MAX_W * 16];
 
+// TFT_eSPI (StickC Plus) and LovyanGFX (StickS3) disagree on the byte order
+// of the transparent-key overload of pushImage(uint16_t*).  On StickS3 that
+// overload can turn ICON_TRANSPARENT into a visible magenta/green pixel.
+// Icons are deliberately small (16–32 px), so skip the transparent pixels
+// explicitly on S3 and keep the fast native path on StickC Plus.
+static void drawIcon(int x, int y, int w, int h, const uint16_t* pixels) {
+#ifdef VIBESTICK_BOARD_S3
+  for (int py = 0; py < h; ++py) {
+    for (int px = 0; px < w; ++px) {
+      uint16_t color = pixels[py * w + px];
+      if (color != ICON_TRANSPARENT) M5Lcd.drawPixel(x + px, y + py, color);
+    }
+  }
+#else
+  M5Lcd.pushImage(x, y, w, h, pixels, ICON_TRANSPARENT);
+#endif
+}
+
 // Rasterize up to nBytes of s into the line buffer and push in one SPI
 // transfer, clipped to maxW px. Returns the drawn width.
 static int drawText16N(int x, int y, const char* s, int nBytes, uint16_t color,
@@ -471,7 +489,7 @@ void uiInit() {
 static void drawStatusBar(const char* title) {
   M5Lcd.fillRect(0, 0, sW, BAR_H, TFT_BLACK);
 
-  M5Lcd.pushImage(2, 0, 16, 16, logo_bt, ICON_TRANSPARENT);
+  drawIcon(2, 0, 16, 16, logo_bt);
   if (!bleConnected()) {  // red slash over the rune
     M5Lcd.drawLine(4, 13, 15, 2, TFT_RED);
     M5Lcd.drawLine(5, 14, 16, 3, TFT_RED);
@@ -482,7 +500,7 @@ static void drawStatusBar(const char* title) {
   if (sBatteryPct >= 75) bat = icon_bat_3;
   else if (sBatteryPct >= 40) bat = icon_bat_2;
   else if (sBatteryPct >= 15) bat = icon_bat_1;
-  M5Lcd.pushImage(sW - 18, 0, 16, 16, bat, ICON_TRANSPARENT);
+  drawIcon(sW - 18, 0, 16, 16, bat);
   M5Lcd.setTextSize(1);
   M5Lcd.setTextColor(COL_DIM, TFT_BLACK);
   M5Lcd.setCursor(sW - 50, 4);
@@ -523,7 +541,7 @@ static void waitingDrawRings(int animPhase) {
     int phase = (animPhase + i) % 3;
     M5Lcd.drawCircle(cx, cy, 18 + phase * 6, ringCol[2 - phase]);
   }
-  M5Lcd.pushImage(cx - 16, cy - 16, 32, 32, logo_bt_large, ICON_TRANSPARENT);
+  drawIcon(cx - 16, cy - 16, 32, 32, logo_bt_large);
 }
 
 static void waitingDrawMsg(int animPhase) {
@@ -603,8 +621,7 @@ static void drawLocalHomeBadge(int cx, int cy, bool yolo) {
 
 static void drawHomeNeighbor(int cx, int cy, int idx) {
   if (isMicEntry(idx)) drawLocalHomeBadge(cx, cy, isYoloEntry(idx));
-  else M5Lcd.pushImage(cx - 12, cy - 12, 24, 24, entryLogo(idx),
-                        ICON_TRANSPARENT);
+  else drawIcon(cx - 12, cy - 12, 24, 24, entryLogo(idx));
 }
 
 // Local modes are product surfaces rather than host tools.  Their selected
@@ -693,8 +710,7 @@ void uiShowHome(int selTool) {
     } else {
       M5Lcd.fillRoundRect(cx - 28, cy - 26, 56, 56, 8, COL_HL);
       M5Lcd.drawRoundRect(cx - 28, cy - 26, 56, 56, 8, COL_ACCENT);
-      M5Lcd.pushImage(cx - 12, cy - 10, 24, 24, entryLogo(selTool),
-                       ICON_TRANSPARENT);
+      drawIcon(cx - 12, cy - 10, 24, 24, entryLogo(selTool));
     }
     nameY = cy + 38;
     stateY = cy + 62;
@@ -716,8 +732,7 @@ void uiShowHome(int selTool) {
     } else {
       M5Lcd.fillRoundRect(cx - 28, 68, 56, 56, 8, COL_HL);
       M5Lcd.drawRoundRect(cx - 28, 68, 56, 56, 8, COL_ACCENT);
-      M5Lcd.pushImage(cx - 12, 84, 24, 24, entryLogo(selTool),
-                       ICON_TRANSPARENT);
+      drawIcon(cx - 12, 84, 24, 24, entryLogo(selTool));
     }
     nameY = 132;
     stateY = 154;
@@ -790,11 +805,9 @@ void uiHomeAnimate(int fromIdx, int toIdx) {
   M5Lcd.fillRoundRect(fx, fy, 56, 56, 8, COL_HL);
   M5Lcd.drawRoundRect(fx, fy, 56, 56, 8, COL_ACCENT);
   if (landscape()) {
-    M5Lcd.pushImage(ix + HOME_ANIM_SHIFT, iy, 24, 24, entryLogo(toIdx),
-                     ICON_TRANSPARENT);
+    drawIcon(ix + HOME_ANIM_SHIFT, iy, 24, 24, entryLogo(toIdx));
   } else {
-    M5Lcd.pushImage(ix, iy + HOME_ANIM_SHIFT, 24, 24, entryLogo(toIdx),
-                     ICON_TRANSPARENT);
+    drawIcon(ix, iy + HOME_ANIM_SHIFT, 24, 24, entryLogo(toIdx));
   }
 }
 
@@ -814,11 +827,9 @@ bool uiHomeAnimTick() {
   M5Lcd.fillRoundRect(fx, fy, 56, 56, 8, COL_HL);
   M5Lcd.drawRoundRect(fx, fy, 56, 56, 8, COL_ACCENT);
   if (landscape()) {
-    M5Lcd.pushImage(ix + shift, iy, 24, 24, entryLogo(sHomeAnimTo),
-                     ICON_TRANSPARENT);
+    drawIcon(ix + shift, iy, 24, 24, entryLogo(sHomeAnimTo));
   } else {
-    M5Lcd.pushImage(ix, iy + shift, 24, 24, entryLogo(sHomeAnimTo),
-                     ICON_TRANSPARENT);
+    drawIcon(ix, iy + shift, 24, 24, entryLogo(sHomeAnimTo));
   }
   return false;
 }
