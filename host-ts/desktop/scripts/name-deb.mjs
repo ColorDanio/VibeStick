@@ -5,8 +5,9 @@ import { fileURLToPath } from "node:url";
 const desktop = dirname(dirname(fileURLToPath(import.meta.url)));
 const config = JSON.parse(await readFile(join(desktop, "src-tauri", "tauri.conf.json"), "utf8"));
 const directory = join(desktop, "src-tauri", "target", "release", "bundle", "deb");
-const source = join(directory, `${config.productName}_${config.version}_amd64.deb`);
-const destination = join(directory, `VibeStick_${config.version}_amd64.deb`);
+const architecture = process.arch === "arm64" ? "arm64" : "amd64";
+const source = join(directory, `${config.productName}_${config.version}_${architecture}.deb`);
+const destination = join(directory, `VibeStick_${config.version}_${architecture}.deb`);
 
 try {
   await stat(source);

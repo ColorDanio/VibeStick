@@ -30,8 +30,10 @@ jobs:
           restore-keys: platformio-
       - name: Install build tools
         run: pip install platformio build
-      - name: Build firmware (all boards)
-        run: pio run -d firmware
+      - name: Build M5StickC Plus firmware
+        run: pio run -d firmware -e m5stick-c
+      - name: Build M5StickS3 firmware
+        run: pio run -d firmware -e m5stick-s3
       - name: Run host tests
         run: |
           pip install -e "./host[dev]"
@@ -61,11 +63,17 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            label: Linux
+            label: Linux AMD64
+            linux: true
+          - os: ubuntu-24.04-arm
+            label: Linux ARM64
+            linux: true
           - os: macos-latest
             label: macOS
+            linux: false
           - os: windows-latest
             label: Windows
+            linux: false
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -78,29 +86,29 @@ jobs:
             host-ts/desktop/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.linux
         with:
           python-version: "3.12"
           cache: pip
       - name: Install Linux Tauri prerequisites
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.linux
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libsoup-3.0-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
       - name: Install and build Host 2.0 core
         run: |
           npm ci --prefix host-ts
           npm run build --prefix host-ts
       - name: Prepare Linux BLE helper runtime
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.linux
         run: |
           python -m venv host/.venv
-          host/.venv/bin/python -m pip install -e ./host
+          host/.venv/bin/python -m pip install -e "./host[asr]"
       - name: Install desktop dependencies
         run: npm ci --prefix host-ts/desktop
       - name: Package Vibe Stick for Linux
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.linux
         run: npm run package:deb --prefix host-ts/desktop
       - name: Package Vibe Stick for native platform
-        if: matrix.os != 'ubuntu-latest'
+        if: '!matrix.linux'
         run: npm run package --prefix host-ts/desktop
       - name: Upload Vibe Stick release artifacts
         uses: actions/upload-artifact@v4

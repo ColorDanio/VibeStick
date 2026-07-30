@@ -29,11 +29,17 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            label: Linux
+            label: Linux AMD64
+            linux: true
+          - os: ubuntu-24.04-arm
+            label: Linux ARM64
+            linux: true
           - os: macos-latest
             label: macOS
+            linux: false
           - os: windows-latest
             label: Windows
+            linux: false
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -46,29 +52,29 @@ jobs:
             host-ts/desktop/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.linux
         with:
           python-version: "3.12"
           cache: pip
       - name: Install Linux Tauri prerequisites
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.linux
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libsoup-3.0-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
       - name: Install HostCore dependencies
         run: npm ci --prefix host-ts
       - name: Build HostCore
         run: npm run build --prefix host-ts
       - name: Prepare Linux BLE helper runtime
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.linux
         run: |
           python -m venv host/.venv
-          host/.venv/bin/python -m pip install -e ./host
+          host/.venv/bin/python -m pip install -e "./host[asr]"
       - name: Install desktop dependencies
         run: npm ci --prefix host-ts/desktop
       - name: Package Linux
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.linux
         run: npm run package:deb --prefix host-ts/desktop
       - name: Package current platform
-        if: matrix.os != 'ubuntu-latest'
+        if: '!matrix.linux'
         run: npm run package --prefix host-ts/desktop
       - name: Upload Tauri desktop artifact
         uses: actions/upload-artifact@v4
@@ -108,8 +114,10 @@ jobs:
           restore-keys: platformio-
       - name: Install PlatformIO
         run: pip install platformio
-      - name: Build firmware
-        run: pio run -d firmware
+      - name: Build M5StickC Plus firmware
+        run: pio run -d firmware -e m5stick-c
+      - name: Build M5StickS3 firmware
+        run: pio run -d firmware -e m5stick-s3
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:

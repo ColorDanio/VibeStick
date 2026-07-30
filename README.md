@@ -50,7 +50,7 @@ project is named **Vibe Stick**.
 Download the matching `.deb` from a release, then install it.
 
 ```sh
-sudo apt install "./Vibe Stick_0.2.1_amd64.deb"
+sudo apt install "./VibeStick_0.2.1_amd64.deb"
 ```
 
 Launch **Vibe Stick** from your application menu. The app starts its local host
