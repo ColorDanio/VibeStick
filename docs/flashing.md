@@ -67,6 +67,18 @@ The repository configures the M5StickS3 uploader to use the ESP32-S3 native
 USB reset path. Do not add custom DTR/RTS reset flags: its normal USB CDC port
 may briefly disappear when those legacy serial-control signals are used.
 
+### M5StickS3 recovery upload
+
+If upload reports `Write timeout` or cannot connect, put the StickS3 in its
+hardware download mode first: while connected over USB, press and hold the
+**side reset/power button** until its internal green LED flashes, then release
+it. Immediately run the recovery environment, which deliberately does not
+reset the USB device again:
+
+```sh
+pio run -d firmware -e m5stick-s3-recovery -t upload --upload-port /dev/ttyACM0
+```
+
 After `SUCCESS`, unplug and reconnect the Stick or restart it. Its serial log
 should include the current Vibe Stick version and `advertising as 'VibeStick'`.
 

@@ -457,6 +457,12 @@ static const uint16_t* toolLogo(const char* id) {
 
 void uiInit() {
   uiSetOrientation(1);  // 240x135 landscape
+#ifdef VIBESTICK_BOARD_S3
+  // M5Unified/LovyanGFX already converts host-order RGB565 image buffers for
+  // StickS3. Enabling TFT_eSPI's byte-swap convention here turns cyan/white
+  // icon pixels into magenta on the S3 panel.
+  M5Lcd.setSwapBytes(false);
+#else
   // Our bitmap arrays (icons.h/logos.h) are host-order uint16_t. The driver
   // defaults to _swapBytes=false (In_eSPI.cpp:253), which would send each
   // pixel LSB-first over SPI (pushColors -> spi.writeBytes) and byte-swap
@@ -464,6 +470,7 @@ void uiInit() {
   // (MSB-first) and makes the transparent-sentinel compare work. Text and
   // primitive drawing do not consult _swapBytes and are unaffected.
   M5Lcd.setSwapBytes(true);
+#endif
   M5Lcd.fillScreen(TFT_BLACK);
   M5Lcd.setTextColor(TFT_WHITE, TFT_BLACK);
 }
