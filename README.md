@@ -76,18 +76,10 @@ Overview screen. It does not need a browser or a development server.
 
 ## Flash the firmware
 
-With the Stick attached by USB, build and upload the firmware for your board:
-
-```sh
-# M5StickC Plus
-firmware/.venv/bin/pio run -d firmware -e m5stick-c -t upload
-
-# M5StickS3
-firmware/.venv/bin/pio run -d firmware -e m5stick-s3 -t upload
-```
-
-If your serial device is not detected automatically, add `--upload-port
-/dev/ttyUSB0` (or the appropriate device path).
+Use the cross-platform [firmware flashing guide](docs/flashing.md) for Linux,
+macOS and Windows 11. It covers PlatformIO installation, serial-port discovery,
+USB driver/permission issues, upload commands and serial-log verification for
+both supported boards.
 
 ## Pair and connect
 
