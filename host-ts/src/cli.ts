@@ -143,6 +143,7 @@ async function main(): Promise<void> {
     },
     async updateMicBindings(body) {
       config = updateMicBindings(config, body); await saveConfigFile(args.config, config);
+      core.updateMicConfig(config.mic);
       // Apply shortcut changes immediately when the Stick is already
       // connected. A later reconnect also performs this sync automatically.
       const device_synced = bridge ? await bridge.syncDeviceConfig() : false;

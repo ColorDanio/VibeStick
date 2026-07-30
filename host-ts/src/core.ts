@@ -48,7 +48,9 @@ export class HostCore {
   private device = { model: "", firmware: "" };
   private onTranscription: ((record: TranscriptionRecord) => void) | undefined;
 
-  constructor(readonly config: Config) { this.store = new HostSessionStore(config); }
+  constructor(public config: Config) { this.store = new HostSessionStore(config); }
+  /** Runtime-only settings that the BLE bridge must use before a restart. */
+  updateMicConfig(mic: Config["mic"]): void { this.config = { ...this.config, mic }; }
   replaceSessions(records: SessionRecord[]): void { this.store.replace(records); }
 
   command(input: { cmd: string; id?: string; mode?: unknown; model?: unknown; firmware?: unknown }): { changed: boolean; actions: RoutingAction[] } {
