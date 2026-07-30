@@ -11,7 +11,7 @@ import { startDashboardServer } from "./server.js";
 import { VibeBridge } from "./bridge.js";
 import type { DashboardEnvironment } from "./dashboard.js";
 import { VoicePipeline, onlineTranscriber } from "./asr.js";
-import { pythonLocalTranscriber } from "./local-asr.js";
+import { preparePythonLocalAsr, pythonLocalTranscriber } from "./local-asr.js";
 import { pythonSessionDiscovery } from "./session-discovery.js";
 import { NodeProcessInspector, discoverProcessSessions, mergeSessions } from "./process-discovery.js";
 import { publicAsrSettings, updateMicBindings, updateOnlineAsr, updateSessionLauncher, updateToolCwd, verifyOnlineAsr } from "./settings.js";
@@ -82,7 +82,14 @@ async function main(): Promise<void> {
     };
   };
   const dashboard = await startDashboardServer(core, args.port, environment, {
-    async updateOnlineAsr(body) { config = updateOnlineAsr(config, body); await saveConfigFile(args.config, config); return publicAsrSettings(config); },
+    async updateOnlineAsr(body) {
+      const candidate = updateOnlineAsr(config, body);
+      if (candidate.asr.engine === "faster-whisper")
+        await preparePythonLocalAsr(localAsrExecutable, localAsrHelper, candidate.asr);
+      config = candidate;
+      await saveConfigFile(args.config, config);
+      return publicAsrSettings(config);
+    },
     async testOnlineAsr() { return verifyOnlineAsr(config); },
     async testYoloFocused() {
       if (!testYoloFocused) throw new Error("YOLO permission testing is available only with a native focused-input adapter");

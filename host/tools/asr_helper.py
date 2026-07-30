@@ -24,6 +24,17 @@ def main() -> None:
         asr = ASRConfig.from_dict(request.get("asr"))
         if asr.engine not in ("faster-whisper", "command"):
             raise ValueError("local helper supports faster-whisper or command ASR")
+        if request.get("action") == "prepare":
+            if asr.engine != "faster-whisper":
+                raise ValueError("only faster-whisper models can be prepared")
+            # WhisperModel uses the standard Hugging Face cache. Constructing
+            # it here makes model acquisition an explicit Settings action,
+            # rather than a surprising first-recording side effect.
+            from faster_whisper import WhisperModel
+
+            WhisperModel(asr.model, device=asr.device)
+            print(json.dumps({"ok": True, "model": asr.model}), flush=True)
+            return
         pcm = base64.b64decode(str(request.get("pcm") or ""), validate=True)
         text, meta = VoicePipeline(asr, lambda _payload: None)._transcribe(pcm)
         print(json.dumps({"ok": True, "text": text, "meta": meta}, ensure_ascii=False), flush=True)

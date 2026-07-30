@@ -209,20 +209,18 @@ export function App(): ReactElement {
     };
   }, []);
   useEffect(() => {
-    setApiBase(data.environment.config.asr_api_base);
-    setOnlineModel(
-      data.environment.config.asr_online_model ??
-        data.environment.config.asr_model,
-    );
-    setLocalModel(
-      data.environment.config.asr_engine === "online"
-        ? localModel
-        : data.environment.config.asr_model,
-    );
-    if (!asrDirty)
+    if (!asrDirty) {
+      setApiBase(data.environment.config.asr_api_base);
+      setOnlineModel(
+        data.environment.config.asr_online_model ??
+          data.environment.config.asr_model,
+      );
+      if (data.environment.config.asr_engine !== "online")
+        setLocalModel(data.environment.config.asr_model);
       setAsrMode(
         data.environment.config.asr_engine === "online" ? "online" : "local",
       );
+    }
     setLauncher(data.environment.config.session_launcher);
     setMicButtonA(data.environment.config.mic_button_a ?? "F14");
     setMicButtonB(data.environment.config.mic_button_b ?? "F15");
@@ -302,12 +300,19 @@ export function App(): ReactElement {
               },
         ),
       });
-      if (!response.ok) throw new Error("Save failed");
+      const result: unknown = await response.json().catch(() => undefined);
+      if (!response.ok) {
+        const detail = typeof result === "object" && result !== null && typeof (result as { error?: unknown }).error === "string"
+          ? (result as { error: string }).error : "Could not prepare and save ASR settings.";
+        throw new Error(detail);
+      }
       setApiKey("");
-      setAsrDirty(false);
-      setNotice("ASR mode saved. Restart VibeConn 2.0 to apply it.");
-    } catch {
-      setNotice("Could not save ASR settings.");
+      // Keep the chosen values stable until the restarted Host reports its
+      // new configuration; an older polling snapshot must not reset the menu.
+      setAsrDirty(true);
+      setNotice("ASR model is ready and saved. Restart Vibe Stick to apply it.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not prepare and save ASR settings.");
     } finally {
       setSaving(false);
     }
@@ -552,7 +557,10 @@ export function App(): ReactElement {
             onApiBase={setApiBase}
             onTheme={setTheme}
             onOnlineModel={setOnlineModel}
-            onLocalModel={setLocalModel}
+            onLocalModel={(model) => {
+              setLocalModel(model);
+              setAsrDirty(true);
+            }}
             onAsrMode={(mode) => {
               setAsrMode(mode);
               setAsrDirty(true);
@@ -927,14 +935,14 @@ function Settings(props: {
         </div>
         {props.asrMode === "local" ? <>
           <label>Local model<select value={props.localModel} onChange={(e) => props.onLocalModel(e.target.value)}><option value="tiny">Tiny — fastest</option><option value="base">Base</option><option value="small">Small — recommended</option><option value="medium">Medium — highest quality</option></select></label>
-          <div className="asr-local-note">Audio stays on this computer. The configured local model is used after restart.</div>
+          <div className="asr-local-note">Audio stays on this computer. Save verifies the selected model and downloads it on first use; large models can take several minutes. The configured model is used after restart.</div>
         </> : <>
           <label>API base<input value={props.apiBase} onChange={(e) => props.onApiBase(e.target.value)} /></label>
           <label>Model<input value={props.onlineModel} onChange={(e) => props.onOnlineModel(e.target.value)} /></label>
           <label>API key<input type="password" value={props.apiKey} placeholder="Leave blank to keep it" onChange={(e) => props.onApiKey(e.target.value)} /></label>
         </>}
         <div className="form-actions">
-          <button className="primary" disabled={props.saving}>{props.saving ? "Saving…" : `Use ${props.asrMode === "local" ? "Local" : "Online"} ASR`}</button>
+          <button className="primary" disabled={props.saving}>{props.saving ? (props.asrMode === "local" ? "Preparing model…" : "Saving…") : props.asrMode === "local" ? `Prepare & use ${props.localModel}` : "Use Online ASR"}</button>
           {props.asrMode === "online" && <button type="button" className="secondary" onClick={props.onTestAsr} disabled={props.testing === "asr"}>{props.testing === "asr" ? "Testing…" : "Test provider"}</button>}
         </div>
       </form>
