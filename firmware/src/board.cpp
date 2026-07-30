@@ -4,9 +4,6 @@
 
 // ---- M5StickS3 (ESP32-S3-PICO, M5Unified) ----
 
-#define PIN_BTN_A 11  // KEY1
-#define PIN_BTN_B 12  // KEY2
-
 void boardInit() {
   auto cfg = M5.config();
   M5.begin(cfg);
@@ -15,55 +12,25 @@ void boardInit() {
   // Rotation 0 is the native 135 x 240 portrait orientation: USB-C at bottom.
   M5.Display.setRotation(0);
   M5.Display.setBrightness(200);
-  pinMode(PIN_BTN_A, INPUT_PULLUP);
-  pinMode(PIN_BTN_B, INPUT_PULLUP);
 }
 
-void boardUpdate() {}
+// StickS3's A/B GPIOs and side power key are board-specific. M5Unified owns
+// their debounce and the M5PM1 PMIC key state; callers must use these event
+// objects after boardUpdate() rather than reading the GPIOs directly.
+void boardUpdate() { M5.update(); }
 
-// Simple GPIO button edge tracking (active-low, ~10 ms debounce via
-// caller's M5.update-free polling at loop rate).
-static bool sA = false, sAprev = false, sApress = false, sArelease = false;
-static bool sB = false, sBprev = false, sBpress = false, sBrelease = false;
+bool boardBtnA_wasPressed() { return M5.BtnA.wasPressed(); }
+bool boardBtnA_wasReleased() { return M5.BtnA.wasReleased(); }
+bool boardBtnA_isPressed() { return M5.BtnA.isPressed(); }
+bool boardBtnB_wasPressed() { return M5.BtnB.wasPressed(); }
+bool boardBtnB_wasReleased() { return M5.BtnB.wasReleased(); }
+bool boardBtnB_isPressed() { return M5.BtnB.isPressed(); }
 
-static void pollBtn(int pin, bool& cur, bool& prev, bool& press, bool& rel) {
-  prev = cur;
-  cur = digitalRead(pin) == LOW;
-  press = cur && !prev;
-  rel = !cur && prev;
+uint8_t boardPowerButtonEvent() {
+  // Keep the common board API: 2 means a short press. The main loop already
+  // turns a short press into Back and two short presses into Home.
+  return M5.BtnPWR.wasClicked() ? 2 : 0;
 }
-
-static void pollButtonsRaw() {
-  pollBtn(PIN_BTN_A, sA, sAprev, sApress, sArelease);
-  pollBtn(PIN_BTN_B, sB, sBprev, sBpress, sBrelease);
-}
-
-bool boardBtnA_wasPressed() {
-  pollButtonsRaw();
-  bool v = sApress;
-  sApress = false;
-  return v;
-}
-bool boardBtnA_wasReleased() {
-  bool v = sArelease;
-  sArelease = false;
-  return v;
-}
-bool boardBtnA_isPressed() { return digitalRead(PIN_BTN_A) == LOW; }
-bool boardBtnB_wasPressed() {
-  pollButtonsRaw();
-  bool v = sBpress;
-  sBpress = false;
-  return v;
-}
-bool boardBtnB_wasReleased() {
-  bool v = sBrelease;
-  sBrelease = false;
-  return v;
-}
-bool boardBtnB_isPressed() { return digitalRead(PIN_BTN_B) == LOW; }
-
-uint8_t boardPowerButtonEvent() { return 0; }  // no AXP192-style power key
 
 int boardBatteryPct() {
   int lvl = M5.Power.getBatteryLevel();  // 0..100, -1 if unsupported
