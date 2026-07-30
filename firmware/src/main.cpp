@@ -443,10 +443,8 @@ static uint8_t sCandOrientation = 1;
 static uint32_t sCandSince = 0;
 #define ORIENT_STABLE_MS 500
 
-// MPU6886 axes on the M5StickC Plus: +Y points toward the device top,
-// +X toward the right side. Pick the closest of the 4 rotations. StickS3
-// uses a BMI270 with a different physical mounting; keep its validated
-// landscape UI fixed until it has a board-specific calibration mapping.
+// +Y points toward the device top and +X toward the right side. Pick the
+// closest of the 4 rotations after M5Unified has normalized the board IMU.
 static uint8_t orientationFromAccel(float ax, float ay) {
   if (fabsf(ay) >= fabsf(ax)) return ay >= 0 ? 0 : 2;  // portrait
   return ax >= 0 ? 1 : 3;                             // landscape
@@ -488,7 +486,6 @@ static void pollImu() {
   if (fabsf(ax) < 0.5f && fabsf(ay) < 0.5f) {
     sCandSince = now;
   } else {
-#ifndef VIBESTICK_BOARD_S3
     uint8_t cand = orientationFromAccel(ax, ay);
     if (cand != sCandOrientation) {
       sCandOrientation = cand;
@@ -503,7 +500,6 @@ static void pollImu() {
                     sOrientation, (cand % 2 == 0) ? 135 : 240,
                     (cand % 2 == 0) ? 240 : 135);
     }
-#endif
   }
 }
 

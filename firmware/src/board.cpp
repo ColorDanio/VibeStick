@@ -10,6 +10,11 @@
 void boardInit() {
   auto cfg = M5.config();
   M5.begin(cfg);
+  // StickS3's ST7789P3 panel uses RGB order. M5GFX's generic ST7789 setup
+  // defaults to BGR, which swaps the blue and red components of UI assets.
+  auto panelCfg = M5.Display.panel()->config();
+  panelCfg.rgb_order = true;
+  M5.Display.panel()->config(panelCfg);
   M5.Display.setRotation(1);
   M5.Display.setBrightness(200);
   pinMode(PIN_BTN_A, INPUT_PULLUP);
