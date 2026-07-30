@@ -63,6 +63,7 @@ async function main(): Promise<void> {
   };
   await loadSessions();
   let runtime: HostRuntime | undefined;
+  let bridge: VibeBridge | undefined;
   let testYoloFocused: (() => Promise<{ available: boolean; detail: string }>) | undefined;
   let localModelStatus: LocalAsrModelStatus = config.asr.engine === "faster-whisper"
     ? { model: config.asr.model, state: "applied", progress: 100, detail: "Active model" }
@@ -142,12 +143,14 @@ async function main(): Promise<void> {
     },
     async updateMicBindings(body) {
       config = updateMicBindings(config, body); await saveConfigFile(args.config, config);
+      // Apply shortcut changes immediately when the Stick is already
+      // connected. A later reconnect also performs this sync automatically.
+      await bridge?.sync().catch(() => undefined);
       return { button_a: config.mic.buttonA, button_b: config.mic.buttonB };
     },
   }, () => diagnosticsReport(core, environment(), { platform: process.platform, arch: process.arch, runtime: `node ${process.version}` }));
   console.log(`VibeConn 2.0 dashboard: http://127.0.0.1:${dashboard.port}`);
 
-  let bridge: VibeBridge | undefined;
   let commands: ReturnType<typeof createLinuxBridge>["commands"] | undefined;
   let refreshOwnedCapabilities: (() => Promise<void>) | undefined;
   let helperCapabilitiesProbed = false;

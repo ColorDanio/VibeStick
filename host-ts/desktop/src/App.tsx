@@ -426,7 +426,7 @@ export function App(): ReactElement {
       });
       if (!response.ok) throw new Error();
       setMicBindingsDirty(false);
-      setNotice(t("Vibe Mic buttons saved. Restart Vibe Stick to send them to the device.", "Vibe Mic 按键已保存。请重启 Vibe Stick 将设置发送到设备。"));
+      setNotice(t("Vibe Mic buttons saved and sent to the connected Stick.", "Vibe Mic 按键已保存，并已发送到当前连接的 Stick。"));
     } catch { setNotice(t("Could not save Vibe Mic button bindings.", "无法保存 Vibe Mic 按键映射。")); }
     finally { setBusy(undefined); }
   };
