@@ -12,7 +12,7 @@ export interface SettingsService {
   updateSessionLauncher(body: unknown): Promise<{ session_launcher: "auto" | "tmux" | "zellij" }>;
   updateToolCwd(body: unknown): Promise<{ id: string; cwd: string }>;
   updateMicBindings?(body: unknown): Promise<{ button_a: string; button_b: string }>;
-  scanSticks?(): Promise<{ name: string; address: string; rssi?: number | null }[]>;
+  scanSticks?(): Promise<{ name: string; address: string; rssi?: number | null; paired?: boolean; connected?: boolean }[]>;
   connectStick?(body: unknown): Promise<{ name?: string; address: string }>;
 }
 

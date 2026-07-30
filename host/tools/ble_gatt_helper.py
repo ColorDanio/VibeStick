@@ -12,6 +12,7 @@ import base64
 import fcntl
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -99,7 +100,22 @@ class Helper:
                 continue
             address = str(getattr(device, "address", "") or "")
             if address:
-                devices[address] = {"name": name, "address": address, "rssi": getattr(device, "rssi", None)}
+                devices[address.upper()] = {"name": name, "address": address.upper(), "rssi": getattr(device, "rssi", None), "paired": False, "connected": address.upper() == str(getattr(self.client, "address", "")).upper()}
+        # BlueZ keeps paired devices even when they are not advertising. Merge
+        # them so Settings can manage a remembered Stick rather than exposing
+        # only the few seconds in which it happens to be discoverable.
+        try:
+            output = subprocess.run(["bluetoothctl", "devices", "Paired"], capture_output=True, text=True, timeout=3, check=False).stdout
+            for line in output.splitlines():
+                parts = line.split(maxsplit=2)
+                if len(parts) != 3 or parts[0] != "Device" or not parts[2].startswith("VibeStick_"):
+                    continue
+                address, name = parts[1].upper(), parts[2]
+                item = devices.setdefault(address, {"name": name, "address": address, "rssi": None, "paired": True, "connected": False})
+                item["paired"] = True
+                item["connected"] = address == str(getattr(self.client, "address", "")).upper()
+        except (OSError, subprocess.SubprocessError):
+            pass
         return sorted(devices.values(), key=lambda item: item["name"])
 
     async def disconnect(self) -> None:

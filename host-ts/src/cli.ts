@@ -64,7 +64,7 @@ async function main(): Promise<void> {
   await loadSessions();
   let runtime: HostRuntime | undefined;
   let bridge: VibeBridge | undefined;
-  let scanSticks: (() => Promise<{ name: string; address: string; rssi?: number | null }[]>) | undefined;
+  let scanSticks: (() => Promise<{ name: string; address: string; rssi?: number | null; paired?: boolean; connected?: boolean }[]>) | undefined;
   let connectStick: ((body: unknown) => Promise<{ address: string }>) | undefined;
   let testYoloFocused: (() => Promise<{ available: boolean; detail: string }>) | undefined;
   let localModelStatus: LocalAsrModelStatus = config.asr.engine === "faster-whisper"

@@ -963,13 +963,13 @@ function Settings(props: {
 }): ReactElement {
   const t = useT();
   const { data } = props;
-  const [sticks, setSticks] = useState<{ name: string; address: string; rssi?: number | null }[]>([]);
+  const [sticks, setSticks] = useState<{ name: string; address: string; rssi?: number | null; paired?: boolean; connected?: boolean }[]>([]);
   const [deviceBusy, setDeviceBusy] = useState<"scan" | string>();
   const scan = async (): Promise<void> => {
     setDeviceBusy("scan");
     try {
       const response = await fetch("http://127.0.0.1:7861/api/devices/scan", { method: "POST" });
-      const result = await response.json() as { devices?: { name: string; address: string; rssi?: number | null }[]; error?: string };
+      const result = await response.json() as { devices?: { name: string; address: string; rssi?: number | null; paired?: boolean; connected?: boolean }[]; error?: string };
       if (!response.ok) throw new Error(result.error ?? "Scan failed");
       setSticks(result.devices ?? []);
     } finally { setDeviceBusy(undefined); }
@@ -1012,7 +1012,7 @@ function Settings(props: {
         <div><span className="section-label">{t("DEVICE SETUP", "设备设置")}</span><h3>{t("VibeStick devices", "VibeStick 设备")}</h3><p>{t("Manage paired Sticks and their connection state.", "管理已配对设备及其连接状态。")}</p></div>
         <div className="device-manager"><DeviceImage model={data.device.model} /><div><b>{data.device.name || deviceName(data.device.model)}</b><span><i className={data.environment.owner === "active" ? "online" : "warn"} />{data.environment.owner === "active" ? t("Connected", "已连接") : t("Disconnected", "未连接")}</span><small>{data.device.firmware || t("Firmware detected automatically", "自动检测固件版本")}</small></div><button className="secondary" onClick={props.onRestart} disabled={props.busy === "restart"}>{props.busy === "restart" ? t("Reconnecting…", "正在重连…") : t("Reconnect", "重新连接")}</button></div>
         <button className="quiet" onClick={() => void scan()} disabled={deviceBusy === "scan"}>{deviceBusy === "scan" ? t("Scanning…", "正在扫描…") : `+ ${t("Scan for Sticks", "扫描设备")}`}</button>
-        {sticks.map((stick) => <div className="device-manager" key={stick.address}><div /><div><b>{stick.name}</b><small>{stick.address}{typeof stick.rssi === "number" ? ` · ${stick.rssi} dBm` : ""}</small></div><button className="secondary" onClick={() => void selectStick(stick.address)} disabled={Boolean(deviceBusy)}>{deviceBusy === stick.address ? t("Connecting…", "正在连接…") : t("Use this Stick", "使用此设备")}</button></div>)}
+        {sticks.map((stick) => <div className="device-manager" key={stick.address}><div /><div><b>{stick.name}</b><span><i className={stick.connected ? "online" : "warn"} />{stick.connected ? t("Active on this host", "此主机当前使用") : stick.paired ? t("Paired · ready to connect", "已配对 · 可连接") : t("Nearby · not paired", "附近 · 未配对")}</span><small>{stick.address}{typeof stick.rssi === "number" ? ` · ${stick.rssi} dBm` : ""} · {stick.connected ? (data.device.model || t("Identifying…", "正在识别型号…")) : t("Model identified on first connection", "首次连接后识别型号")}</small></div><button className="secondary" onClick={() => void selectStick(stick.address)} disabled={Boolean(deviceBusy) || stick.connected}>{deviceBusy === stick.address ? t("Connecting…", "正在连接…") : stick.connected ? t("In use", "正在使用") : t("Use this Stick", "使用此设备")}</button></div>)}
       </section>
       <section className="setup-section host-setup">
         <span className="section-label">{t("HOST SETUP", "主机设置")}</span>
