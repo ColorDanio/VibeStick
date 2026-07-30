@@ -14,6 +14,8 @@ host-ts/desktop/.playwright-cli/
 host-ts/desktop/output/
 host-ts/desktop/*.tsbuildinfo
 host-ts/desktop/release/
+/.playwright-cli/
+/release/
 
 # PlatformIO
 .pio/

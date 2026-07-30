@@ -24,6 +24,15 @@ supported M5Stick boards. The current release line is **0.2.x** for both.
 - Local-first operation: the desktop dashboard is served on loopback only;
   diagnostics deliberately redact paths, commands, transcripts and audio.
 
+## Desktop app
+
+The desktop app brings connection state, speech recognition, recent activity
+and the active delivery target into one native window. It supports English,
+Simplified Chinese, system/light/dark appearance settings, reconnect controls
+and a live system-tray connection indicator.
+
+![Vibe Stick desktop Overview](docs/images/vibe-stick-overview.png)
+
 ## Hardware support
 
 | Board | PlatformIO environment | Release firmware |
@@ -38,11 +47,10 @@ project is named **Vibe Stick**.
 
 ### 1. Install the desktop app
 
-Download the matching `.deb` from a release, then install it. (The current
-artifact filename remains `VibeConn` during the packaging-name transition.)
+Download the matching `.deb` from a release, then install it.
 
 ```sh
-sudo apt install ./VibeConn_0.2.1_amd64.deb
+sudo apt install "./Vibe Stick_0.2.1_amd64.deb"
 ```
 
 Launch **Vibe Stick** from your application menu. The app starts its local host
