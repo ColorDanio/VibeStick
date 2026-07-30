@@ -2,13 +2,13 @@ import { spawn } from "node:child_process";
 
 export type HidRunner = (command: string, args: string[]) => Promise<boolean>;
 
-/** Converts complete F14/F15 HID reports into Linux ydotool key transitions. */
+/** Converts complete F13..F24 HID reports into Linux ydotool key transitions. */
 export class LinuxHidFallback {
   private pressed = new Set<number>();
   constructor(private readonly run: HidRunner = runProcess) {}
   async probe(): Promise<boolean> { return this.run("ydotool", ["--help"]); }
   async report(keys: number[]): Promise<boolean> {
-    const next = new Set<number>(keys.filter((key) => key === 184 || key === 185));
+    const next = new Set<number>(keys.filter((key) => key >= 183 && key <= 194));
     let ok = true;
     for (const key of this.pressed) if (!next.has(key)) ok = (await this.run("ydotool", ["key", `${key}:0`])) && ok;
     for (const key of next) if (!this.pressed.has(key)) ok = (await this.run("ydotool", ["key", `${key}:1`])) && ok;

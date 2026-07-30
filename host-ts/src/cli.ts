@@ -14,7 +14,7 @@ import { VoicePipeline, onlineTranscriber } from "./asr.js";
 import { pythonLocalTranscriber } from "./local-asr.js";
 import { pythonSessionDiscovery } from "./session-discovery.js";
 import { NodeProcessInspector, discoverProcessSessions, mergeSessions } from "./process-discovery.js";
-import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher, updateToolCwd, verifyOnlineAsr } from "./settings.js";
+import { publicAsrSettings, updateMicBindings, updateOnlineAsr, updateSessionLauncher, updateToolCwd, verifyOnlineAsr } from "./settings.js";
 import { probeTraditionalOwner, type TraditionalOwner } from "./ownership.js";
 import { diagnosticsReport } from "./diagnostics.js";
 import { NobleGattTransport } from "./noble-transport.js";
@@ -23,6 +23,8 @@ import { PipeWireVibeMicSink } from "./pipewire-mic.js";
 import { LinuxFocusedInput } from "./linux-focused-input.js";
 import { TerminalSessionAdapter } from "./terminal-session.js";
 import { LinuxHidFallback } from "./linux-hid-fallback.js";
+import { ForegroundTargetProbe } from "./foreground-target.js";
+import { TranscriptionHistory } from "./transcription-history.js";
 
 type Args = { config: string; sessions: string; port: number; helper?: string; address?: string; nativeBle: boolean };
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
@@ -31,6 +33,10 @@ async function main(): Promise<void> {
   const args = parse(process.argv.slice(2));
   let config = await loadConfigFile(args.config);
   const core = new HostCore(config);
+  const transcriptionHistory = new TranscriptionHistory(resolve(homedir(), ".vibestick/transcriptions.jsonl"));
+  core.setTranscriptionHistory(await transcriptionHistory.load());
+  core.onTranscript((record) => { void transcriptionHistory.append(record).catch((error) => console.error(`transcript history failed: ${String(error)}`)); });
+  const foregroundTarget = new ForegroundTargetProbe();
   let traditionalOwner: TraditionalOwner = await probeTraditionalOwner();
   const processes = new NodeProcessInspector();
   const compatibilityExecutable = process.env.VIBECONN_PYTHON || process.env.VIBESTICK_LINUX_HELPER || "python3";
@@ -71,7 +77,7 @@ async function main(): Promise<void> {
         asr: { available: false, reason: "Configure an ASR provider for Host 2.0" },
         yolo: { available: false, reason: "Start the Host 2.0 runtime" },
       },
-      config: { path: args.config, asr_engine: config.asr.engine, asr_api_base: config.asr.online.api_base, asr_model: config.asr.engine === "online" ? config.asr.online.model : config.asr.model, asr_online_model: config.asr.online.model, online_asr_configured: config.asr.engine === "online" && Boolean(config.asr.online.api_key), session_launcher: config.session_launcher, tools: config.tools.map((tool) => ({ id: tool.id, name: tool.name, cwd: tool.cwd ?? "" })) },
+      config: { path: args.config, asr_engine: config.asr.engine, asr_api_base: config.asr.online.api_base, asr_model: config.asr.engine === "online" ? config.asr.online.model : config.asr.model, asr_online_model: config.asr.online.model, online_asr_configured: config.asr.engine === "online" && Boolean(config.asr.online.api_key), mic_button_a: config.mic.buttonA, mic_button_b: config.mic.buttonB, session_launcher: config.session_launcher, tools: config.tools.map((tool) => ({ id: tool.id, name: tool.name, cwd: tool.cwd ?? "" })) },
       ...(diagnostics?.error ? { error: diagnostics.error } : {}),
     };
   };
@@ -95,6 +101,10 @@ async function main(): Promise<void> {
         if (!directory?.isDirectory()) throw new Error("Working directory does not exist");
       }
       config = candidate; await saveConfigFile(args.config, config); return { id: changed.id, cwd: changed.cwd ?? "" };
+    },
+    async updateMicBindings(body) {
+      config = updateMicBindings(config, body); await saveConfigFile(args.config, config);
+      return { button_a: config.mic.buttonA, button_b: config.mic.buttonB };
     },
   }, () => diagnosticsReport(core, environment(), { platform: process.platform, arch: process.arch, runtime: `node ${process.version}` }));
   console.log(`VibeConn 2.0 dashboard: http://127.0.0.1:${dashboard.port}`);
@@ -329,6 +339,8 @@ async function main(): Promise<void> {
   }
   const refresh = async (): Promise<void> => {
     await loadSessions();
+    const mode = core.snapshot().device_mode;
+    core.setForegroundTarget(mode === "mic" || mode === "yolo" ? await foregroundTarget.current() : undefined);
     // While VibeConn 1.x owns BLE, the 2.0 bridge is intentionally never
     // started. Keep its loopback dashboard fresh without asking a missing
     // helper transport to write characteristics every second.

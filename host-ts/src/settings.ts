@@ -45,6 +45,15 @@ export function updateSessionLauncher(config: Config, input: unknown): Config {
   return { ...config, session_launcher: launcher };
 }
 
+export function updateMicBindings(config: Config, input: unknown): Config {
+  const values = typeof input === "object" && input !== null && !Array.isArray(input) ? input as { button_a?: unknown; button_b?: unknown } : {};
+  const valid = new Set(["F13", "F14", "F15", "F16", "F17", "F18", "F19", "F20", "F21", "F22", "F23", "F24"]);
+  const buttonA = typeof values.button_a === "string" ? values.button_a.toUpperCase() : "";
+  const buttonB = typeof values.button_b === "string" ? values.button_b.toUpperCase() : "";
+  if (!valid.has(buttonA) || !valid.has(buttonB)) throw new TypeError("Vibe Mic buttons must be F13 through F24");
+  return { ...config, mic: { ...config.mic, buttonA: buttonA as Config["mic"]["buttonA"], buttonB: buttonB as Config["mic"]["buttonB"] } };
+}
+
 export function updateToolCwd(config: Config, input: unknown): Config {
   const values = typeof input === "object" && input !== null && !Array.isArray(input) ? input as { id?: unknown; cwd?: unknown } : {};
   const id = typeof values.id === "string" ? values.id : "";

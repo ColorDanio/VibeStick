@@ -18,6 +18,7 @@ export const BLE = {
   tools: "4b1e0006-5a3f-4c8d-9b6e-7f2a1c0d3e5f",
   voice: "4b1e0007-5a3f-4c8d-9b6e-7f2a1c0d3e5f",
   audio: "4b1e0008-5a3f-4c8d-9b6e-7f2a1c0d3e5f",
+  deviceConfig: "4b1e0009-5a3f-4c8d-9b6e-7f2a1c0d3e5f",
   hidInput: "00002a4d-0000-1000-8000-00805f9b34fb",
 } as const;
 

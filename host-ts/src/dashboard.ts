@@ -9,7 +9,7 @@ export interface DashboardEnvironment {
   runtime: RuntimeState;
   capabilities: Capabilities;
   traditional_owner: TraditionalOwner;
-  config: { path: string; asr_engine: string; asr_api_base: string; asr_model: string; asr_online_model?: string; online_asr_configured: boolean; session_launcher: "auto" | "tmux" | "zellij"; tools: { id: string; name: string; cwd: string }[] };
+  config: { path: string; asr_engine: string; asr_api_base: string; asr_model: string; asr_online_model?: string; online_asr_configured: boolean; mic_button_a?: string; mic_button_b?: string; session_launcher: "auto" | "tmux" | "zellij"; tools: { id: string; name: string; cwd: string }[] };
   error?: string;
 }
 
@@ -49,7 +49,7 @@ function defaultEnvironment(): DashboardEnvironment {
   return {
     implementation: "host-2", owner: "inactive", runtime: "stopped", capabilities: unavailable,
     traditional_owner: { state: "unavailable" },
-    config: { path: "", asr_engine: "", asr_api_base: "", asr_model: "", asr_online_model: "", online_asr_configured: false, session_launcher: "auto", tools: [] },
+    config: { path: "", asr_engine: "", asr_api_base: "", asr_model: "", asr_online_model: "", online_asr_configured: false, mic_button_a: "F14", mic_button_b: "F15", session_launcher: "auto", tools: [] },
   };
 }
 

@@ -26,7 +26,7 @@ import { VoicePipeline, wav, type AsrTranscriber } from "../asr.js";
 import { pythonLocalTranscriber } from "../local-asr.js";
 import { pythonSessionDiscovery } from "../session-discovery.js";
 import { discoverProcessSessions, mergeSessions } from "../process-discovery.js";
-import { publicAsrSettings, updateOnlineAsr, updateSessionLauncher, updateToolCwd, verifyOnlineAsr } from "../settings.js";
+import { publicAsrSettings, updateMicBindings, updateOnlineAsr, updateSessionLauncher, updateToolCwd, verifyOnlineAsr } from "../settings.js";
 import { probeTraditionalOwner } from "../ownership.js";
 import { diagnosticsReport } from "../diagnostics.js";
 import { NobleGattTransport, type NobleAdapter } from "../noble-transport.js";
@@ -47,6 +47,15 @@ const fixture = async (name: string): Promise<Record<string, any>> => {
 test("config normalization conforms to v1", async () => {
   const data = await fixture("config-normalization.json");
   assert.deepEqual(configToWire(normalizeConfig(data.input)), data.expected);
+});
+
+test("Vibe Mic button bindings default to A=F14 and B=F15 and accept F13–F24", () => {
+  const defaults = normalizeConfig({});
+  assert.deepEqual(defaults.mic, { enabled: true, buttonA: "F14", buttonB: "F15" });
+  const configured = updateMicBindings(defaults, { button_a: "f13", button_b: "F24" });
+  assert.deepEqual(configured.mic, { enabled: true, buttonA: "F13", buttonB: "F24" });
+  assert.deepEqual(configToWire(configured).mic, { enabled: true, button_a: "F13", button_b: "F24" });
+  assert.throws(() => updateMicBindings(defaults, { button_a: "F12", button_b: "F15" }), /F13 through F24/);
 });
 
 test("status and sessions payloads conform to v1", async () => {
@@ -164,6 +173,13 @@ test("dashboard contract returns snapshots and routes commands through one core"
   core.updateVoice({ state: "ready", text: "Preview text" });
   assert.equal(core.snapshot().voice.text, "Preview text");
   assert.equal(core.snapshot().transfers[0]?.text, "Preview text");
+  const firstTranscript = core.snapshot().transcriptions[0];
+  assert.ok(firstTranscript);
+  assert.deepEqual({ source: firstTranscript.source, text: firstTranscript.text }, { source: "yolo", text: "Preview text" });
+  core.setForegroundTarget({ app: "Notepad" });
+  assert.deepEqual(core.snapshot().foreground_target, { app: "Notepad" });
+  core.command({ cmd: "device.info", model: "M5StickS3", firmware: "0.2.1" });
+  assert.deepEqual(core.snapshot().device, { model: "M5StickS3", firmware: "0.2.1" });
   core.recordDelivery("yolo");
   assert.equal(core.snapshot().transfers[0]?.kind, "delivery");
   assert.equal(dashboardRequest(core, "POST", "/api/command", { cmd: "tool.select", id: "nope" }).status, 400);
@@ -299,7 +315,7 @@ test("native terminal adapter delivers only to selected tmux or zellij sessions"
   assert.equal(await adapter.deliver("never global"), false);
 });
 
-test("Linux HID fallback emits only F15/F14 state transitions", async () => {
+test("Linux HID fallback emits F13–F24 state transitions", async () => {
   const calls: string[][] = [];
   const fallback = new LinuxHidFallback(async (_command, args) => { calls.push(args); return true; });
   assert.equal(await fallback.probe(), true);
@@ -355,11 +371,26 @@ test("dashboard exposes an explicit online ASR provider test without returning s
     async testYoloFocused() { return { available: true, detail: "probe passed" }; },
     async updateSessionLauncher() { return { session_launcher: "auto" }; },
     async updateToolCwd() { return { id: "", cwd: "" }; },
+    async updateMicBindings(body) {
+      const config = updateMicBindings(normalizeConfig({}), body);
+      return { button_a: config.mic.buttonA, button_b: config.mic.buttonB };
+    },
   });
   const response = await fetch(`http://127.0.0.1:${server.port}/api/settings/asr/test`, { method: "POST" });
   assert.deepEqual(await response.json(), { ok: true, provider: "reachable", model_available: null });
   const yolo = await fetch(`http://127.0.0.1:${server.port}/api/settings/yolo/test`, { method: "POST" });
   assert.deepEqual(await yolo.json(), { ok: true, available: true, detail: "probe passed" });
+  const mic = await fetch(`http://127.0.0.1:${server.port}/api/settings/mic-bindings`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ button_a: "f13", button_b: "F24" }),
+  });
+  assert.deepEqual(await mic.json(), { ok: true, restart_required: true, button_a: "F13", button_b: "F24" });
+  const invalidMic = await fetch(`http://127.0.0.1:${server.port}/api/settings/mic-bindings`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ button_a: "F12", button_b: "F15" }),
+  });
+  assert.equal(invalidMic.status, 400);
+  assert.match(String((await invalidMic.json()).error), /F13 through F24/);
   await server.close();
 });
 
@@ -470,13 +501,18 @@ test("BLE bridge subscribes, syncs and keeps Vibe Mic audio separate from ASR", 
   const bridge = new VibeBridge(transport, core, { onAudio: (destination) => { audio.push(destination); } });
   await bridge.connect();
   assert.deepEqual(transport.subscriptions, ["INPUT", "COMMAND", "AUDIO", "HID_INPUT"]);
-  assert.deepEqual(transport.writes.map((item) => item.characteristic), ["STATUS", "SESSIONS", "TOOLS"]);
+  assert.deepEqual(transport.writes.map((item) => item.characteristic), ["STATUS", "SESSIONS", "TOOLS", "DEVICE_CONFIG"]);
+  assert.deepEqual(JSON.parse(new TextDecoder().decode(transport.writes[3]?.data)), { hid: { button_a: "F14", button_b: "F15" } });
+  // Firmware 0.2.1 announces its model after COMMAND is subscribed. The
+  // bridge must retain it so the desktop chooses the matching product art.
+  transport.notify("COMMAND", new TextEncoder().encode('{"cmd":"device.info","model":"M5StickS3","firmware":"0.2.1"}'));
   transport.notify("COMMAND", new TextEncoder().encode('{"cmd":"voice.start","mode":"mic"}'));
   transport.notify("AUDIO", new Uint8Array([128, 129]));
   transport.notify("COMMAND", new TextEncoder().encode('{"cmd":"voice.start"}'));
   transport.notify("AUDIO", new Uint8Array([130]));
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(audio, ["mic", "asr"]);
+  assert.deepEqual(core.snapshot().device, { model: "M5StickS3", firmware: "0.2.1" });
 });
 
 test("BLE voice stop publishes transcribing immediately but waits for preceding PCM before ASR stop", async () => {

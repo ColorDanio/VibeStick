@@ -27,7 +27,7 @@ export type NobleLoader = () => Promise<NobleAdapter>;
 
 const DEVICE_NAME = "VibeStick";
 const notificationUuids: Record<Characteristic, string> = { INPUT: BLE.input, COMMAND: BLE.command, AUDIO: BLE.audio, HID_INPUT: BLE.hidInput };
-const writableUuids = { STATUS: BLE.status, SESSIONS: BLE.sessions, TOOLS: BLE.tools, VOICE: BLE.voice } as const;
+const writableUuids = { STATUS: BLE.status, SESSIONS: BLE.sessions, TOOLS: BLE.tools, VOICE: BLE.voice, DEVICE_CONFIG: BLE.deviceConfig } as const;
 
 /**
  * Cross-platform Node BLE central backed by Noble. It intentionally exposes
@@ -57,7 +57,7 @@ export class NobleGattTransport implements GattTransport {
       await peripheral.connectAsync();
       const discovered = await peripheral.discoverAllServicesAndCharacteristicsAsync();
       this.characteristics = new Map(discovered.characteristics.map((item) => [uuid(item.uuid), item]));
-      for (const value of [...Object.values(notificationUuids), ...Object.values(writableUuids)]) {
+      for (const value of [...Object.values(notificationUuids), BLE.status, BLE.sessions, BLE.tools, BLE.voice]) {
         if (!this.characteristics.has(uuid(value))) throw new Error(`VibeStick characteristic missing: ${value}`);
       }
       this.peripheral = peripheral;

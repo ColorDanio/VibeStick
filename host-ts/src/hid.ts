@@ -1,6 +1,6 @@
 export const KEY_F14 = 184;
 export const KEY_F15 = 185;
-const usageToKeycode = new Map<number, number>([[0x69, KEY_F14], [0x6a, KEY_F15]]);
+const usageToKeycode = new Map<number, number>(Array.from({ length: 12 }, (_, index) => [0x68 + index, 183 + index]));
 
 /** Decode an eight-byte boot-keyboard body, optionally prefixed with report ID 1. */
 export function keycodesFromReport(input: Uint8Array): number[] | null {

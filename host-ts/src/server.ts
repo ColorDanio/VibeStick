@@ -8,6 +8,7 @@ export interface SettingsService {
   testYoloFocused(): Promise<{ available: boolean; detail: string }>;
   updateSessionLauncher(body: unknown): Promise<{ session_launcher: "auto" | "tmux" | "zellij" }>;
   updateToolCwd(body: unknown): Promise<{ id: string; cwd: string }>;
+  updateMicBindings?(body: unknown): Promise<{ button_a: string; button_b: string }>;
 }
 
 export type DiagnosticsService = () => Record<string, unknown>;
@@ -90,6 +91,16 @@ export async function startDashboardServer(core: HostCore, port = 7861, environm
     if (request.method === "POST" && request.url === "/api/settings/tool-cwd" && settings) {
       try {
         const result = await settings.updateToolCwd(body);
+        response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+        response.end(JSON.stringify({ ok: true, restart_required: true, ...result })); return;
+      } catch (error) {
+        response.writeHead(400, { "content-type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) })); return;
+      }
+    }
+    if (request.method === "POST" && request.url === "/api/settings/mic-bindings" && settings?.updateMicBindings) {
+      try {
+        const result = await settings.updateMicBindings(body);
         response.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
         response.end(JSON.stringify({ ok: true, restart_required: true, ...result })); return;
       } catch (error) {

@@ -14,12 +14,14 @@ export interface BridgeHooks {
   /** Surface serialized BLE side-effect failures instead of silently dropping them. */
   onEffectError?(error: Error): void | Promise<void>;
 }
-export interface DeviceCommand { cmd: string; id?: string; mode?: unknown; fn?: string; }
+export interface DeviceCommand { cmd: string; id?: string; mode?: unknown; fn?: string; model?: string; firmware?: string; }
 
 /** BLE protocol bridge shared by every platform adapter. */
 export class VibeBridge {
   private effects: Promise<void> = Promise.resolve();
   private audioEffects: Promise<void> = Promise.resolve();
+  /** Avoid waking the Stick UI for identical 1 Hz dashboard sync snapshots. */
+  private lastWirePayload = new Map<string, string>();
   /** AUDIO must not reach a recorder until its matching voice.start action is complete. */
   private audioStartBarrier: Promise<void> = Promise.resolve();
   private wired = false;
@@ -32,6 +34,9 @@ export class VibeBridge {
       this.transport.onConnectionState((connected) => this.hooks.onConnectionState?.(connected));
     }
     await this.transport.connect();
+    // A newly connected peripheral has no previous state, even if the host
+    // snapshot is unchanged since the last link.
+    this.lastWirePayload.clear();
     for (const characteristic of ["INPUT", "COMMAND", "AUDIO", "HID_INPUT"] as const) await this.transport.subscribe(characteristic);
     await this.sync();
   }
@@ -42,11 +47,18 @@ export class VibeBridge {
     await this.write("STATUS", snapshot.status);
     await this.write("SESSIONS", sessionsToWire(snapshot.sessions));
     await this.write("TOOLS", snapshot.tools);
+    // Firmware before v2.3 does not expose this optional characteristic.
+    // Keep connection compatibility while synchronizing key bindings whenever
+    // the device supports the capability.
+    await this.write("DEVICE_CONFIG", { hid: { button_a: this.core.config.mic.buttonA, button_b: this.core.config.mic.buttonB } }).catch(() => undefined);
   }
   async publishVoice(value: { state: string; text: string }): Promise<void> { this.core.updateVoice(value); await this.write("VOICE", value); }
 
-  private async write(characteristic: "STATUS" | "SESSIONS" | "TOOLS" | "VOICE", value: unknown): Promise<void> {
-    await this.transport.write(characteristic, new TextEncoder().encode(JSON.stringify(value)));
+  private async write(characteristic: "STATUS" | "SESSIONS" | "TOOLS" | "VOICE" | "DEVICE_CONFIG", value: unknown): Promise<void> {
+    const json = JSON.stringify(value);
+    if (this.lastWirePayload.get(characteristic) === json) return;
+    await this.transport.write(characteristic, new TextEncoder().encode(json));
+    this.lastWirePayload.set(characteristic, json);
   }
 
   private notification(characteristic: Characteristic, data: Uint8Array): void {
@@ -80,6 +92,8 @@ export class VibeBridge {
       if (typeof payload.id === "string") command.id = payload.id;
       if ("mode" in payload) command.mode = payload.mode;
       if (typeof payload.fn === "string") command.fn = payload.fn;
+      if (typeof payload.model === "string") command.model = payload.model;
+      if (typeof payload.firmware === "string") command.firmware = payload.firmware;
       const result = this.core.command(command);
       const audioBeforeControl = command.cmd === "voice.stop" || command.cmd === "voice.cancel"
         ? this.audioEffects

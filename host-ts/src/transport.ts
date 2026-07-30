@@ -9,7 +9,7 @@ export interface GattTransport {
   disconnect(): Promise<void>;
   isConnected(): boolean;
   subscribe(characteristic: Characteristic): Promise<void>;
-  write(characteristic: "STATUS" | "SESSIONS" | "TOOLS" | "VOICE", data: Uint8Array): Promise<void>;
+  write(characteristic: "STATUS" | "SESSIONS" | "TOOLS" | "VOICE" | "DEVICE_CONFIG", data: Uint8Array): Promise<void>;
   onNotification(handler: NotificationHandler): void;
   onConnectionState(handler: ConnectionHandler): void;
 }
@@ -25,7 +25,7 @@ export class MemoryGattTransport implements GattTransport {
   async disconnect(): Promise<void> { this.connected = false; this.connectionHandler?.(false); }
   isConnected(): boolean { return this.connected; }
   async subscribe(characteristic: Characteristic): Promise<void> { this.subscriptions.push(characteristic); }
-  async write(characteristic: "STATUS" | "SESSIONS" | "TOOLS" | "VOICE", data: Uint8Array): Promise<void> { this.writes.push({ characteristic, data }); }
+  async write(characteristic: "STATUS" | "SESSIONS" | "TOOLS" | "VOICE" | "DEVICE_CONFIG", data: Uint8Array): Promise<void> { this.writes.push({ characteristic, data }); }
   onNotification(handler: NotificationHandler): void { this.handler = handler; }
   onConnectionState(handler: ConnectionHandler): void { this.connectionHandler = handler; }
   /** Simulate an unexpected link loss in contract tests. */

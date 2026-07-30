@@ -32,7 +32,7 @@ export class HelperGattTransport implements GattTransport {
     this.child?.kill(); this.child = undefined;
   }
   async subscribe(_characteristic: Characteristic): Promise<void> { /* helper subscribes atomically on connect */ }
-  async write(characteristic: "STATUS" | "SESSIONS" | "TOOLS" | "VOICE", data: Uint8Array): Promise<void> {
+  async write(characteristic: "STATUS" | "SESSIONS" | "TOOLS" | "VOICE" | "DEVICE_CONFIG", data: Uint8Array): Promise<void> {
     await this.request({ cmd: "write", characteristic, data: Buffer.from(data).toString("base64") });
   }
   async invoke(command: string, values: Record<string, unknown> = {}): Promise<HelperReply> {

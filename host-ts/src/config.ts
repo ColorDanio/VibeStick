@@ -26,7 +26,7 @@ export interface Config {
     online: { api_base: string; api_key: string; model: string; language: string | null };
   };
   features: { process_watcher: boolean; voice_enabled: boolean };
-  mic: { enabled: boolean };
+  mic: { enabled: boolean; buttonA: FunctionKey; buttonB: FunctionKey };
   session_launcher: "auto" | "tmux" | "zellij";
 }
 
@@ -39,6 +39,9 @@ const language = (value: unknown): string | null => {
   const text = asString(value).trim();
   return !text || ["auto", "none", "null"].includes(text.toLowerCase()) ? null : text;
 };
+export type FunctionKey = "F13" | "F14" | "F15" | "F16" | "F17" | "F18" | "F19" | "F20" | "F21" | "F22" | "F23" | "F24";
+const functionKeys: FunctionKey[] = ["F13", "F14", "F15", "F16", "F17", "F18", "F19", "F20", "F21", "F22", "F23", "F24"];
+const functionKey = (value: unknown, fallback: FunctionKey): FunctionKey => functionKeys.includes(value as FunctionKey) ? value as FunctionKey : fallback;
 
 export function normalizeConfig(value: unknown): Config {
   if (!isRecord(value)) throw new TypeError("config must be a JSON object");
@@ -89,7 +92,7 @@ export function normalizeConfig(value: unknown): Config {
       api_key: asString(rawOnline.api_key), model: asString(rawOnline.model, "whisper-large-v3-turbo") || "whisper-large-v3-turbo", language: language(rawOnline.language),
     }},
     features: { process_watcher: rawFeatures.process_watcher !== false, voice_enabled: rawFeatures.voice_enabled !== false },
-    mic: { enabled: rawMic.enabled !== false },
+    mic: { enabled: rawMic.enabled !== false, buttonA: functionKey(rawMic.button_a, "F14"), buttonB: functionKey(rawMic.button_b, "F15") },
     session_launcher: launcher,
   };
 }
@@ -111,7 +114,11 @@ export function configToWire(config: Config): JsonRecord {
     }),
     asr: config.asr,
     features: config.features,
-    mic: config.mic,
+    mic: {
+      enabled: config.mic.enabled,
+      ...(config.mic.buttonA !== "F14" ? { button_a: config.mic.buttonA } : {}),
+      ...(config.mic.buttonB !== "F15" ? { button_b: config.mic.buttonB } : {}),
+    },
     session_launcher: config.session_launcher,
   };
 }

@@ -10,13 +10,21 @@ export type TransferRecord = {
   kind: "recording" | "transcript" | "delivery" | "audio" | "error";
   text: string;
 };
+export type TranscriptionRecord = {
+  at: number;
+  source: "agent" | "yolo";
+  text: string;
+};
 
 export interface CoreSnapshot {
   selected_tool: string | null;
   active_session: string | null;
   audio_route: AudioRoute;
   device_mode: "home" | "agent" | "mic" | "yolo";
+  device: { model: string; firmware: string };
+  foreground_target?: { app: string };
   voice: VoicePreview;
+  transcriptions: TranscriptionRecord[];
   transfers: TransferRecord[];
   queued: number;
   status: ReturnType<HostSessionStore["statusPayload"]>;
@@ -35,11 +43,22 @@ export class HostCore {
   private deviceMode: "home" | "agent" | "mic" | "yolo" = "home";
   private voice: VoicePreview = { state: "idle", mode: "agent", recorded_ms: 0, level: 0, text: "" };
   private transfers: TransferRecord[] = [];
+  private transcriptions: TranscriptionRecord[] = [];
+  private foregroundTarget: { app: string } | undefined;
+  private device = { model: "", firmware: "" };
+  private onTranscription: ((record: TranscriptionRecord) => void) | undefined;
 
   constructor(readonly config: Config) { this.store = new HostSessionStore(config); }
   replaceSessions(records: SessionRecord[]): void { this.store.replace(records); }
 
-  command(input: { cmd: string; id?: string; mode?: unknown }): { changed: boolean; actions: RoutingAction[] } {
+  command(input: { cmd: string; id?: string; mode?: unknown; model?: unknown; firmware?: unknown }): { changed: boolean; actions: RoutingAction[] } {
+    if (input.cmd === "device.info") {
+      const model = typeof input.model === "string" ? input.model : "";
+      const firmware = typeof input.firmware === "string" ? input.firmware : "";
+      const changed = model !== this.device.model || firmware !== this.device.firmware;
+      this.device = { model: model || this.device.model, firmware: firmware || this.device.firmware };
+      return { changed, actions: [] };
+    }
     if (input.cmd === "mode.select" && typeof input.mode === "string" && ["home", "agent", "mic", "yolo"].includes(input.mode)) {
       const previous = this.deviceMode;
       this.deviceMode = input.mode as typeof this.deviceMode;
@@ -75,10 +94,19 @@ export class HostCore {
   recordDelivery(mode: VoicePreview["mode"]): void {
     this.record("delivery", `Delivered to ${this.modeLabel(mode)}`);
   }
+  setForegroundTarget(target: { app: string } | undefined): void { this.foregroundTarget = target; }
+  setTranscriptionHistory(records: TranscriptionRecord[]): void { this.transcriptions = records.slice(0, 100); }
+  onTranscript(listener: (record: TranscriptionRecord) => void): void { this.onTranscription = listener; }
   updateVoice(update: { state: string; text: string }): void {
     if (["idle", "recording", "transcribing", "ready", "error"].includes(update.state)) {
       this.voice = { ...this.voice, state: update.state as VoiceState, level: update.state === "recording" ? this.voice.level : 0, text: update.text };
-      if (update.state === "ready" && update.text) this.record("transcript", update.text);
+      if (update.state === "ready" && update.text) {
+        this.record("transcript", update.text);
+        const source = this.voice.mode === "yolo" ? "yolo" : "agent";
+        const record = { at: Date.now(), source, text: update.text } satisfies TranscriptionRecord;
+        this.transcriptions = [record, ...this.transcriptions].slice(0, 100);
+        this.onTranscription?.(record);
+      }
       if (update.state === "error" && update.text) this.record("error", update.text);
     }
   }
@@ -94,7 +122,10 @@ export class HostCore {
       active_session: this.store.activeId,
       audio_route: this.route,
       device_mode: this.deviceMode,
+      device: { ...this.device },
+      ...(this.foregroundTarget ? { foreground_target: { ...this.foregroundTarget } } : {}),
       voice: { ...this.voice },
+      transcriptions: this.transcriptions.map((item) => ({ ...item })),
       transfers: this.transfers.map((item) => ({ ...item })),
       queued: this.queue.size,
       status: this.store.statusPayload(),
