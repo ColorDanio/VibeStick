@@ -50,7 +50,17 @@ export class VibeBridge {
     // Firmware before v2.3 does not expose this optional characteristic.
     // Keep connection compatibility while synchronizing key bindings whenever
     // the device supports the capability.
-    await this.write("DEVICE_CONFIG", { hid: { button_a: this.core.config.mic.buttonA, button_b: this.core.config.mic.buttonB } }).catch(() => undefined);
+    await this.syncDeviceConfig();
+  }
+  /** Write just the Vibe Mic shortcut configuration and report whether the
+   * connected device accepted the GATT write. */
+  async syncDeviceConfig(): Promise<boolean> {
+    try {
+      await this.write("DEVICE_CONFIG", { hid: { button_a: this.core.config.mic.buttonA, button_b: this.core.config.mic.buttonB } });
+      return true;
+    } catch {
+      return false;
+    }
   }
   async publishVoice(value: { state: string; text: string }): Promise<void> { this.core.updateVoice(value); await this.write("VOICE", value); }
 

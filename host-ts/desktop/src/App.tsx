@@ -23,6 +23,7 @@ function useT(): Translate {
   return (english, chinese) => locale === "zh" ? chinese : english;
 }
 type LocalModelStatus = { model: string; state: "idle" | "downloading" | "ready" | "applying" | "applied" | "error"; progress: number; detail?: string };
+type MicBindingFeedback = { state: "idle" | "saving" | "synced" | "saved" | "error"; text: string };
 type Capability = { available: boolean; reason?: string; testable?: boolean };
 type Session = {
   id: string;
@@ -177,6 +178,7 @@ export function App(): ReactElement {
   const [micButtonA, setMicButtonA] = useState("F14");
   const [micButtonB, setMicButtonB] = useState("F15");
   const [micBindingsDirty, setMicBindingsDirty] = useState(false);
+  const [micBindingFeedback, setMicBindingFeedback] = useState<MicBindingFeedback>({ state: "idle", text: "" });
   const [saving, setSaving] = useState(false);
   const [launcher, setLauncher] = useState<"auto" | "tmux" | "zellij">("auto");
   const [cwdTool, setCwdTool] = useState("");
@@ -419,15 +421,23 @@ export function App(): ReactElement {
   const saveMicBindings = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
     setBusy("mic-bindings");
+    setMicBindingFeedback({ state: "saving", text: t("Saving shortcut…", "正在保存快捷键…") });
     try {
       const response = await fetch("http://127.0.0.1:7861/api/settings/mic-bindings", {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ button_a: micButtonA, button_b: micButtonB }),
       });
-      if (!response.ok) throw new Error();
+      const result = await response.json().catch(() => ({})) as { device_synced?: boolean; error?: string };
+      if (!response.ok) throw new Error(result.error ?? t("Could not save Vibe Mic button bindings.", "无法保存 Vibe Mic 按键映射。"));
       setMicBindingsDirty(false);
-      setNotice(t("Vibe Mic buttons saved and sent to the connected Stick.", "Vibe Mic 按键已保存，并已发送到当前连接的 Stick。"));
-    } catch { setNotice(t("Could not save Vibe Mic button bindings.", "无法保存 Vibe Mic 按键映射。")); }
+      const feedback = result.device_synced
+        ? { state: "synced" as const, text: t("Saved • sent to connected Stick", "已保存 • 已发送到当前连接的 Stick") }
+        : { state: "saved" as const, text: t("Saved • will send when Stick reconnects", "已保存 • Stick 重连后将自动发送") };
+      setMicBindingFeedback(feedback); setNotice(feedback.text);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : t("Could not save Vibe Mic button bindings.", "无法保存 Vibe Mic 按键映射。");
+      setMicBindingFeedback({ state: "error", text }); setNotice(text);
+    }
     finally { setBusy(undefined); }
   };
   const login = async (action: "install" | "uninstall"): Promise<void> => {
@@ -610,6 +620,7 @@ export function App(): ReactElement {
             apiKey={apiKey}
             micButtonA={micButtonA}
             micButtonB={micButtonB}
+            micBindingFeedback={micBindingFeedback}
             saving={saving}
             busy={busy}
             testing={testing}
@@ -632,8 +643,8 @@ export function App(): ReactElement {
               setAsrDirty(true);
             }}
             onApiKey={(value) => { setApiKey(value); setAsrDirty(true); }}
-            onMicButtonA={(value) => { setMicButtonA(value); setMicBindingsDirty(true); }}
-            onMicButtonB={(value) => { setMicButtonB(value); setMicBindingsDirty(true); }}
+            onMicButtonA={(value) => { setMicButtonA(value); setMicBindingsDirty(true); setMicBindingFeedback({ state: "idle", text: "" }); }}
+            onMicButtonB={(value) => { setMicButtonB(value); setMicBindingsDirty(true); setMicBindingFeedback({ state: "idle", text: "" }); }}
             onSaveMicBindings={saveMicBindings}
             onSaveAsr={saveAsr}
             onTestAsr={() => void testProvider("asr")}
@@ -925,6 +936,7 @@ function Settings(props: {
   apiKey: string;
   micButtonA: string;
   micButtonB: string;
+  micBindingFeedback: MicBindingFeedback;
   saving: boolean;
   busy?: string;
   testing?: "asr" | "yolo";
@@ -1029,6 +1041,7 @@ function Settings(props: {
         <label>{t("Button A", "按键 A")}<ShortcutPicker value={props.micButtonA} onChange={props.onMicButtonA} t={t} /></label>
         <label>{t("Button B", "按键 B")}<ShortcutPicker value={props.micButtonB} onChange={props.onMicButtonB} t={t} /></label>
         <button className="secondary" disabled={props.busy === "mic-bindings"}>{props.busy === "mic-bindings" ? t("Saving…", "正在保存…") : t("Save", "保存")}</button>
+        {props.micBindingFeedback.state !== "idle" && <div className={`shortcut-save-status ${props.micBindingFeedback.state}`} role="status">{props.micBindingFeedback.text}</div>}
       </form>
       {yolo?.testable && (
         <div className="form-block inline">

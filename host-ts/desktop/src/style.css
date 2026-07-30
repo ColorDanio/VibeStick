@@ -68,3 +68,4 @@ nav { display:grid; gap:6px; margin-top:50px; } .nav-item { display:flex; align-
 
 /* Compact visual shortcut composer for Vibe Mic A/B bindings. */
 .shortcut-picker { display:grid; gap:7px; } .shortcut-modifiers { display:flex; flex-wrap:wrap; gap:8px; } .shortcut-modifiers label { display:flex; align-items:center; gap:4px; color:#9baabd; font-size:11px; font-weight:600; } .shortcut-modifiers input { width:14px; min-width:14px; height:14px; margin:0; accent-color:#2ee2ec; }
+.shortcut-save-status { grid-column:2/-1; padding:8px 10px; border:1px solid #2d3b48; border-radius:7px; color:#aebdcb; background:#0b121a; font-size:12px; } .shortcut-save-status.saving { color:#bdeef2; border-color:#287480; } .shortcut-save-status.synced { color:#6ce7c7; border-color:#276052; background:#102b27; } .shortcut-save-status.saved { color:#f1c77d; border-color:#66542e; background:#2b2518; } .shortcut-save-status.error { color:#ffd0c4; border-color:#78473e; background:#2b1c1a; }

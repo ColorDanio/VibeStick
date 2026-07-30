@@ -145,8 +145,8 @@ async function main(): Promise<void> {
       config = updateMicBindings(config, body); await saveConfigFile(args.config, config);
       // Apply shortcut changes immediately when the Stick is already
       // connected. A later reconnect also performs this sync automatically.
-      await bridge?.sync().catch(() => undefined);
-      return { button_a: config.mic.buttonA, button_b: config.mic.buttonB };
+      const device_synced = bridge ? await bridge.syncDeviceConfig() : false;
+      return { button_a: config.mic.buttonA, button_b: config.mic.buttonB, device_synced };
     },
   }, () => diagnosticsReport(core, environment(), { platform: process.platform, arch: process.arch, runtime: `node ${process.version}` }));
   console.log(`VibeConn 2.0 dashboard: http://127.0.0.1:${dashboard.port}`);
