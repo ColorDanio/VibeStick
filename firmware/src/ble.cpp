@@ -4,6 +4,7 @@
 #include <ArduinoJson.h>
 
 #include "hid.h"
+#include "board.h"
 
 // UUIDs from docs/protocol.md (v2)
 static const char* SERVICE_UUID  = "4b1e0001-5a3f-4c8d-9b6e-7f2a1c0d3e5f";
@@ -14,6 +15,7 @@ static const char* COMMAND_UUID  = "4b1e0005-5a3f-4c8d-9b6e-7f2a1c0d3e5f";
 static const char* TOOLS_UUID    = "4b1e0006-5a3f-4c8d-9b6e-7f2a1c0d3e5f";
 static const char* VOICE_UUID    = "4b1e0007-5a3f-4c8d-9b6e-7f2a1c0d3e5f";
 static const char* AUDIO_UUID    = "4b1e0008-5a3f-4c8d-9b6e-7f2a1c0d3e5f";
+static const char* DEVICE_CONFIG_UUID = "4b1e0009-5a3f-4c8d-9b6e-7f2a1c0d3e5f";
 
 StatusInfo gStatus = {};
 SessionsInfo gSessions = {};
@@ -32,6 +34,8 @@ static NimBLECharacteristic* pInputChar = nullptr;
 static NimBLECharacteristic* pCommandChar = nullptr;
 static NimBLECharacteristic* pAudioChar = nullptr;
 static bool sConnected = false;
+
+static void bleNotifyDeviceInfo();
 
 bool bleConnected() { return sConnected; }
 
@@ -77,6 +81,14 @@ void bleNotifyAudio(const uint8_t* data, size_t len) {
   if (pAudioChar->getSubscribedCount() == 0) return;  // nobody listening
   pAudioChar->setValue(data, len);
   pAudioChar->notify();
+}
+
+static void bleNotifyDeviceInfo() {
+  char buf[128];
+  snprintf(buf, sizeof(buf),
+           "{\"cmd\":\"device.info\",\"model\":\"%s\",\"firmware\":\"%s\"}",
+           BOARD_MODEL, FIRMWARE_VERSION);
+  notifyJson(pCommandChar, buf);
 }
 
 // ---- Callbacks ----
@@ -135,6 +147,13 @@ class ServerCB : public NimBLEServerCallbacks {
     gConnDirty = true;
     Serial.println("[BLE] host disconnected, advertising");
     pServer->startAdvertising();
+  }
+};
+
+class CommandCB : public NimBLECharacteristicCallbacks {
+  void onSubscribe(NimBLECharacteristic* /*characteristic*/,
+                   ble_gap_conn_desc* /*desc*/, uint16_t value) override {
+    if (value) bleNotifyDeviceInfo();
   }
 };
 
@@ -294,6 +313,26 @@ class VoiceCB : public NimBLECharacteristicCallbacks {
   }
 };
 
+static uint8_t functionKeyUsage(const char* value) {
+  if (value == nullptr || strncmp(value, "F", 1) != 0) return 0;
+  char* end = nullptr;
+  long key = strtol(value + 1, &end, 10);
+  if (end == value + 1 || *end != '\0') return 0;
+  return key >= 13 && key <= 24 ? (uint8_t)(key + 0x5B) : 0;
+}
+
+class DeviceConfigCB : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* pChar) override {
+    JsonDocument doc;
+    if (deserializeJson(doc, pChar->getValue().c_str())) return;
+    JsonObject hid = doc["hid"].as<JsonObject>();
+    if (hid.isNull()) return;
+    uint8_t a = functionKeyUsage(hid["button_a"] | "");
+    uint8_t b = functionKeyUsage(hid["button_b"] | "");
+    hidSetBindings(a, b);
+  }
+};
+
 // ---- Setup ----
 
 void bleInit() {
@@ -323,8 +362,13 @@ void bleInit() {
       pService->createCharacteristic(VOICE_UUID, NIMBLE_PROPERTY::WRITE);
   pVoice->setCallbacks(new VoiceCB());
 
+  NimBLECharacteristic* pDeviceConfig = pService->createCharacteristic(
+      DEVICE_CONFIG_UUID, NIMBLE_PROPERTY::WRITE);
+  pDeviceConfig->setCallbacks(new DeviceConfigCB());
+
   pInputChar = pService->createCharacteristic(INPUT_UUID, NIMBLE_PROPERTY::NOTIFY);
   pCommandChar = pService->createCharacteristic(COMMAND_UUID, NIMBLE_PROPERTY::NOTIFY);
+  pCommandChar->setCallbacks(new CommandCB());
   pAudioChar = pService->createCharacteristic(AUDIO_UUID, NIMBLE_PROPERTY::NOTIFY);
 
   pService->start();

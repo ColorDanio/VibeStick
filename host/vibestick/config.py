@@ -273,15 +273,27 @@ class MicConfig:
     """Virtual microphone (PTT mic mode) settings."""
 
     enabled: bool = True
+    button_a: str = "F14"
+    button_b: str = "F15"
 
     def to_dict(self) -> dict:
-        return {"enabled": self.enabled}
+        data = {"enabled": self.enabled}
+        if self.button_a != "F14":
+            data["button_a"] = self.button_a
+        if self.button_b != "F15":
+            data["button_b"] = self.button_b
+        return data
 
     @classmethod
     def from_dict(cls, data: object) -> "MicConfig":
         if not isinstance(data, dict):
             return cls()
-        return cls(enabled=bool(data.get("enabled", True)))
+        valid = {f"F{key}" for key in range(13, 25)}
+        button_a = str(data.get("button_a") or "F14").upper()
+        button_b = str(data.get("button_b") or "F15").upper()
+        return cls(enabled=bool(data.get("enabled", True)),
+                   button_a=button_a if button_a in valid else "F14",
+                   button_b=button_b if button_b in valid else "F15")
 
 
 @dataclass

@@ -1,9 +1,9 @@
 # VibeStick BLE Protocol (v2)
 
-Communication between the host daemon (computer) and the M5StickC Plus
-uses a single custom GATT service.
+Communication between the host daemon (computer) and a supported VibeStick
+(M5StickC Plus or M5StickS3) uses a single custom GATT service.
 
-- The **device** (M5StickC Plus) is the GATT **server** (BLE peripheral).
+- The **device** (M5StickC Plus or M5StickS3) is the GATT **server** (BLE peripheral).
   It advertises the name `VibeStick`.
 - The **daemon** (computer) is the GATT **client** (BLE central).
 - The daemon holds all session/tool state; the device is a display +
@@ -24,6 +24,7 @@ uses a single custom GATT service.
 | TOOLS    | `4b1e0006-5a3f-4c8d-9b6e-7f2a1c0d3e5f` | write      | daemon | device | JSON    |
 | VOICE    | `4b1e0007-5a3f-4c8d-9b6e-7f2a1c0d3e5f` | write      | daemon | device | JSON    |
 | AUDIO    | `4b1e0008-5a3f-4c8d-9b6e-7f2a1c0d3e5f` | notify     | device | daemon | binary  |
+| DEVICE_CONFIG | `4b1e0009-5a3f-4c8d-9b6e-7f2a1c0d3e5f` | write | daemon | device | JSON |
 
 JSON payloads are UTF-8, one complete document per write/notify, kept
 under 512 bytes by trimming optional fields. Negotiated MTU is 247, so
@@ -206,6 +207,28 @@ delivery), then resumes STATUS pushes (back to monitoring).
 {"cmd": "inference.cancel"}
 {"cmd": "session.new"}
 {"cmd": "refresh"}
+```
+
+When the host subscribes to `COMMAND`, firmware 0.2.1 also publishes its
+identity. This lets VibeConn choose the matching product artwork without
+guessing from the BLE name:
+
+```json
+{"cmd":"device.info","model":"M5StickC-Plus","firmware":"0.2.1"}
+```
+
+`model` is `M5StickC-Plus` or `M5StickS3`. Hosts that do not understand this
+optional event must ignore it.
+
+### DEVICE_CONFIG (daemon -> device)
+
+Firmware 0.2.1 accepts the Vibe Mic HID bindings as named function keys. Both
+keys must be in the inclusive `F13`–`F24` range; invalid or missing values
+leave the existing binding unchanged. Defaults are Button A = `F14` and
+Button B = `F15`.
+
+```json
+{"hid":{"button_a":"F14","button_b":"F15"}}
 ```
 
 - `fn.activate` with a custom binding id makes the host send that key

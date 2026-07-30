@@ -18,6 +18,7 @@ COMMAND_UUID = "4b1e0005-5a3f-4c8d-9b6e-7f2a1c0d3e5f"
 TOOLS_UUID = "4b1e0006-5a3f-4c8d-9b6e-7f2a1c0d3e5f"
 VOICE_UUID = "4b1e0007-5a3f-4c8d-9b6e-7f2a1c0d3e5f"
 AUDIO_UUID = "4b1e0008-5a3f-4c8d-9b6e-7f2a1c0d3e5f"
+DEVICE_CONFIG_UUID = "4b1e0009-5a3f-4c8d-9b6e-7f2a1c0d3e5f"
 # The standard HID-over-GATT input-report characteristic.  BlueZ 5.85 on
 # this host subscribes to it but fails to forward reports through UHID, so the
 # daemon also subscribes and supplies an application-visible keyboard fallback.

@@ -33,6 +33,7 @@ WRITE = {
     "SESSIONS": protocol.SESSIONS_UUID,
     "TOOLS": protocol.TOOLS_UUID,
     "VOICE": protocol.VOICE_UUID,
+    "DEVICE_CONFIG": protocol.DEVICE_CONFIG_UUID,
 }
 
 
@@ -74,7 +75,16 @@ class Helper:
         CACHE.parent.mkdir(parents=True, exist_ok=True)
         CACHE.write_text(actual + "\n")
         for name, uuid in NOTIFY.items():
-            await client.start_notify(uuid, self._notify(name))
+            try:
+                await client.start_notify(uuid, self._notify(name))
+            except Exception:
+                # BlueZ can auto-own the standard HID input report for its
+                # keyboard integration and reject a second application
+                # subscription. The GATT command/audio bridge remains fully
+                # usable, so do not turn that optional fallback into a
+                # connection failure.
+                if name != "HID_INPUT":
+                    raise
         return actual
 
     async def disconnect(self) -> None:

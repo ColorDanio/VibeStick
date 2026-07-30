@@ -1367,10 +1367,10 @@ void uiShowMic(const char* errorText, bool yolo) {
     centerText("hold A: voice", footL1Y(), 1, COL_FAINT);
     centerText("A: enter  B: esc x2", footL2Y(), 1, COL_FAINT);
   } else if (land) {
-    centerText("A: PTT + F15  B: F14  pwr: back", footL1Y(), 1, COL_FAINT);
+    centerText("A: PTT + F14  B: F15  pwr: back", footL1Y(), 1, COL_FAINT);
   } else {
-    centerText("A: PTT + F15", footL1Y(), 1, COL_FAINT);
-    centerText("B: F14  pwr: back", footL2Y(), 1, COL_FAINT);
+    centerText("A: PTT + F14", footL1Y(), 1, COL_FAINT);
+    centerText("B: F15  pwr: back", footL2Y(), 1, COL_FAINT);
   }
 
   // Recent voice error, if any (replaces the hint line).

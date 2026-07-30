@@ -19,8 +19,8 @@
 //   home:            B = next tool (slide animation), A = select tool
 //   session picker:  B = next entry,         A = enter (new session / select)
 //   conversation:    hold A >=500 ms = record (voice.start), release = stop
-//   microphone:      A press = F15 + PTT start, A release = PTT stop + F15 up;
-//                    B is F14 only (power key exits Microphone mode)
+//   microphone:      A press = configured key (default F14) + PTT start;
+//                    B = configured key (default F15), power key exits mode
 //                    (voice.stop); transcript ready: A = send, B = discard;
 //                    thinking/running: A = inference.cancel;
 //                    otherwise A/B = scroll content down/up
@@ -346,7 +346,7 @@ static void pollButtons() {
     activity();
     sADownAt = millis();
     if (hidMicMode) {
-      hidKey(VIBESTICK_HID_KEY_A, true);
+      hidKey(hidKeyForButtonA(), true);
       // Microphone mode is PTT, not the conversation's delayed hold-to-talk:
       // physical A down simultaneously starts the raw BLE audio stream.
       if (!wakeOnly && !sRecording) startRecording(true);
@@ -356,13 +356,13 @@ static void pollButtons() {
     if (sDimmed) sSwallowGesture = true;
     activity();
     sBDownAt = millis();
-    if (hidMicMode) hidKey(VIBESTICK_HID_KEY_B, true);
+    if (hidMicMode) hidKey(hidKeyForButtonB(), true);
   }
 
   if (boardBtnA_wasReleased() && sADownAt != 0) {
     uint32_t dur = millis() - sADownAt;
     sADownAt = 0;
-    if (hidMicMode) hidKey(VIBESTICK_HID_KEY_A, false);
+    if (hidMicMode) hidKey(hidKeyForButtonA(), false);
     if (sSwallowGesture && !boardBtnA_isPressed() && !boardBtnB_isPressed()) {
       sSwallowGesture = false;
     } else if (hidMicMode) {
@@ -409,7 +409,7 @@ static void pollButtons() {
   if (boardBtnB_wasReleased() && sBDownAt != 0) {
     uint32_t dur = millis() - sBDownAt;
     sBDownAt = 0;
-    if (hidMicMode) hidKey(VIBESTICK_HID_KEY_B, false);
+    if (hidMicMode) hidKey(hidKeyForButtonB(), false);
     if (sSwallowGesture && !boardBtnA_isPressed() && !boardBtnB_isPressed()) {
       sSwallowGesture = false;
     } else if (!sSwallowGesture) {

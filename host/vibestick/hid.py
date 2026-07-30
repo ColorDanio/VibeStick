@@ -13,11 +13,14 @@ EV_SYN = 0x00
 EV_KEY = 0x01
 SYN_REPORT = 0
 BUS_BLUETOOTH = 0x05
+KEY_F13 = 183
 KEY_F14 = 184
 KEY_F15 = 185
+HID_USAGE_F13 = 0x68
 HID_USAGE_F14 = 0x69
 HID_USAGE_F15 = 0x6A
-USAGE_TO_KEYCODE = {HID_USAGE_F15: KEY_F15, HID_USAGE_F14: KEY_F14}
+USAGE_TO_KEYCODE = {usage: KEY_F13 + usage - HID_USAGE_F13
+                    for usage in range(HID_USAGE_F13, 0x74)}
 
 
 def keycodes_from_report(data: bytes) -> frozenset[int] | None:
@@ -69,7 +72,7 @@ class VirtualKeyboard:
         try:
             fd = os.open(self._path, os.O_WRONLY | os.O_NONBLOCK)
             fcntl.ioctl(fd, UI_SET_EVBIT, EV_KEY)
-            for key in (KEY_F14, KEY_F15):
+            for key in range(KEY_F13, KEY_F13 + 12):
                 fcntl.ioctl(fd, UI_SET_KEYBIT, key)
             # struct uinput_user_dev: name, input_id, ff_effects_max, absinfo
             setup = struct.pack("80sHHHHI" + "i" * 256,

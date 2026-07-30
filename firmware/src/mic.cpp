@@ -107,7 +107,10 @@ bool micRunning() { return sTask != nullptr; }
 
 static void micTask(void* arg) {
   int16_t raw[READ_SAMPLES];
-  uint8_t out[READ_SAMPLES / 2];
+  // StickC Plus downsamples its 16 kHz PDM capture 2:1, while StickS3's
+  // ES8311 capture is already at the 8 kHz protocol rate. Keep enough room
+  // for the latter's full READ_SAMPLES block.
+  uint8_t out[READ_SAMPLES];
   size_t bytesRead = 0;
   uint32_t smooth = 0;
   int32_t dc = 0;  // running DC estimate (~1 s time constant at 16 kHz)

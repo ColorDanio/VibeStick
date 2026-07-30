@@ -6,7 +6,7 @@
 #include "ble.h"
 
 // Standard boot-keyboard report, extended to usage max 0x73 (F13-F24) so
-// F14/F15 are available as application-bindable special keys.  The Report ID
+// F13–F24 are available as application-bindable special keys. The Report ID
 // is advertised by the Report Reference descriptor; it must not be prepended
 // to the GATT value. BlueZ 5.85 otherwise treats 0x01 as the modifier bitmap
 // and leaves Left Ctrl pressed.
@@ -38,6 +38,10 @@ static const uint8_t sReportMap[] = {
 };
 
 static NimBLECharacteristic* sInput = nullptr;
+static uint8_t sKeyA = VIBESTICK_HID_KEY_A;
+static uint8_t sKeyB = VIBESTICK_HID_KEY_B;
+
+static bool validFunctionKey(uint8_t usage) { return usage >= 0x68 && usage <= 0x73; }
 
 class HidReportCallbacks : public NimBLECharacteristicCallbacks {
   void onSubscribe(NimBLECharacteristic* /*characteristic*/,
@@ -70,8 +74,18 @@ void hidInit(NimBLEServer* pServer) {
   // v1.11, country 0, flags: remote-wake + normally-connectable.
   hid->hidInfo(0x00, 0x03);
   hid->startServices();
-  Serial.println("[HID] keyboard service up (Vibe Mic: A=F15, B=F14)");
+  Serial.println("[HID] keyboard service up (Vibe Mic: A=F14, B=F15)");
 }
+
+void hidSetBindings(uint8_t buttonA, uint8_t buttonB) {
+  if (validFunctionKey(buttonA)) sKeyA = buttonA;
+  if (validFunctionKey(buttonB)) sKeyB = buttonB;
+  Serial.printf("[HID] Vibe Mic bindings A=F%d B=F%d\n", sKeyA - 0x5B,
+                sKeyB - 0x5B);
+}
+
+uint8_t hidKeyForButtonA() { return sKeyA; }
+uint8_t hidKeyForButtonB() { return sKeyB; }
 
 void hidKey(uint8_t keycode, bool pressed) {
   if (!bleConnected() || sInput == nullptr) return;
@@ -82,7 +96,6 @@ void hidKey(uint8_t keycode, bool pressed) {
   const size_t subscribers = sInput->getSubscribedCount();
   sInput->setValue(report, sizeof(report));
   sInput->notify();
-  Serial.printf("[HID] %s %s (subscribers=%u)\n",
-                keycode == VIBESTICK_HID_KEY_A ? "F15" : "F14",
+  Serial.printf("[HID] F%d %s (subscribers=%u)\n", keycode - 0x5B,
                 pressed ? "press" : "release", (unsigned)subscribers);
 }
