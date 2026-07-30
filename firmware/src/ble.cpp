@@ -125,6 +125,9 @@ static int gapEventHandler(ble_gap_event* event, void* arg) {
 }
 
 class ServerCB : public NimBLEServerCallbacks {
+  // NimBLE deliberately invokes both the legacy and descriptor callback for
+  // every GAP event. Implement only the descriptor forms so one physical
+  // link transition produces exactly one UI state transition.
   void onConnect(NimBLEServer* pServer, ble_gap_conn_desc* desc) override {
     sConnected = true;
     gConnDirty = true;
@@ -137,15 +140,11 @@ class ServerCB : public NimBLEServerCallbacks {
     // BlueZ connection prevents the GATT bridge from discovering/attaching.
     pServer->startAdvertising();
   }
-  void onConnect(NimBLEServer* pServer) override {
-    sConnected = true;
-    gConnDirty = true;
-    Serial.println("[BLE] host connected");
-  }
-  void onDisconnect(NimBLEServer* pServer) override {
+  void onDisconnect(NimBLEServer* pServer, ble_gap_conn_desc* desc) override {
     sConnected = pServer->getConnectedCount() > 0;
     gConnDirty = true;
-    Serial.println("[BLE] host disconnected, advertising");
+    Serial.printf("[BLE] host disconnected (handle %d, peers %d), advertising\n",
+                  desc->conn_handle, pServer->getConnectedCount());
     pServer->startAdvertising();
   }
 };

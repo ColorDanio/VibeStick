@@ -437,9 +437,15 @@ static uint32_t sLastPulseAt = 0;
 static uint32_t sShakeCooldownUntil = 0;
 
 // Current LCD rotation (0=portrait, 1=landscape, 2/3=flipped) and the
-// candidate orientation pending confirmation (hysteresis).
+// candidate orientation pending confirmation (hysteresis). StickS3 uses the
+// native portrait layout (USB-C down) and does not auto-rotate.
+#ifdef VIBESTICK_BOARD_S3
+static uint8_t sOrientation = 0;
+static uint8_t sCandOrientation = 0;
+#else
 static uint8_t sOrientation = 1;
 static uint8_t sCandOrientation = 1;
+#endif
 static uint32_t sCandSince = 0;
 #define ORIENT_STABLE_MS 500
 
@@ -479,6 +485,9 @@ static void pollImu() {
     sLastPulseAt = now;
   }
 
+  // StickS3 is intentionally locked to portrait (USB-C down). Its IMU is
+  // still sampled above for wake and shake gestures.
+#ifndef VIBESTICK_BOARD_S3
   // Orientation: candidate must stay stable ORIENT_STABLE_MS before we
   // rotate. Locked while recording so the screen can't flip mid-gesture.
   // When the device is ~flat (gravity mostly on Z) keep the current
@@ -501,6 +510,7 @@ static void pollImu() {
                     (cand % 2 == 0) ? 240 : 135);
     }
   }
+#endif
 }
 
 // ---- battery ----
@@ -520,15 +530,34 @@ static void pollBattery(bool force) {
 
 // ---- BLE state application ----
 
+// A desktop BLE reconnect normally takes a few hundred milliseconds. Do not
+// bounce the device between the home and waiting screens during that window;
+// only a sustained absence is a real disconnection to the user.
+#define BLE_DISCONNECT_GRACE_MS 1500
+static uint32_t sDisconnectPendingAt = 0;
+
 static void applyBleDirty() {
   if (gConnDirty) {
     gConnDirty = false;
     if (!bleConnected()) {
-      if (sRecording) stopRecording();
-      setScreen(SCR_WAITING);
+      if (sDisconnectPendingAt == 0) {
+        sDisconnectPendingAt = millis();
+        Serial.println("[BLE] link absent; waiting briefly for reconnect");
+      }
     } else if (sScreen == SCR_WAITING) {
+      sDisconnectPendingAt = 0;
       setScreen(SCR_HOME);
+    } else {
+      sDisconnectPendingAt = 0;
     }
+    sNeedRedraw = true;
+  }
+  if (sDisconnectPendingAt != 0 && !bleConnected() &&
+      millis() - sDisconnectPendingAt >= BLE_DISCONNECT_GRACE_MS) {
+    sDisconnectPendingAt = 0;
+    if (sRecording) stopRecording();
+    Serial.println("[BLE] reconnect grace elapsed; showing waiting screen");
+    setScreen(SCR_WAITING);
     sNeedRedraw = true;
   }
   if (gToolsDirty) {

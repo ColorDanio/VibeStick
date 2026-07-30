@@ -474,7 +474,12 @@ static const uint16_t* toolLogo(const char* id) {
 // ---- Status bar ----
 
 void uiInit() {
+#ifdef VIBESTICK_BOARD_S3
+  // StickS3 is deliberately fixed to its native portrait layout: USB-C down.
+  uiSetOrientation(0);  // 135x240 portrait
+#else
   uiSetOrientation(1);  // 240x135 landscape
+#endif
   // Our bitmap arrays (icons.h/logos.h) are host-order uint16_t. The driver
   // defaults to _swapBytes=false (In_eSPI.cpp:253), which would send each
   // pixel LSB-first over SPI (pushColors -> spi.writeBytes) and byte-swap
