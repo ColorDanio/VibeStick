@@ -271,6 +271,11 @@ async function main(): Promise<void> {
       core.clearDevice();
       linux.transport.setTargetAddress(address);
       await runtime?.start();
+      // HostRuntime records a transport failure as degraded instead of
+      // throwing. The device-management API must surface that failure to the
+      // button; otherwise Activate looks like a successful no-op.
+      if (!runtime?.isBleOwner())
+        throw new Error(runtime?.diagnostics().error ?? "Could not activate this VibeStick");
       return { address };
     };
     const deviceAddress = (body: unknown): string => {
