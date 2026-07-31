@@ -160,8 +160,13 @@ class Helper:
         self._validate_address(address)
         if self.client is not None and str(self.client.address).upper() == address.upper():
             await self.disconnect()
+        # BlueZ may keep the HID keyboard link alive even after the app's GATT
+        # helper disconnects. Removing a bond beneath that connection leaves
+        # a stale device object which prevents a later Pair & Use. Tear down
+        # every link first, then remove the remembered pairing.
+        await self._bluetoothctl(f"disconnect {address}", timeout=8)
         output = await self._bluetoothctl(f"remove {address}", timeout=8)
-        if "not available" in output.lower() or "failed" in output.lower():
+        if "failed" in output.lower() and "not available" not in output.lower():
             raise RuntimeError(output.strip() or "Bluetooth unpair failed")
         if self._cached().upper() == address.upper():
             try:

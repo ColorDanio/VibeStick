@@ -437,8 +437,8 @@ static uint32_t sLastPulseAt = 0;
 static uint32_t sShakeCooldownUntil = 0;
 
 // Current LCD rotation (0=portrait, 1=landscape, 2/3=flipped) and the
-// candidate orientation pending confirmation (hysteresis). StickS3 uses the
-// native portrait layout (USB-C down) and does not auto-rotate.
+// candidate orientation pending confirmation (hysteresis). Both boards start
+// with USB-C down, then rotate after a stable physical orientation change.
 #ifdef VIBESTICK_BOARD_S3
 static uint8_t sOrientation = 0;
 static uint8_t sCandOrientation = 0;
@@ -485,9 +485,6 @@ static void pollImu() {
     sLastPulseAt = now;
   }
 
-  // StickS3 is intentionally locked to portrait (USB-C down). Its IMU is
-  // still sampled above for wake and shake gestures.
-#ifndef VIBESTICK_BOARD_S3
   // Orientation: candidate must stay stable ORIENT_STABLE_MS before we
   // rotate. Locked while recording so the screen can't flip mid-gesture.
   // When the device is ~flat (gravity mostly on Z) keep the current
@@ -510,7 +507,6 @@ static void pollImu() {
                     (cand % 2 == 0) ? 240 : 135);
     }
   }
-#endif
 }
 
 // ---- battery ----

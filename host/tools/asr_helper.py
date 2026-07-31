@@ -57,6 +57,12 @@ def main() -> None:
         if not isinstance(request, dict):
             raise ValueError("request must be an object")
         asr = ASRConfig.from_dict(request.get("asr"))
+        # Vibe Stick's default interaction language is Simplified Chinese.
+        # Auto-detection is unreliable for short 8 kHz push-to-talk clips and
+        # can decode Mandarin phonetics as English. An explicit user setting
+        # still overrides this default.
+        if asr.language is None:
+            asr.language = "zh"
         if asr.engine not in ("faster-whisper", "command"):
             raise ValueError("local helper supports faster-whisper or command ASR")
         action = request.get("action")

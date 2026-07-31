@@ -10,7 +10,7 @@ import {
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import stickCPlusImage from "./assets/m5stickc-plus-product-v2.png";
-import stickS3Image from "./assets/m5sticks3-concept.png";
+import stickS3Image from "./assets/m5sticks3-product-reference.png";
 
 type Page = "overview" | "sessions" | "voice" | "settings";
 type ThemePreference = "system" | "light" | "dark";
