@@ -65,6 +65,7 @@ async function main(): Promise<void> {
   let runtime: HostRuntime | undefined;
   let bridge: VibeBridge | undefined;
   let scanSticks: (() => Promise<{ name: string; address: string; rssi?: number | null; paired?: boolean; connected?: boolean }[]>) | undefined;
+  let pairedSticks: (() => Promise<{ name: string; address: string; rssi?: number | null; paired?: boolean; connected?: boolean }[]>) | undefined;
   let connectStick: ((body: unknown) => Promise<{ address: string }>) | undefined;
   let pairStick: ((body: unknown) => Promise<void>) | undefined;
   let unpairStick: ((body: unknown) => Promise<void>) | undefined;
@@ -156,6 +157,10 @@ async function main(): Promise<void> {
     async scanSticks() {
       if (!scanSticks) throw new Error("Stick scanning is available only with the Linux BLE helper");
       return scanSticks();
+    },
+    async pairedSticks() {
+      if (!pairedSticks) throw new Error("Paired VibeStick devices are available only with the Linux BLE helper");
+      return pairedSticks();
     },
     async connectStick(body) {
       if (!connectStick) throw new Error("Stick selection is available only with the Linux BLE helper");
@@ -255,6 +260,7 @@ async function main(): Promise<void> {
     bridge = linux.bridge;
     commands = linux.commands;
     scanSticks = () => linux.transport.scan();
+    pairedSticks = () => linux.transport.paired();
     connectStick = async (body) => {
       const address = typeof body === "object" && body !== null && typeof (body as { address?: unknown }).address === "string"
         ? (body as { address: string }).address.trim() : "";
