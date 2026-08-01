@@ -13,16 +13,16 @@
 #ifdef VIBESTICK_BOARD_S3
 #include <M5Unified.h>
 #define M5Lcd M5.Display
-#define BOARD_NAME "VibeStick v0.2.9 (M5StickS3)"
+#define BOARD_NAME "VibeStick v0.2.10 (M5StickS3)"
 #define BOARD_MODEL "M5StickS3"
 #else
 #include <M5StickCPlus.h>
 #define M5Lcd M5.Lcd
-#define BOARD_NAME "VibeStick v0.2.9 (M5StickC Plus)"
+#define BOARD_NAME "VibeStick v0.2.10 (M5StickC Plus)"
 #define BOARD_MODEL "M5StickC-Plus"
 #endif
 
-#define FIRMWARE_VERSION "0.2.9"
+#define FIRMWARE_VERSION "0.2.10"
 
 // One-time board init (M5.begin + display brightness).
 void boardInit();

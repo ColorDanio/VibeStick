@@ -20,9 +20,8 @@ void boardInit() {
   M5.begin(cfg);
   // Keep M5Unified's board-specific panel colour order.  Overriding it here
   // swaps red and blue on the StickS3 (the Bluetooth blue then looks orange).
-  // On StickS3's panel rotation 2, not 0, is portrait with USB-C at the
-  // physical bottom. Rotation 0 puts the UI's top-left at the bottom-left.
-  M5.Display.setRotation(2);
+  // S3 physical orientation contract: USB-C down is rotation 0.
+  M5.Display.setRotation(0);
   M5.Display.setBrightness(200);
 }
 
