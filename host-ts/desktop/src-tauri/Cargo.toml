@@ -1,6 +1,6 @@
 [package]
 name = "vibeconn"
-version = "0.2.17"
+version = "0.2.18"
 description = "Vibe Stick desktop shell"
 license = "MIT"
 authors = ["VibeStick contributors"]

@@ -69,11 +69,13 @@ bool boardBtnB_wasReleased() { return M5.BtnB.wasReleased(); }
 bool boardBtnB_isPressed() { return M5.BtnB.isPressed(); }
 
 uint8_t boardPowerButtonEvent() {
-  // M5PM1 reports both single and double clicks as a power-key event. The
-  // single-reset/double-off actions are disabled in boardInit(), leaving the
-  // application in control. A two-second hold still enters download mode in
-  // the PMU and therefore does not return here.
-  return M5.Power.getKeyState();
+  // M5.update() polls the PMU before the application loop and consumes the
+  // one-shot getKeyState() result into BtnPWR. Read the debounced button state
+  // here instead of polling the PMU a second time (which would always return
+  // zero and make submenu back appear broken).
+  if (M5.BtnPWR.wasClicked()) return 2;
+  if (M5.BtnPWR.wasHold()) return 1;
+  return 0;
 }
 
 void boardRestart() { ESP.restart(); }
