@@ -763,7 +763,11 @@ function LiveActivity({ data, selected }: { data: Snapshot; selected?: Session }
 }
 function CurrentTarget({ data, selected, agents }: { data: Snapshot; selected?: Session; agents: Agent[] }): ReactElement {
   const t = useT();
-  return <section className="panel current-target"><span className="section-label">{t("CURRENT TARGET", "当前目标")}</span><div className="target-mark">›_</div><h2>{currentTarget(data, selected, t)}</h2><p className="lede">{targetDetail(data, selected, agents, t)}</p><div className="target-mode"><i className={data.environment.owner === "active" ? "online" : "warn"} />{modeName(data.device_mode, t)}</div></section>;
+  const voiceMode = data.device_mode === "mic" || data.device_mode === "yolo";
+  const state = voiceMode ? voiceStateName(data.voice.state, t) : "";
+  const stateClass = voiceMode ? ` ${data.voice.state}` : "";
+  const mark = data.device_mode === "yolo" ? "✦" : data.device_mode === "mic" ? "◉" : "›_";
+  return <section className="panel current-target"><span className="section-label">{t("CURRENT TARGET", "当前目标")}</span><div className={`target-mark ${data.device_mode}`}>{mark}</div><div className="target-heading"><h2>{currentTarget(data, selected, t)}</h2>{voiceMode && <b className={`target-voice-state${stateClass}`}><i />{state}</b>}</div><p className="lede">{targetDetail(data, selected, agents, t)}</p><div className="target-mode"><i className={data.environment.owner === "active" ? "online" : "warn"} /><span className="target-mode-name">{modeName(data.device_mode, t)}</span>{voiceMode && <b className={`target-voice-state compact${stateClass}`}><i />{state}</b>}</div></section>;
 }
 function deviceName(model: string): string {
   const kind = stickKind(model);
@@ -790,8 +794,14 @@ function modeName(mode: Snapshot["device_mode"], t: Translate = (english) => eng
 }
 function currentTarget(data: Snapshot, selected: Session | undefined, t: Translate): string {
   if (data.device_mode === "mic" || data.device_mode === "yolo")
-    return data.foreground_target?.app ?? t("Detecting focused application…", "正在检测当前应用…");
+    return data.foreground_target?.app ?? (data.device_mode === "yolo" ? t("YOLO target", "YOLO 目标") : t("Vibe Mic target", "Vibe Mic 目标"));
   return selected ? sessionTitle(selected, t) : t("No session selected", "未选择会话");
+}
+function voiceStateName(state: Snapshot["voice"]["state"], t: Translate): string {
+  return state === "recording" ? t("Listening", "聆听中")
+    : state === "transcribing" ? t("Transcribing", "转写中")
+      : state === "error" ? t("Error", "错误")
+        : t("Ready", "就绪");
 }
 function targetDetail(data: Snapshot, selected: Session | undefined, agents: Agent[], t: Translate): string {
   if (data.device_mode === "mic")
