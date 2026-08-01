@@ -453,10 +453,11 @@ static uint32_t sCandSince = 0;
 // closest of the 4 rotations after M5Unified has normalized the board IMU.
 static uint8_t orientationFromAccel(float ax, float ay) {
 #ifdef VIBESTICK_BOARD_S3
-  // S3 physical orientation contract:
-  // USB down=0, left=3, up=2, right=1.
-  if (fabsf(ay) >= fabsf(ax)) return ay >= 0 ? 0 : 2;
-  return ax >= 0 ? 1 : 3;
+  // S3 panel calibration: rotation 0 is USB-right. Moving the USB edge
+  // counter-clockwise advances the display rotation: right=0, up=1,
+  // left=2, down=3.
+  if (fabsf(ay) >= fabsf(ax)) return ay >= 0 ? 3 : 1;
+  return ax >= 0 ? 0 : 2;
 #else
   if (fabsf(ay) >= fabsf(ax)) return ay >= 0 ? 0 : 2;  // portrait
   return ax >= 0 ? 1 : 3;                             // landscape
