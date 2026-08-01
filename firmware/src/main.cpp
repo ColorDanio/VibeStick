@@ -440,8 +440,8 @@ static uint32_t sShakeCooldownUntil = 0;
 // candidate orientation pending confirmation (hysteresis). Both boards start
 // with USB-C down, then rotate after a stable physical orientation change.
 #ifdef VIBESTICK_BOARD_S3
-static uint8_t sOrientation = 0;
-static uint8_t sCandOrientation = 0;
+static uint8_t sOrientation = 2;
+static uint8_t sCandOrientation = 2;
 #else
 static uint8_t sOrientation = 1;
 static uint8_t sCandOrientation = 1;
@@ -452,8 +452,16 @@ static uint32_t sCandSince = 0;
 // +Y points toward the device top and +X toward the right side. Pick the
 // closest of the 4 rotations after M5Unified has normalized the board IMU.
 static uint8_t orientationFromAccel(float ax, float ay) {
+#ifdef VIBESTICK_BOARD_S3
+  // StickS3 panel/IMU coordinates are inverted relative to StickC Plus.
+  // USB-C-down portrait is rotation 2; apply the same 180-degree offset to
+  // the landscape positions so subsequent auto-rotation remains consistent.
+  if (fabsf(ay) >= fabsf(ax)) return ay >= 0 ? 2 : 0;
+  return ax >= 0 ? 3 : 1;
+#else
   if (fabsf(ay) >= fabsf(ax)) return ay >= 0 ? 0 : 2;  // portrait
   return ax >= 0 ? 1 : 3;                             // landscape
+#endif
 }
 
 static void pollImu() {
