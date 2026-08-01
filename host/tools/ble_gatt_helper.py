@@ -120,6 +120,11 @@ class Helper:
             if len(parts) != 3 or parts[0] != "Device" or not parts[2].startswith("VibeStick_"):
                 continue
             address, name = parts[1].upper(), parts[2]
+            # ``bluetoothctl devices Paired`` can briefly retain a stale line
+            # after remove. Confirm the actual BlueZ bond before exposing it
+            # to the UI, otherwise an already removed Stick reappears.
+            if not await self._is_paired(address):
+                continue
             devices.append({"name": name, "address": address, "rssi": None, "paired": True, "connected": address == active})
         return sorted(devices, key=lambda item: item["name"])
 
@@ -168,6 +173,17 @@ class Helper:
         output = await self._bluetoothctl(f"remove {address}", timeout=8)
         if "failed" in output.lower() and "not available" not in output.lower():
             raise RuntimeError(output.strip() or "Bluetooth unpair failed")
+        # BlueZ processes remove asynchronously. Verify the bond is really
+        # gone, retrying a few times for the HID/GATT device object to settle.
+        for attempt in range(5):
+            if not await self._is_paired(address):
+                break
+            if attempt == 4:
+                raise RuntimeError("Bluetooth still reports this Stick as paired")
+            await asyncio.sleep(0.35)
+            retry = await self._bluetoothctl(f"remove {address}", timeout=8)
+            if "failed" in retry.lower() and "not available" not in retry.lower():
+                raise RuntimeError(retry.strip() or "Bluetooth unpair failed")
         if self._cached().upper() == address.upper():
             try:
                 CACHE.unlink()
@@ -183,6 +199,11 @@ class Helper:
     async def _bluetoothctl(command: str, timeout: int) -> str:
         result = await asyncio.to_thread(subprocess.run, ["bluetoothctl", "--timeout", str(timeout), *command.split()], capture_output=True, text=True, timeout=timeout + 3, check=False)
         return result.stdout + result.stderr
+
+    @classmethod
+    async def _is_paired(cls, address: str) -> bool:
+        output = await cls._bluetoothctl(f"info {address}", timeout=6)
+        return bool(re.search(r"(?im)^\s*Paired:\s*yes\s*$", output))
 
     async def disconnect(self) -> None:
         try:

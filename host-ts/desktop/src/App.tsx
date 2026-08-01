@@ -10,7 +10,7 @@ import {
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import stickCPlusImage from "./assets/m5stickc-plus-product-v2.png";
-import stickS3Image from "./assets/m5sticks3-product-reference.png";
+import stickS3Image from "./assets/m5sticks3-product-transparent.png";
 
 type Page = "overview" | "sessions" | "voice" | "settings";
 type ThemePreference = "system" | "light" | "dark";
@@ -1056,6 +1056,11 @@ function Settings(props: {
         const result = await response.json().catch(() => ({})) as { error?: string };
         throw new Error(result.error ?? "Remove failed");
       }
+      // Update the list immediately. BlueZ can take a moment to publish the
+      // changed bond state, so waiting for a second fetch here used to make a
+      // successfully removed Stick appear to remain paired.
+      setPairedSticks((items) => items.filter((item) => item.address !== address));
+      setNearbySticks((items) => items.filter((item) => item.address !== address));
       await loadPaired();
       setDeviceError("");
     } catch (error) { setDeviceError(error instanceof Error ? error.message : "Remove failed"); }
@@ -1090,7 +1095,6 @@ function Settings(props: {
       </div>
       <section className="setup-section">
         <div><span className="section-label">{t("DEVICE SETUP", "设备设置")}</span><h3>{t("VibeStick devices", "VibeStick 设备")}</h3><p>{t("Manage paired Sticks and their connection state.", "管理已配对设备及其连接状态。")}</p></div>
-        {data.environment.owner === "active" && <div className="device-manager"><DeviceImage model={data.device.model} /><div><b>{data.device.name || deviceName(data.device.model)}</b><span><i className="online" />{t("Connected", "已连接")}</span><small>{data.device.firmware || t("Firmware detected automatically", "自动检测固件版本")}</small></div></div>}
         <button className="quiet" onClick={() => void scan()} disabled={deviceBusy === "scan"}>{deviceBusy === "scan" ? t("Scanning…", "正在扫描…") : `+ ${t("Scan for Sticks", "扫描设备")}`}</button>
         {deviceError && <p className="notice">{deviceError}</p>}
         <h4 className="device-list-title">{t("Paired Sticks", "已配对设备")}</h4>
@@ -1162,26 +1166,27 @@ function Settings(props: {
         </div>
       )}
       {props.desktopShell && (
-        <div className="form-block inline">
+        <div className="form-block inline startup-setting">
           <div>
             <h3>{t("Start at login", "登录时启动")}</h3>
             <p>
-              {props.loginEnabled ? t("Enabled for this user.", "已为当前用户启用。") : t("Not enabled.", "尚未启用。")}
+              {props.loginEnabled === undefined
+                ? t("Checking the current startup setting…", "正在检查当前开机启动状态…")
+                : props.loginEnabled
+                  ? t("Vibe Stick starts automatically for this user.", "Vibe Stick 将为当前用户自动启动。")
+                  : t("Vibe Stick will stay closed until you launch it.", "Vibe Stick 不会自动启动。")}
             </p>
           </div>
           <button
-            className="secondary"
-            disabled={props.busy === "install" || props.loginEnabled}
-            onClick={() => void props.onLogin("install")}
+            type="button"
+            role="switch"
+            aria-checked={props.loginEnabled === true}
+            className={`startup-toggle${props.loginEnabled ? " enabled" : ""}`}
+            disabled={props.loginEnabled === undefined || props.busy === "install" || props.busy === "uninstall"}
+            onClick={() => void props.onLogin(props.loginEnabled ? "uninstall" : "install")}
           >
-            {t("Enable", "启用")}
-          </button>
-          <button
-            className="quiet"
-            disabled={props.busy === "uninstall" || !props.loginEnabled}
-            onClick={() => void props.onLogin("uninstall")}
-          >
-            {t("Remove", "移除")}
+            <span className="startup-toggle-track" aria-hidden="true"><span /></span>
+            <span>{props.busy === "install" || props.busy === "uninstall" ? t("Saving…", "正在保存…") : props.loginEnabled ? t("Enabled", "已启用") : t("Disabled", "已禁用")}</span>
           </button>
         </div>
       )}

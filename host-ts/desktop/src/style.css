@@ -46,6 +46,17 @@ nav { display:grid; gap:6px; margin-top:50px; } .nav-item { display:flex; align-
 .device-manager .stick { width:36px; height:58px; border-radius:7px; } .device-manager b,.device-manager span,.device-manager small { display:block; } .device-manager b { color:#e9f1f8; font-size:13px; } .device-manager span { display:flex; align-items:center; gap:6px; margin-top:4px; color:#7ee4c3; font-size:11px; } .device-manager small { margin-top:3px; color:#7f90a2; font-size:10px; }
 .device-list-title { margin:22px 0 9px; color:#9fb4c9; font-size:11px; letter-spacing:.12em; text-transform:uppercase; } .muted { color:#7f90a2; font-size:12px; }
 .host-setup { border-bottom:0; padding-bottom:0; } .language-setting { margin-top:10px; } :root[data-theme="light"] .setup-section { border-color:#d8e3ea; } :root[data-theme="light"] .device-manager { border-color:#d1dfe8; background:#f8fbfd; } :root[data-theme="light"] .device-manager b { color:#203448; }
+.startup-setting { align-items:center; }
+.startup-toggle { display:inline-flex; align-items:center; justify-content:center; gap:9px; min-width:132px; height:36px; padding:0 12px; border:1px solid #405063; border-radius:7px; color:#d6e3ee; background:#1b2532; font-size:12px; font-weight:850; }
+.startup-toggle:hover { border-color:#687a90; background:#263343; }
+.startup-toggle-track { position:relative; display:inline-block; width:30px; height:17px; border-radius:999px; background:#536274; transition:background .15s ease; }
+.startup-toggle-track span { position:absolute; top:3px; left:3px; width:11px; height:11px; border-radius:50%; background:#f5f8fb; transition:transform .15s ease; }
+.startup-toggle.enabled { border-color:#2d8c83; color:#8de9d1; background:#102b29; }
+.startup-toggle.enabled .startup-toggle-track { background:#2bd5b0; }
+.startup-toggle.enabled .startup-toggle-track span { transform:translateX(13px); }
+:root[data-theme="light"] .startup-toggle { border-color:#9cabb8; color:#213444; background:#f7fafc; }
+:root[data-theme="light"] .startup-toggle:hover { border-color:#78909f; background:#e7f2f6; }
+:root[data-theme="light"] .startup-toggle.enabled { border-color:#5ba99b; color:#176052; background:#edfbf5; }
 .dashboard-hero .device-facts { display:flex; flex-wrap:wrap; gap:7px 9px; margin-top:17px; }
 .dashboard-hero .device-facts .status-fact { display:inline-flex; align-items:center; gap:6px; min-height:25px; padding:0 8px; border:1px solid #33404d; border-radius:5px; background:#0d151e; white-space:nowrap; }
 .dashboard-hero .device-facts .status-fact small { color:#73849a; font-size:10px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; }
