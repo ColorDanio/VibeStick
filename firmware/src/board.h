@@ -13,16 +13,16 @@
 #ifdef VIBESTICK_BOARD_S3
 #include <M5Unified.h>
 #define M5Lcd M5.Display
-#define BOARD_NAME "VibeStick v0.2.16 (M5StickS3)"
+#define BOARD_NAME "VibeStick v0.2.17 (M5StickS3)"
 #define BOARD_MODEL "M5StickS3"
 #else
 #include <M5StickCPlus.h>
 #define M5Lcd M5.Lcd
-#define BOARD_NAME "VibeStick v0.2.16 (M5StickC Plus)"
+#define BOARD_NAME "VibeStick v0.2.17 (M5StickC Plus)"
 #define BOARD_MODEL "M5StickC-Plus"
 #endif
 
-#define FIRMWARE_VERSION "0.2.16"
+#define FIRMWARE_VERSION "0.2.17"
 
 // One-time board init (M5.begin + display brightness).
 void boardInit();
@@ -40,9 +40,14 @@ bool boardBtnB_wasReleased();
 bool boardBtnB_isPressed();
 
 // Power key edge events: 0 = none, 1 = long press, 2 = short press.
-// StickC Plus: AXP192 PEK IRQ. StickS3: no equivalent (reset button is
-// hardware power/reset) -- always 0; back/home uses long-B only there.
+// StickC Plus: AXP192 PEK IRQ. StickS3: M5PM1 click IRQ after boardInit()
+// disables the PMU's single-reset and double-off actions. A two-second hold
+// remains owned by the PMU and enters download mode.
 uint8_t boardPowerButtonEvent();
+
+// Restart the MCU from the application (used for a short press on the home
+// screen). The S3 PMU is configured so this is the only short-press reset.
+void boardRestart();
 
 // Battery level 0..100, -1 when unknown.
 int boardBatteryPct();

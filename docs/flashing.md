@@ -80,7 +80,8 @@ pio run -d firmware -e m5stick-s3-recovery -t upload --upload-port /dev/ttyACM0
 ```
 
 After `SUCCESS`, unplug and reconnect the Stick or restart it. Its serial log
-should include the current Vibe Stick version and `advertising as 'VibeStick'`.
+should include the current Vibe Stick version and an advertising name such as
+`VibeStick_A1B2` (the suffix is derived from the board's factory MAC).
 
 ## Troubleshooting
 

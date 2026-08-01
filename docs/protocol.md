@@ -56,8 +56,10 @@ Session-centric flow over a terminal-style ("fake CLI") screen:
   - **Double-click `A`** while `thinking`/`running` = cancel the
     ongoing inference (`inference.cancel`).
   - `B` with a pending transcript = discard (`voice.cancel`).
-- **Power key**: short press = back (conversation -> session picker ->
-  home), double press = home (tool picker).
+- **Power key**: on the StickS3, a short press returns from a submenu and
+  restarts the device only on the home screen; the PMU still enters download
+  mode after a 2-second hold. The C Plus keeps its legacy short-back and
+  double-home behavior.
 - Long-press `B` (>=800 ms, anywhere) = back. Shake = `refresh`.
 
 `fn.activate` remains in the protocol for backwards compatibility but

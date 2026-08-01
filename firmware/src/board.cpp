@@ -12,6 +12,36 @@ static void initDeviceName() {
            (unsigned long long)(mac & 0xFFFF));
 }
 
+// StickS3's side key is managed by the M5PM1 power controller. Its factory
+// configuration treats a single click as a hardware reset, so the ESP32 never
+// gets a chance to route that click to the UI. Keep the two-second download
+// gesture, but make short/double clicks application events instead.
+static void configurePowerButton() {
+  constexpr uint8_t kButtonConfig1 = 0x49;
+  constexpr uint8_t kButtonConfig2 = 0x4A;
+  constexpr uint8_t kSingleResetDisable = 1u << 0;
+  constexpr uint8_t kLongPressMask = 0x03u << 3;
+  constexpr uint8_t kLongPressTwoSeconds = 0x01u << 3;
+  constexpr uint8_t kDoubleOffDisable = 1u << 0;
+
+  uint8_t cfg1 = M5.Power.M5pm1.readRegister8(kButtonConfig1);
+  cfg1 |= kSingleResetDisable;
+  cfg1 = (cfg1 & ~kLongPressMask) | kLongPressTwoSeconds;
+  const bool cfg1Ok = M5.Power.M5pm1.writeRegister8(kButtonConfig1, cfg1);
+
+  uint8_t cfg2 = M5.Power.M5pm1.readRegister8(kButtonConfig2);
+  cfg2 |= kDoubleOffDisable;
+  const bool cfg2Ok = M5.Power.M5pm1.writeRegister8(kButtonConfig2, cfg2);
+  const bool irqOk = M5.Power.M5pm1.setButtonIRQMaskBits(0x00);
+
+  // Discard a click that may have been latched while the PMU was starting.
+  M5.Power.M5pm1.clearButtonIRQStatus();
+  Serial.printf("[PWR] PM1 app button mode: reset=%s double-off=%s irq=%s long=2s\n",
+                cfg1Ok ? "disabled" : "unchanged",
+                cfg2Ok ? "disabled" : "unchanged",
+                irqOk ? "enabled" : "unchanged");
+}
+
 const char* boardDeviceName() { return sDeviceName; }
 
 void boardInit() {
@@ -23,6 +53,7 @@ void boardInit() {
   // S3 physical orientation contract: USB-C down is rotation 0.
   M5.Display.setRotation(0);
   M5.Display.setBrightness(200);
+  configurePowerButton();
 }
 
 // StickS3's A/B GPIOs are board-specific. M5Unified owns their debounce;
@@ -38,11 +69,14 @@ bool boardBtnB_wasReleased() { return M5.BtnB.wasReleased(); }
 bool boardBtnB_isPressed() { return M5.BtnB.isPressed(); }
 
 uint8_t boardPowerButtonEvent() {
-  // StickS3's side key is a hardware power/reset control: single-click reset,
-  // double-click power off, long-press download mode. It can reset or power
-  // down the MCU before app code receives an event, so it is not an app key.
-  return 0;
+  // M5PM1 reports both single and double clicks as a power-key event. The
+  // single-reset/double-off actions are disabled in boardInit(), leaving the
+  // application in control. A two-second hold still enters download mode in
+  // the PMU and therefore does not return here.
+  return M5.Power.getKeyState();
 }
+
+void boardRestart() { ESP.restart(); }
 
 int boardBatteryPct() {
   int lvl = M5.Power.getBatteryLevel();  // 0..100, -1 if unsupported
@@ -91,6 +125,8 @@ bool boardBtnB_wasReleased() { return M5.BtnB.wasReleased(); }
 bool boardBtnB_isPressed() { return M5.BtnB.isPressed(); }
 
 uint8_t boardPowerButtonEvent() { return M5.Axp.GetBtnPress(); }
+
+void boardRestart() { ESP.restart(); }
 
 int boardBatteryPct() {
   float v = M5.Axp.GetBatVoltage();

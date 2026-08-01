@@ -148,7 +148,9 @@ Notable details:
   portrait, horizontal in landscape).
 - **IMU** — orientation auto-rotation (all four), double-shake refresh,
   motion wake; stable while lying flat.
-- **Power button** — short press = back one level, double press = home.
+- **Power button** — StickS3 short press returns from a submenu and restarts
+  only on home; its PMU 2-second hold still enters download mode. C Plus uses
+  the legacy short-back/double-home behavior.
 - **Rendering safety** — all LCD text passes through a sanitizer that
   replaces non-ASCII bytes with `?` (the built-in GLCD font has no CJK
   glyphs and its renderer wedges the ESP32 on high bytes); every

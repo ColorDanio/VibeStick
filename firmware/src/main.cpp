@@ -25,7 +25,8 @@
 //                    thinking/running: A = inference.cancel;
 //                    otherwise A/B = scroll content down/up
 //   anywhere:        B long = back one level; shake = refresh
-//   power key:       short press = back one level, double press = home
+//   power key:       S3 short press = back in submenus, restart on home;
+//                    C Plus keeps the legacy short-back/double-home behavior
 //   idle 60 s = display dim (wake on button/motion); display auto-rotates
 //   portrait/landscape from the IMU gravity vector (locked while recording)
 
@@ -632,8 +633,9 @@ static void applyBleDirty() {
 //
 // boardPowerButtonEvent() returns AXP192 IRQ status reg 0x46 and clears it.
 // On this unit: 0 = none, 1 = long press (>=2 s), 2 = short press.
-// Short press = back one level; double press (two short presses within
-// 400 ms) = home. Long press is ignored (the PMU owns power-off).
+// C Plus: short press = back one level; double press (two short presses within
+// 400 ms) = home. Long press is ignored (the PMU owns power-off). S3 routes
+// each PMU click directly to the screen-specific handler below.
 
 static bool sPowerAwaitSecond = false;
 static uint32_t sPowerFirstAt = 0;
@@ -651,6 +653,21 @@ static void pollPowerButton() {
     Serial.printf("[PWR] power button event: %d\n", btn);
     activity();
   }
+#ifdef VIBESTICK_BOARD_S3
+  // The S3 PMU now leaves short clicks for the application. Keep the home
+  // screen as an explicit restart action, while every real submenu behaves
+  // like a conventional back button. Waiting is intentionally a no-op.
+  if (btn == 2) {
+    if (sScreen == SCR_HOME) {
+      Serial.println("[PWR] short press on home -> restart");
+      boardRestart();
+    } else if (sScreen != SCR_WAITING) {
+      Serial.println("[PWR] short press -> back");
+      back();
+    }
+    return;
+  }
+#else
   if (btn == 2) {
     if (sPowerAwaitSecond && now - sPowerFirstAt < DBL_CLICK_MS) {
       sPowerAwaitSecond = false;
@@ -666,6 +683,7 @@ static void pollPowerButton() {
     Serial.println("[PWR] short press -> back");
     back();
   }
+#endif
 }
 
 // ---- status LED: off when connected, slow blink when advertising ----
