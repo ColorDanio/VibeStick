@@ -44,6 +44,7 @@ nav { display:grid; gap:6px; margin-top:50px; } .nav-item { display:flex; align-
 .setup-section { padding:3px 0 18px; border-bottom:1px solid #2a3440; } .setup-section h3 { margin:7px 0 4px; font-size:17px; } .setup-section p { margin:0; color:#9ba9ba; font-size:12px; }
 .device-manager { display:grid; grid-template-columns:44px minmax(0,1fr) auto; gap:13px; align-items:center; margin:16px 0 3px; padding:13px; border:1px solid #30404e; border-radius:9px; background:#0d141d; }
 .device-manager .stick { width:36px; height:58px; border-radius:7px; } .device-manager b,.device-manager span,.device-manager small { display:block; } .device-manager b { color:#e9f1f8; font-size:13px; } .device-manager span { display:flex; align-items:center; gap:6px; margin-top:4px; color:#7ee4c3; font-size:11px; } .device-manager small { margin-top:3px; color:#7f90a2; font-size:10px; }
+.device-manager.active-device { border-color:#287878; background:#102126; }
 .device-list-title { margin:22px 0 9px; color:#9fb4c9; font-size:11px; letter-spacing:.12em; text-transform:uppercase; } .muted { color:#7f90a2; font-size:12px; }
 .host-setup { border-bottom:0; padding-bottom:0; } .language-setting { margin-top:10px; } :root[data-theme="light"] .setup-section { border-color:#d8e3ea; } :root[data-theme="light"] .device-manager { border-color:#d1dfe8; background:#f8fbfd; } :root[data-theme="light"] .device-manager b { color:#203448; }
 .startup-setting { align-items:center; }
@@ -57,6 +58,7 @@ nav { display:grid; gap:6px; margin-top:50px; } .nav-item { display:flex; align-
 :root[data-theme="light"] .startup-toggle { border-color:#9cabb8; color:#213444; background:#f7fafc; }
 :root[data-theme="light"] .startup-toggle:hover { border-color:#78909f; background:#e7f2f6; }
 :root[data-theme="light"] .startup-toggle.enabled { border-color:#5ba99b; color:#176052; background:#edfbf5; }
+:root[data-theme="light"] .device-manager.active-device { border-color:#83c7c0; background:#effaf8; }
 .dashboard-hero .device-facts { display:flex; flex-wrap:wrap; gap:7px 9px; margin-top:17px; }
 .dashboard-hero .device-facts .status-fact { display:inline-flex; align-items:center; gap:6px; min-height:25px; padding:0 8px; border:1px solid #33404d; border-radius:5px; background:#0d151e; white-space:nowrap; }
 .dashboard-hero .device-facts .status-fact small { color:#73849a; font-size:10px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; }
