@@ -511,7 +511,9 @@ export function App(): ReactElement {
   };
   return (
     <LocaleContext.Provider value={locale}>
-    <main className="vibe-app">
+    <div className="window-shell">
+      {isTauri() && <WindowChrome locale={locale} connected={connected} />}
+      <main className="vibe-app">
       <aside className="rail">
         <button className="wordmark" onClick={() => setPage("overview")}>
           <span>V</span>
@@ -654,10 +656,81 @@ export function App(): ReactElement {
           />
         )}
       </section>
-    </main>
+      </main>
+    </div>
     </LocaleContext.Provider>
   );
 }
+
+function WindowChrome({
+  locale,
+  connected,
+}: {
+  locale: Locale;
+  connected: boolean;
+}): ReactElement {
+  const [maximized, setMaximized] = useState(false);
+  const currentWindow = (): ReturnType<typeof getCurrentWindow> =>
+    getCurrentWindow();
+  const t = (english: string, chinese: string): string =>
+    locale === "zh" ? chinese : english;
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    const window = currentWindow();
+    let alive = true;
+    const syncMaximized = async (): Promise<void> => {
+      try {
+        const value = await window.isMaximized();
+        if (alive) setMaximized(value);
+      } catch {
+        // Window controls are best effort on unsupported webview hosts.
+      }
+    };
+    void syncMaximized();
+    const unlisten = window.onResized(() => void syncMaximized());
+    return () => {
+      alive = false;
+      void unlisten.then((dispose) => dispose());
+    };
+  }, []);
+
+  const minimize = (): void => {
+    if (isTauri()) void currentWindow().minimize();
+  };
+  const toggleMaximize = (): void => {
+    if (!isTauri()) return;
+    void currentWindow().toggleMaximize().then(() => setMaximized((value) => !value));
+  };
+  const hideToTray = (): void => {
+    if (isTauri()) void currentWindow().close();
+  };
+
+  return (
+    <header
+      className="window-chrome"
+      data-tauri-drag-region
+      onDoubleClick={(event) => {
+        if (!(event.target as HTMLElement).closest("button")) toggleMaximize();
+      }}
+    >
+      <div className="window-title" data-tauri-drag-region>
+        <span className="window-mark" aria-hidden="true">V</span>
+        <span className="window-title-copy">
+          <b>Vibe Stick</b>
+          <small>{t("Desktop companion", "桌面伴侣")}</small>
+        </span>
+        <i className={connected ? "window-status online" : "window-status warn"} />
+      </div>
+      <div className="window-controls" aria-label={t("Window controls", "窗口控制")}>
+        <button className="window-control" type="button" onClick={minimize} aria-label={t("Minimize", "最小化")} title={t("Minimize", "最小化")}>−</button>
+        <button className="window-control" type="button" onClick={toggleMaximize} aria-label={maximized ? t("Restore", "还原") : t("Maximize", "最大化")} title={maximized ? t("Restore", "还原") : t("Maximize", "最大化")}>{maximized ? "❐" : "□"}</button>
+        <button className="window-control close" type="button" onClick={hideToTray} aria-label={t("Hide to tray", "隐藏到系统托盘")} title={t("Hide to tray", "隐藏到系统托盘")}>×</button>
+      </div>
+    </header>
+  );
+}
+
 function Nav({
   page,
   target,
