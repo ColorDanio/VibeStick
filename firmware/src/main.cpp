@@ -629,10 +629,10 @@ static void applyBleDirty() {
 }
 
 
-// ---- power button (AXP192 PEK) ----
+// ---- power button (AXP192 PEK / M5PM1) ----
 //
-// boardPowerButtonEvent() returns AXP192 IRQ status reg 0x46 and clears it.
-// On this unit: 0 = none, 1 = long press (>=2 s), 2 = short press.
+// boardPowerButtonEvent() normalizes both PMU implementations to: 0 = none,
+// 1 = long press (>=2 s), 2 = short press.
 // C Plus: short press = back one level; double press (two short presses within
 // 400 ms) = home. Long press is ignored (the PMU owns power-off). S3 routes
 // each PMU click directly to the screen-specific handler below.
