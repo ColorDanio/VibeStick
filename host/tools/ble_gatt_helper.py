@@ -59,27 +59,41 @@ class Helper:
             self._release_owner()
             raise ConnectionError("No VibeStick selected. Choose one in Device Setup first.")
         self._validate_address(target)
+        client = None
         try:
             client = BleakClient(target, timeout=20.0, disconnected_callback=self._disconnected)
             await asyncio.wait_for(client.connect(), timeout=25.0)
         except Exception:
-            self._release_owner()
+            try:
+                if client is not None and client.is_connected:
+                    await client.disconnect()
+            finally:
+                self._release_owner()
             raise
         self.client = client
         actual = str(client.address)
         CACHE.parent.mkdir(parents=True, exist_ok=True)
         CACHE.write_text(actual + "\n")
-        for name, uuid in NOTIFY.items():
+        try:
+            for name, uuid in NOTIFY.items():
+                try:
+                    await client.start_notify(uuid, self._notify(name))
+                except Exception:
+                    # BlueZ can auto-own the standard HID input report for its
+                    # keyboard integration and reject a second application
+                    # subscription. The GATT command/audio bridge remains fully
+                    # usable, so do not turn that optional fallback into a
+                    # connection failure.
+                    if name != "HID_INPUT":
+                        raise
+        except Exception:
             try:
-                await client.start_notify(uuid, self._notify(name))
-            except Exception:
-                # BlueZ can auto-own the standard HID input report for its
-                # keyboard integration and reject a second application
-                # subscription. The GATT command/audio bridge remains fully
-                # usable, so do not turn that optional fallback into a
-                # connection failure.
-                if name != "HID_INPUT":
-                    raise
+                if client.is_connected:
+                    await client.disconnect()
+            finally:
+                self.client = None
+                self._release_owner()
+            raise
         return actual
 
     async def scan(self) -> list[dict]:
@@ -131,10 +145,11 @@ class Helper:
     async def pair(self, address: str) -> None:
         """Pair through the BlueZ D-Bus path used by Bleak, not an ephemeral CLI agent.
 
-        ``bluetoothctl pair`` starts an interactive agent that can disappear when
-        the short-lived command exits.  Bleak's ``pair=True`` keeps pairing and
-        the GATT connection in the same BlueZ operation, which makes the result
-        observable before the UI is told it succeeded.
+        Bleak's ``pair=True`` keeps pairing and the GATT connection in the same
+        BlueZ operation. BlueZ still requires an Agent1 implementation for the
+        HID security request, even for a no-input/no-output Just Works device;
+        the temporary bluetoothctl agent below supplies that contract for the
+        duration of the operation.
         """
         from bleak import BleakClient
         self._validate_address(address)
@@ -142,7 +157,24 @@ class Helper:
             raise RuntimeError("Disconnect the active VibeStick before pairing another one")
         self._acquire_owner()
         client = None
+        pairing_agent = None
         try:
+            # Register the agent before touching the existing HID link.  BlueZ
+            # can trigger authentication while disconnecting an automatically
+            # connected HID profile; if no Agent1 is registered at that point,
+            # the controller reports ``No agent available`` and the subsequent
+            # Pair call degenerates into a page timeout.
+            pairing_agent = await self._start_pairing_agent()
+            # A previously failed attempt can leave an unpaired device marked
+            # Trusted. BlueZ then lets the HID profile reconnect immediately,
+            # racing the new Pair call. An unpaired device has no bond to
+            # preserve, so clear that stale auto-connect policy before retrying.
+            if not await self._is_paired(address):
+                await self._bluetoothctl(f"untrust {address}", timeout=8)
+            # A HID profile can leave a stale BlueZ connection while the GATT
+            # object reports disconnected. Release that link before asking
+            # BlueZ to pair, otherwise the Pair call often ends in Page Timeout.
+            await self._bluetoothctl(f"disconnect {address}", timeout=8)
             client = BleakClient(address, pair=True, timeout=25.0)
             await asyncio.wait_for(client.connect(), timeout=30.0)
         except asyncio.TimeoutError as exc:
@@ -150,9 +182,19 @@ class Helper:
         except Exception as exc:
             raise RuntimeError(f"Bluetooth pairing failed: {exc}") from exc
         finally:
-            if client is not None and client.is_connected:
-                await client.disconnect()
-            self._release_owner()
+            try:
+                if client is not None and client.is_connected:
+                    await client.disconnect()
+            finally:
+                if pairing_agent is not None:
+                    await self._stop_pairing_agent(pairing_agent)
+                self._release_owner()
+
+        # BlueZ releases the temporary pairing GATT object asynchronously. A
+        # short settle period prevents the immediately-following activation
+        # connection from racing that teardown and leaving the helper without
+        # an observable owner.
+        await asyncio.sleep(0.25)
 
         # Trust is persistent policy rather than an interactive pairing step;
         # bluetoothctl is reliable for it and is available on all supported
@@ -160,6 +202,66 @@ class Helper:
         output = await self._bluetoothctl(f"trust {address}", timeout=8)
         if "failed" in output.lower():
             raise RuntimeError(output.strip() or "Bluetooth paired but could not be trusted")
+
+    async def _start_pairing_agent(self):
+        """Keep a no-input/no-output BlueZ agent alive while Pair runs.
+
+        A one-shot ``bluetoothctl agent`` command exits before BlueZ asks for
+        confirmation. Keeping the command interpreter open avoids that race,
+        while the reader task prevents its status output from filling a pipe.
+        """
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "bluetoothctl", "--agent", "NoInputNoOutput",
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+        except (OSError, asyncio.SubprocessError) as exc:
+            raise RuntimeError(f"Could not start Bluetooth pairing agent: {exc}") from exc
+
+        default_agent = asyncio.Event()
+        messages: list[str] = []
+
+        async def consume() -> None:
+            if process.stdout is None:
+                return
+            while line := await process.stdout.readline():
+                text = line.decode(errors="replace").strip()
+                if text:
+                    messages.append(text)
+                if "Default agent request successful" in text:
+                    default_agent.set()
+
+        reader = asyncio.create_task(consume())
+        try:
+            if process.stdin is None:
+                raise RuntimeError("Bluetooth pairing agent has no command pipe")
+            process.stdin.write(b"default-agent\n")
+            await process.stdin.drain()
+            await asyncio.wait_for(default_agent.wait(), timeout=5.0)
+        except Exception as exc:
+            await self._stop_pairing_agent((process, reader))
+            detail = messages[-1] if messages else str(exc)
+            raise RuntimeError(f"Bluetooth pairing agent was not available: {detail}") from exc
+        return process, reader
+
+    @staticmethod
+    async def _stop_pairing_agent(agent) -> None:
+        process, reader = agent
+        try:
+            if process.stdin is not None and process.returncode is None:
+                process.stdin.write(b"quit\n")
+                await process.stdin.drain()
+                process.stdin.close()
+            await asyncio.wait_for(process.wait(), timeout=3.0)
+        except (OSError, asyncio.TimeoutError, asyncio.CancelledError):
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+        finally:
+            reader.cancel()
+            await asyncio.gather(reader, return_exceptions=True)
 
     async def unpair(self, address: str) -> None:
         self._validate_address(address)
@@ -280,63 +382,69 @@ class Helper:
 
 async def main() -> None:
     helper = Helper()
-    while line := await asyncio.to_thread(sys.stdin.readline):
-        try:
-            request = json.loads(line)
-            ident, command = request["id"], request["cmd"]
-            if command == "connect":
-                result = {"address": await helper.connect(str(request.get("address") or ""))}
-            elif command == "scan":
-                result = {"devices": await helper.scan()}
-            elif command == "paired":
-                result = {"devices": await helper.paired()}
-            elif command == "pair":
-                await helper.pair(str(request.get("address") or "")); result = {}
-            elif command == "unpair":
-                await helper.unpair(str(request.get("address") or "")); result = {}
-            elif command == "disconnect":
-                await helper.disconnect(); result = {}
-            elif command == "write":
-                await helper.write(str(request["characteristic"]), str(request["data"])); result = {}
-            elif command == "mic.warmup":
-                result = {"available": await helper.mic.warmup()}
-            elif command == "mic.select":
-                result = {"available": await helper.mic.select()}
-            elif command == "mic.restore":
-                await helper.mic.restore(); result = {}
-            elif command == "mic.start":
-                result = {"available": await helper.mic.start()}
-            elif command == "mic.feed":
-                helper.mic.feed(base64.b64decode(str(request["data"]))); result = {}
-            elif command == "mic.stop":
-                await helper.mic.stop(); result = {}
-            elif command == "hid.report":
-                helper.keyboard.report(base64.b64decode(str(request["data"]))); result = {}
-            elif command == "delivery.text":
-                raw = request.get("record")
-                result = {"delivered": await delivery.deliver_text(raw if isinstance(raw, dict) else None, str(request.get("text") or ""))}
-            elif command == "delivery.binding":
-                raw = request.get("record")
-                result = {"delivered": await delivery.send_binding(raw if isinstance(raw, dict) else None, str(request.get("binding") or ""))}
-            elif command == "focused.text":
-                result = {"delivered": await helper.focused.text(str(request.get("text") or ""))}
-            elif command == "focused.probe":
-                # This is deliberately a side-effect-free capability check.
-                # The TypeScript owner calls it only after it owns the BLE
-                # link, so standby Host 2.0 never advertises a false-ready
-                # YOLO route while Python 1.x owns the device.
-                result = {"available": helper.focused.available}
-            elif command == "focused.enter":
-                result = {"delivered": await helper.focused.enter()}
-            elif command == "focused.escape":
-                result = {"delivered": await helper.focused.escape_twice()}
-            elif command == "session.new":
-                result = {"delivered": await helper.new_session(request)}
-            else:
-                raise ValueError("unknown command")
-            emit({"id": ident, "ok": True, "result": result})
-        except Exception as exc:  # helper errors become structured TS capability errors
-            emit({"id": request.get("id") if "request" in locals() else None, "ok": False, "error": str(exc)})
+    try:
+        while line := await asyncio.to_thread(sys.stdin.readline):
+            request: dict = {}
+            try:
+                request = json.loads(line)
+                ident, command = request["id"], request["cmd"]
+                if command == "connect":
+                    result = {"address": await helper.connect(str(request.get("address") or ""))}
+                elif command == "scan":
+                    result = {"devices": await helper.scan()}
+                elif command == "paired":
+                    result = {"devices": await helper.paired()}
+                elif command == "pair":
+                    await helper.pair(str(request.get("address") or "")); result = {}
+                elif command == "unpair":
+                    await helper.unpair(str(request.get("address") or "")); result = {}
+                elif command == "disconnect":
+                    await helper.disconnect(); result = {}
+                elif command == "write":
+                    await helper.write(str(request["characteristic"]), str(request["data"])); result = {}
+                elif command == "mic.warmup":
+                    result = {"available": await helper.mic.warmup()}
+                elif command == "mic.select":
+                    result = {"available": await helper.mic.select()}
+                elif command == "mic.restore":
+                    await helper.mic.restore(); result = {}
+                elif command == "mic.start":
+                    result = {"available": await helper.mic.start()}
+                elif command == "mic.feed":
+                    helper.mic.feed(base64.b64decode(str(request["data"]))); result = {}
+                elif command == "mic.stop":
+                    await helper.mic.stop(); result = {}
+                elif command == "hid.report":
+                    helper.keyboard.report(base64.b64decode(str(request["data"]))); result = {}
+                elif command == "delivery.text":
+                    raw = request.get("record")
+                    result = {"delivered": await delivery.deliver_text(raw if isinstance(raw, dict) else None, str(request.get("text") or ""))}
+                elif command == "delivery.binding":
+                    raw = request.get("record")
+                    result = {"delivered": await delivery.send_binding(raw if isinstance(raw, dict) else None, str(request.get("binding") or ""))}
+                elif command == "focused.text":
+                    result = {"delivered": await helper.focused.text(str(request.get("text") or ""))}
+                elif command == "focused.probe":
+                    # This is deliberately a side-effect-free capability check.
+                    # The TypeScript owner calls it only after it owns the BLE
+                    # link, so standby Host 2.0 never advertises a false-ready
+                    # YOLO route while Python 1.x owns the device.
+                    result = {"available": helper.focused.available}
+                elif command == "focused.enter":
+                    result = {"delivered": await helper.focused.enter()}
+                elif command == "focused.escape":
+                    result = {"delivered": await helper.focused.escape_twice()}
+                elif command == "session.new":
+                    result = {"delivered": await helper.new_session(request)}
+                else:
+                    raise ValueError("unknown command")
+                emit({"id": ident, "ok": True, "result": result})
+            except Exception as exc:  # helper errors become structured TS capability errors
+                emit({"id": request.get("id"), "ok": False, "error": str(exc)})
+    finally:
+        # A normal stdin close (for example when the host is replaced) should
+        # release the GATT connection and owner lock before this process exits.
+        await helper.disconnect()
 
 
 if __name__ == "__main__":

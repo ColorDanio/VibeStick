@@ -15,6 +15,10 @@ export class HostRuntime {
   private ownsBleLink = false;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
   private reconnecting = false;
+  /** The in-flight reconnect must finish before a device switch can tear down
+   * the helper. Without this barrier, stop() could kill the helper while
+   * reconnect() was about to write its connect request. */
+  private reconnectPromise: Promise<void> | undefined;
   private stopping = false;
 
   constructor(readonly bridge: VibeBridge, readonly capabilities: Capabilities, private readonly reconnectDelayMs = 2_000, private readonly canConnect: ConnectionGuard = allowConnection) {}
@@ -38,12 +42,23 @@ export class HostRuntime {
   }
 
   async stop(): Promise<void> {
-    if (this.state === "stopped") return;
+    if (this.state === "stopped" && !this.reconnectPromise) return;
     this.stopping = true;
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.retryTimer = undefined;
     this.state = "stopping";
+    // Do not kill the transport until a reconnect that already entered
+    // bridge.connect() has completed. This is what makes Pair & Activate safe
+    // when the previous Stick was in the automatic-reconnect window.
+    await this.reconnectPromise?.catch(() => undefined);
     try { await this.bridge.disconnect(); }
+    catch (error) {
+      // A link can disappear between the reconnect barrier and this cleanup.
+      // Stopping is still successful from the lifecycle's point of view; the
+      // next activation will establish a fresh helper instead of surfacing the
+      // stale teardown error as a pairing failure.
+      this.lastError = error instanceof Error ? error.message : String(error);
+    }
     finally { this.ownsBleLink = false; this.state = "stopped"; }
   }
 
@@ -107,20 +122,31 @@ export class HostRuntime {
   private async reconnect(): Promise<void> {
     if (this.reconnecting || this.stopping || this.state === "stopped") return;
     this.reconnecting = true;
+    const operation = this.reconnectOnce();
+    this.reconnectPromise = operation;
+    try { await operation; }
+    finally {
+      if (this.reconnectPromise === operation) this.reconnectPromise = undefined;
+      this.reconnecting = false;
+      if (!this.ownsBleLink && !this.stopping) this.scheduleReconnect();
+    }
+  }
+
+  private async reconnectOnce(): Promise<void> {
     try {
-      if (!(await this.permitted())) return;
+      if (!(await this.permitted()) || this.stopping) return;
       await this.bridge.connect();
+      // stop() may have been requested while the BLE connect was in flight.
+      // Leave cleanup to stop(), and do not publish a false ready state.
+      if (this.stopping) return;
       this.ownsBleLink = true;
       this.lastError = undefined;
       this.state = this.completeCapabilities() ? "ready" : "degraded";
     } catch (error) {
+      if (this.stopping) return;
       this.ownsBleLink = false;
       this.lastError = error instanceof Error ? error.message : String(error);
       this.state = "degraded";
-      this.scheduleReconnect();
-    } finally {
-      this.reconnecting = false;
-      if (!this.ownsBleLink && !this.stopping) this.scheduleReconnect();
     }
   }
 

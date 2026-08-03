@@ -259,9 +259,18 @@ async function main(): Promise<void> {
     const linux = createLinuxBridge(core, bridgeOptions);
     bridge = linux.bridge;
     commands = linux.commands;
-    scanSticks = () => linux.transport.scan();
-    pairedSticks = () => linux.transport.paired();
-    connectStick = async (body) => {
+    // Device-management requests share one helper process and one BlueZ
+    // owner. Serialize them so a scan/pair/connect request cannot terminate
+    // a pending command from a previous request.
+    let deviceOperation: Promise<unknown> = Promise.resolve();
+    const withDeviceOperation = <T>(operation: () => Promise<T>): Promise<T> => {
+      const run = deviceOperation.then(operation, operation);
+      deviceOperation = run.then(() => undefined, () => undefined);
+      return run;
+    };
+    scanSticks = () => withDeviceOperation(() => linux.transport.scan());
+    pairedSticks = () => withDeviceOperation(() => linux.transport.paired());
+    connectStick = (body) => withDeviceOperation(async () => {
       const address = typeof body === "object" && body !== null && typeof (body as { address?: unknown }).address === "string"
         ? (body as { address: string }).address.trim() : "";
       if (!/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/i.test(address)) throw new Error("Invalid Stick address");
@@ -277,35 +286,40 @@ async function main(): Promise<void> {
       if (!runtime?.isBleOwner())
         throw new Error(runtime?.diagnostics().error ?? "Could not activate this VibeStick");
       return { address };
-    };
+    });
     const deviceAddress = (body: unknown): string => {
       const address = typeof body === "object" && body !== null && typeof (body as { address?: unknown }).address === "string" ? (body as { address: string }).address.trim() : "";
       if (!/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/i.test(address)) throw new Error("Invalid Stick address");
       return address;
     };
-    pairStick = async (body) => {
+    pairStick = (body) => withDeviceOperation(async () => {
       const address = deviceAddress(body);
-      // Bluetooth/BlueZ is allowed one active GATT client. Release the old
-      // Stick before pairing a different one so "Pair & Use" is atomic from
-      // the user's perspective and never leaves two candidates active.
-      const previousAddress = linux.transport.address;
+      // Pair and activate are one transaction. The old implementation
+      // returned after a temporary pairing connection, then the UI started a
+      // second HTTP request; that gap allowed the helper/reconnect timer to
+      // exit before the real Host bridge ever synchronized the Stick.
+      const previousAddress = runtime?.isBleOwner() ? linux.transport.address : undefined;
       await runtime?.stop();
       core.clearDevice();
       linux.transport.setTargetAddress("");
       try {
         await linux.transport.pair(address);
+        linux.transport.setTargetAddress(address);
+        await runtime?.start();
+        if (!runtime?.isBleOwner())
+          throw new Error(runtime?.diagnostics().error ?? "Pairing succeeded but activation failed");
       } catch (error) {
-        // A failed pairing attempt must not strand the already active Stick.
-        // Restore it only after the temporary pairing operation has released
-        // the BlueZ lock, preserving the one-active-device invariant.
+        // Do not leave a half-connected new device behind. Restore the prior
+        // active Stick only after the temporary pairing client released BlueZ.
+        if (runtime && runtime.state !== "stopped") await runtime.stop();
         if (previousAddress) {
           linux.transport.setTargetAddress(previousAddress);
           await runtime?.start();
         }
         throw error;
       }
-    };
-    unpairStick = async (body) => {
+    });
+    unpairStick = (body) => withDeviceOperation(async () => {
       const address = deviceAddress(body);
       if (linux.transport.address?.toUpperCase() === address.toUpperCase()) {
         await runtime?.stop();
@@ -313,7 +327,7 @@ async function main(): Promise<void> {
         linux.transport.setTargetAddress("");
       }
       await linux.transport.unpair(address);
-    };
+    });
     const { mic } = linux;
     const capabilities: Capabilities = {
       ble: { available: true },

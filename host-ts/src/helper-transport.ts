@@ -13,6 +13,8 @@ export class HelperGattTransport implements GattTransport {
   private nextId = 1;
   private readonly pending = new Map<number, { resolve: (reply: HelperReply) => void; reject: (error: Error) => void }>();
   private connected = false;
+  private helperStderr = "";
+  private stoppingChild = false;
   address: string | undefined;
 
   constructor(private readonly executable: string, private readonly args: string[] = [], private targetAddress = "") {}
@@ -30,7 +32,11 @@ export class HelperGattTransport implements GattTransport {
   async disconnect(): Promise<void> {
     if (this.child && this.connected) await this.request({ cmd: "disconnect" });
     this.connected = false; this.connectionHandler?.(false);
-    this.child?.kill(); this.child = undefined;
+    if (this.child) {
+      this.stoppingChild = true;
+      this.child.kill();
+      this.child = undefined;
+    }
   }
   async scan(): Promise<DiscoveredStick[]> {
     if (!this.child) this.start();
@@ -54,14 +60,47 @@ export class HelperGattTransport implements GattTransport {
   private start(): void {
     const child = spawn(this.executable, this.args, { stdio: "pipe" });
     this.child = child;
+    this.stoppingChild = false;
+    this.helperStderr = "";
     createInterface({ input: child.stdout }).on("line", (line) => this.line(line));
-    child.once("exit", () => { this.connected = false; this.connectionHandler?.(false); this.child = undefined; for (const item of this.pending.values()) item.reject(new Error("BLE helper exited")); this.pending.clear(); });
+    child.stderr.on("data", (chunk: Buffer | string) => {
+      this.helperStderr = `${this.helperStderr}${chunk.toString()}`.slice(-2_000);
+    });
+    child.once("exit", (code, signal) => {
+      // A deliberately stopped child may emit its exit event after a new
+      // helper has already been started. Never let that old event reject the
+      // new child's requests or overwrite its connection state.
+      if (this.child !== child) return;
+      const intentionallyStopped = this.stoppingChild;
+      const wasConnected = this.connected;
+      this.connected = false;
+      if (wasConnected) this.connectionHandler?.(false);
+      this.child = undefined;
+      const reason = signal ? `signal ${signal}` : `exit ${code ?? "unknown"}`;
+      const detail = this.helperStderr.trim().replace(/\s+/g, " ");
+      const message = intentionallyStopped
+        ? "BLE helper stopped"
+        : detail ? `BLE helper exited (${reason}): ${detail}` : `BLE helper exited (${reason})`;
+      for (const item of this.pending.values()) item.reject(new Error(message));
+      this.pending.clear();
+    });
   }
   private request(command: Record<string, unknown>): Promise<HelperReply> {
     if (!this.child) return Promise.reject(new Error("BLE helper unavailable"));
     const id = this.nextId++;
-    this.child.stdin.write(`${JSON.stringify({ id, ...command })}\n`);
-    return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
+    const child = this.child;
+    return new Promise((resolve, reject) => {
+      // Register before writing. A helper can answer immediately (especially
+      // for paired/unpair commands), and a fast reply must never beat the
+      // pending-map insertion.
+      this.pending.set(id, { resolve, reject });
+      try {
+        child.stdin.write(`${JSON.stringify({ id, ...command })}\n`);
+      } catch (error) {
+        this.pending.delete(id);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
   }
   private line(line: string): void {
     let reply: HelperReply; try { reply = JSON.parse(line) as HelperReply; } catch { return; }

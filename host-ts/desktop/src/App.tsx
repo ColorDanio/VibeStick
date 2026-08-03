@@ -1133,11 +1133,6 @@ function Settings(props: {
         const result = await paired.json().catch(() => ({})) as { error?: string };
         throw new Error(result.error ?? "Pairing failed");
       }
-      const connected = await deviceRequest("/api/devices/connect", address);
-      if (!connected.ok) {
-        const result = await connected.json().catch(() => ({})) as { error?: string };
-        throw new Error(result.error ?? "Pairing succeeded but connection failed");
-      }
       setActiveAddress(address);
       await loadPaired(address);
       setNearbySticks((items) => items.filter((item) => item.address !== address));
@@ -1210,7 +1205,7 @@ function Settings(props: {
         <h4 className="device-list-title">{t("Paired Sticks", "已配对设备")}</h4>
         {pairedSticks.map((stick) => <div className="device-manager" key={stick.address}><div /><div><b>{stick.name}</b><span><i className="warn" />{t("Paired · ready to activate", "已配对 · 可激活")}</span><small>{stick.address}{typeof stick.rssi === "number" ? ` · ${stick.rssi} dBm` : ""} · {t("Model identified on first activation", "首次激活后识别型号")}</small></div><div className="device-actions"><button className="secondary" onClick={() => void selectStick(stick.address)} disabled={Boolean(deviceBusy)}>{deviceBusyAction === "activate" && deviceBusy === stick.address ? t("Activating…", "正在激活…") : t("Activate", "激活")}</button><button className="quiet" onClick={() => void unpair(stick.address)} disabled={Boolean(deviceBusy)}>{deviceBusyAction === "remove" && deviceBusy === stick.address ? t("Removing…", "正在移除…") : t("Remove", "移除")}</button></div></div>)}
         {!pairedSticks.length && <p className="muted">{t("No paired Sticks yet.", "尚无已配对设备。")}</p>}
-        {nearbySticks.length > 0 && <><h4 className="device-list-title">{t("New nearby Sticks", "附近的新设备")}</h4>{nearbySticks.map((stick) => <div className="device-manager" key={stick.address}><div /><div><b>{stick.name}</b><span><i className="warn" />{t("Nearby · not paired", "附近 · 未配对")}</span><small>{stick.address}{typeof stick.rssi === "number" ? ` · ${stick.rssi} dBm` : ""}</small></div><div className="device-actions"><button className="secondary" onClick={() => void pairAndUse(stick.address)} disabled={Boolean(deviceBusy)}>{deviceBusyAction === "pair" && deviceBusy === stick.address ? t("Pairing…", "正在配对…") : t("Pair & Activate", "配对并激活")}</button></div></div>)}</>}
+        {nearbySticks.length > 0 && <><h4 className="device-list-title">{t("New nearby Sticks", "附近的新设备")}</h4>{nearbySticks.map((stick) => <div className="device-manager" key={stick.address}><div /><div><b>{stick.name}</b><span><i className="warn" />{t("Nearby · not paired", "附近 · 未配对")}</span><small>{stick.address}{typeof stick.rssi === "number" ? ` · ${stick.rssi} dBm` : ""}</small></div><div className="device-actions"><button className="secondary" onClick={() => void pairAndUse(stick.address)} disabled={Boolean(deviceBusy)}>{deviceBusyAction === "pair" && deviceBusy === stick.address ? t("Pairing & activating…", "正在配对并激活…") : t("Pair & Activate", "配对并激活")}</button></div></div>)}</>}
       </section>
       <section className="setup-section host-setup">
         <span className="section-label">{t("HOST SETUP", "主机设置")}</span>
