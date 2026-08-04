@@ -85,7 +85,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vibestick-host-2-${{ matrix.label }}
-          path: host-ts/desktop/src-tauri/target/release/bundle/**
+          # Upload distributable bundles only. Uploading the unpacked macOS
+          # .app tree sends hundreds of files and can time out in ArtifactService.
+          path: |
+            host-ts/desktop/src-tauri/target/release/bundle/**/*.AppImage
+            host-ts/desktop/src-tauri/target/release/bundle/**/*.deb
+            host-ts/desktop/src-tauri/target/release/bundle/**/*.dmg
+            host-ts/desktop/src-tauri/target/release/bundle/**/*.msi
+            host-ts/desktop/src-tauri/target/release/bundle/**/*.exe
           if-no-files-found: error
 
   host-tests:
