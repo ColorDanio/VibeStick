@@ -146,5 +146,11 @@ jobs:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           generate_release_notes: true
           # Desktop bundles are downloaded into per-platform directories;
-          # recurse so deb/dmg/msi/nsis files are attached to the release too.
-          files: dist-release/**/*
+          # include both root firmware files and nested desktop bundles.
+          files: |
+            dist-release/*
+            dist-release/**/*.AppImage
+            dist-release/**/*.deb
+            dist-release/**/*.dmg
+            dist-release/**/*.exe
+            dist-release/**/*.msi
