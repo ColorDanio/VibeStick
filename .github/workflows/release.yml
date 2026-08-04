@@ -145,4 +145,6 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           generate_release_notes: true
-          files: dist-release/*
+          # Desktop bundles are downloaded into per-platform directories;
+          # recurse so deb/dmg/msi/nsis files are attached to the release too.
+          files: dist-release/**/*
