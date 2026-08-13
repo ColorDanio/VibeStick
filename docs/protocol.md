@@ -25,6 +25,7 @@ Communication between the host daemon (computer) and a supported VibeStick
 | VOICE    | `4b1e0007-5a3f-4c8d-9b6e-7f2a1c0d3e5f` | write      | daemon | device | JSON    |
 | AUDIO    | `4b1e0008-5a3f-4c8d-9b6e-7f2a1c0d3e5f` | notify     | device | daemon | binary  |
 | DEVICE_CONFIG | `4b1e0009-5a3f-4c8d-9b6e-7f2a1c0d3e5f` | write | daemon | device | JSON |
+| USAGE    | `4b1e000a-5a3f-4c8d-9b6e-7f2a1c0d3e5f` | write | daemon | device | JSON |
 
 JSON payloads are UTF-8, one complete document per write/notify, kept
 under 512 bytes by trimming optional fields. Negotiated MTU is 247, so
@@ -38,6 +39,9 @@ oversized values.
 Session-centric flow over a terminal-style ("fake CLI") screen:
 
 - **Tool picker (home)**: `B` = next tool, `A` = select tool.
+- When a host provides at least one local usage metric, an additional
+  read-only **Usage** entry appears after the device-local Vibe Mic and YOLO
+  entries. It is omitted when the host has no usable metrics.
 - **Session picker** (fake-CLI screen for the selected tool): lists
   `+ new session` first, then known sessions with an **active dot**
   (green = session is live in the foreground, see `fg` below; gray =
@@ -66,6 +70,24 @@ Session-centric flow over a terminal-style ("fake CLI") screen:
 the v2.1 device UI no longer emits it; custom key bindings are managed
 host-side only.
 
+### Device UI mirror (`COMMAND`, device -> daemon)
+
+Current firmware emits a compact `device.ui` notification whenever a screen,
+carousel selection, or recording state changes. It is the source of truth for
+the desktop's read-only Stick simulator: the host reconstructs the same screen
+from the existing STATUS, SESSIONS, TOOLS, VOICE, and USAGE payloads instead of
+streaming framebuffer pixels over BLE.
+
+```json
+{"cmd":"device.ui","screen":"sessions","selected":2,"recording":false,"battery":73,"rotation":1}
+```
+
+`screen` is `waiting`, `home`, `sessions`, `convo`, `mic`, `yolo`, or `usage`.
+`selected` is the highlighted home/session entry and is `-1` elsewhere. Older
+firmware lacks this notification; the desktop falls back to a host-state view.
+`battery` is `0`–`100` when the PMU reports a level (otherwise `-1`), and
+`rotation` is the active LCD rotation (`0`–`3`).
+
 ## Payloads
 
 ### TOOLS (daemon -> device)
@@ -91,6 +113,29 @@ The configured vibe-coding CLI tools and their functions.
   ]
 }
 ```
+
+### USAGE (daemon -> device)
+
+Optional local usage summaries are sampled by the host every 30 seconds. A
+CLI is included only when its adapter supplied at least one usable context,
+quota, token, or cost metric; wrappers that only expose process state are
+omitted. The payload
+is independent from STATUS so older firmware can continue to connect when it
+does not expose this optional characteristic.
+
+```json
+{
+  "updated": 1721650000,
+  "interval_s": 30,
+  "list": [
+    {"tool":"claude-code","name":"Claude Code","sessions":2,"active":1,"ctx_pct":42,"cost_usd":1.23,"updated":1721650000},
+    {"tool":"codex","name":"Codex","sessions":1,"active":1,"quota_pct":12,"tokens":120000,"updated":1721650000}
+  ]
+}
+```
+
+`ctx_pct`, `quota_pct`, `tokens`, and `cost_usd` are independently optional;
+the host never invents a zero for a missing metric.
 
 - `state`: aggregate of that tool's sessions (`running` if any session
   is running, else `waiting` / `error` / `idle`).

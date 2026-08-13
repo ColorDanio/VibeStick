@@ -55,6 +55,8 @@ function record(value: unknown): SessionRecord[] {
       ctx_pct: number(status.ctx_pct, -1), cost_usd: number(status.cost_usd, -1), last: string(status.last), updated: number(status.updated, 0),
       ...(Array.isArray(status.tail) ? { tail: status.tail.map(String) } : {}),
       ...(typeof status.queued === "number" && status.queued ? { queued: status.queued } : {}),
+      ...(typeof status.quota_pct === "number" && Number.isFinite(status.quota_pct) && status.quota_pct >= 0 ? { quota_pct: status.quota_pct } : {}),
+      ...(typeof status.tokens === "number" && Number.isFinite(status.tokens) && status.tokens >= 0 ? { tokens: status.tokens } : {}),
     },
     ...(value.fg === true ? { fg: true } : {}),
     ...(isObject(value.raw) ? { raw: value.raw } : {}),

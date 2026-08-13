@@ -40,30 +40,32 @@ fn connection_icon(color: [u8; 4]) -> Image<'static> {
     Image::new_owned(rgba, SIZE, SIZE)
 }
 
-fn dashboard_connection_state() -> (&'static str, [u8; 4]) {
+fn dashboard_http(path: &str) -> Option<String> {
     let address = match "127.0.0.1:7861"
         .to_socket_addrs()
         .ok()
         .and_then(|mut it| it.next())
     {
         Some(address) => address,
-        None => return ("Vibe Stick: host unavailable", [120, 124, 130, 255]),
+        None => return None,
     };
     let mut stream = match TcpStream::connect_timeout(&address, Duration::from_millis(700)) {
         Ok(stream) => stream,
-        Err(_) => return ("Vibe Stick: starting host", [230, 167, 40, 255]),
+        Err(_) => return None,
     };
     let _ = stream.set_read_timeout(Some(Duration::from_millis(700)));
-    if stream
-        .write_all(b"GET /api/diagnostics HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
-        .is_err()
-    {
-        return ("Vibe Stick: starting host", [230, 167, 40, 255]);
-    }
+    let request = format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n");
+    if stream.write_all(request.as_bytes()).is_err() { return None; }
     let mut response = String::new();
-    if stream.read_to_string(&mut response).is_err() {
-        return ("Vibe Stick: starting host", [230, 167, 40, 255]);
-    }
+    if stream.read_to_string(&mut response).is_err() { return None; }
+    response.split_once("\r\n\r\n").map(|(_, body)| body.to_string())
+}
+
+fn dashboard_connection_state() -> (&'static str, [u8; 4]) {
+    let response = match dashboard_http("/api/diagnostics") {
+        Some(response) => response,
+        None => return ("Vibe Stick: starting host", [230, 167, 40, 255]),
+    };
     if response.contains("\"host_2\": \"active\"") && response.contains("\"state\": \"ready\"") {
         ("Vibe Stick: Stick connected", [47, 179, 87, 255])
     } else if response.contains("\"state\": \"starting\"") {
@@ -73,6 +75,54 @@ fn dashboard_connection_state() -> (&'static str, [u8; 4]) {
     }
 }
 
+#[derive(Default, Deserialize)]
+struct TrayUsagePayload {
+    #[serde(default)]
+    list: Vec<TrayUsageEntry>,
+}
+
+#[derive(Deserialize)]
+struct TrayUsageEntry {
+    name: String,
+    #[serde(default)]
+    ctx_pct: Option<f64>,
+    #[serde(default)]
+    quota_pct: Option<f64>,
+    #[serde(default)]
+    tokens: Option<f64>,
+    #[serde(default)]
+    cost_usd: Option<f64>,
+}
+
+#[derive(Default, Deserialize)]
+struct TrayDesktopSnapshot {
+    #[serde(default)]
+    usage: TrayUsagePayload,
+}
+
+fn dashboard_usage_label() -> String {
+    let Some(response) = dashboard_http("/api/desktop") else {
+        return "Usage · waiting for Host".to_string();
+    };
+    let Ok(snapshot) = serde_json::from_str::<TrayDesktopSnapshot>(&response) else {
+        return "Usage · waiting for metrics".to_string();
+    };
+    let items = snapshot.usage.list.into_iter().map(|entry| {
+        let mut metrics = Vec::new();
+        if let Some(ctx) = entry.ctx_pct { metrics.push(format!("{ctx:.0}% ctx")); }
+        if let Some(quota) = entry.quota_pct { metrics.push(format!("{quota:.0}% quota")); }
+        if let Some(tokens) = entry.tokens {
+            let token_label = if tokens >= 1_000_000.0 { format!("{:.1}M tok", tokens / 1_000_000.0) }
+                else if tokens >= 1_000.0 { format!("{:.1}k tok", tokens / 1_000.0) }
+                else { format!("{tokens:.0} tok") };
+            metrics.push(token_label);
+        }
+        if let Some(cost) = entry.cost_usd { metrics.push(format!("${cost:.2}")); }
+        if metrics.is_empty() { entry.name } else { format!("{} {}", entry.name, metrics.join(" · ")) }
+    }).collect::<Vec<_>>();
+    if items.is_empty() { "Usage · no local metrics".to_string() } else { format!("Usage · {}", items.join("  |  ")) }
+}
+
 fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
@@ -80,14 +130,15 @@ fn show_main_window(app: &AppHandle) {
     }
 }
 
-fn start_connection_indicator(app: AppHandle, status: MenuItem<tauri::Wry>) {
+fn start_connection_indicator(app: AppHandle, status: MenuItem<tauri::Wry>, usage: MenuItem<tauri::Wry>) {
     std::thread::spawn(move || loop {
         let (label, color) = dashboard_connection_state();
         let _ = status.set_text(label);
+        let _ = usage.set_text(dashboard_usage_label());
         if let Some(tray) = app.tray_by_id(TRAY_ID) {
             let _ = tray.set_icon(Some(connection_icon(color)));
         }
-        std::thread::sleep(Duration::from_secs(2));
+        std::thread::sleep(Duration::from_secs(3));
     });
 }
 
@@ -99,9 +150,11 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         false,
         None::<&str>,
     )?;
+    let usage = MenuItem::with_id(app, "usage-summary", "Usage · waiting for metrics", false, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", "Open Vibe Stick", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&status, &open, &quit])?;
+    let separator = tauri::menu::PredefinedMenuItem::separator(app)?;
+    let menu = Menu::with_items(app, &[&status, &usage, &separator, &open, &quit])?;
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(connection_icon([230, 167, 40, 255]))
         .menu(&menu)
@@ -123,7 +176,7 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             }
         })
         .build(app)?;
-    start_connection_indicator(app.clone(), status);
+    start_connection_indicator(app.clone(), status, usage);
     Ok(())
 }
 

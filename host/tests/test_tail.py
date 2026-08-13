@@ -47,7 +47,9 @@ def make_codex(root):
             "role": "user", "content": [{"type": "input_text", "text": "refactor the db layer"}]}}),
         json.dumps({"type": "response_item", "payload": {"type": "message",
             "role": "assistant", "content": [{"type": "output_text", "text": "Done, 3 files changed."}]}}),
-        json.dumps({"type": "event_msg", "payload": {"type": "token_count"}}),
+        json.dumps({"type": "event_msg", "payload": {"type": "token_count",
+            "info": {"total_token_usage": {"total_tokens": 120000}},
+            "rate_limits": {"primary": {"used_percent": 12.0}}}}),
     ]) + "\n")
     os.utime(f, (NOW, NOW))
     return f

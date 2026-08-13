@@ -16,6 +16,9 @@ supported M5Stick boards. The current release line is **0.2.x** for both.
 - Native **Vibe Stick** desktop app built with Tauri and React — install it from
   your application menu, with a tray indicator for the Stick connection.
 - BLE device status, current target and recent activity in one overview.
+- A local CLI usage panel and tray summary that only show tools with usable
+  context, quota, token, or cost metrics; the Host samples these records every
+  30 seconds and sends the same snapshot to a compatible Stick.
 - Integration-oriented session discovery for Claude Code, Codex, OpenCode and
   Kimi CLI.
 - On-device controls, display, microphone capture and local/online speech

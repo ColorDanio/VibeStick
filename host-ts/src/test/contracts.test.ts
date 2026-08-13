@@ -5,11 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { configToWire, normalizeConfig } from "../config.js";
 import { keycodesFromReport } from "../hid.js";
-import { BLE, BLE_PAYLOAD_MAX_BYTES, sessionsToWire, statusToWire } from "../protocol.js";
+import { BLE, BLE_PAYLOAD_MAX_BYTES, sessionsToWire, statusToWire, usageToWire } from "../protocol.js";
 import { transition, type AudioRoute } from "../routing.js";
 import { SendQueue } from "../queue.js";
 import { SessionSelection } from "../session.js";
 import { HostSessionStore } from "../store.js";
+import { collectUsage } from "../usage.js";
 import { HostCore } from "../core.js";
 import { dashboardRequest } from "../dashboard.js";
 import { loadConfigFile, loadSessionDirectory, saveConfigFile } from "../files.js";
@@ -82,6 +83,20 @@ test("device session payload stays within one BLE value and keeps the active ses
   assert.ok(payload.list.every((session) => Array.from(session.name).length <= 40));
 });
 
+test("usage payload stays within one BLE value and keeps the newest metrics", () => {
+  const payload = usageToWire({
+    updated: 20,
+    interval_s: 30 as const,
+    list: Array.from({ length: 8 }, (_, index) => ({
+      tool: `tool-${index}`, name: `A very long CLI name ${index} that is clipped`, sessions: 2, active: 1,
+      ctx_pct: index * 10, cost_usd: index + 0.5, updated: 20 - index,
+    })),
+  });
+  assert.ok(Buffer.byteLength(JSON.stringify(payload)) <= BLE_PAYLOAD_MAX_BYTES);
+  assert.equal(payload.list[0]?.tool, "tool-0");
+  assert.ok(payload.list.every((entry) => Array.from(entry.name).length <= 24));
+});
+
 test("voice routing conforms to v1", async () => {
   const data = await fixture("voice-routing.json");
   let route: AudioRoute = data.initial_route;
@@ -138,6 +153,37 @@ test("domain store derives ready/running tool states and selected payloads", () 
   assert.deepEqual(store.toolsPayload().list[1]?.fns, ["status", "sessions", "voice"]);
 });
 
+test("usage aggregation hides tools without local metrics", () => {
+  const config = normalizeConfig({ tools: [
+    { id: "claude-code", name: "Claude Code" },
+    { id: "codex", name: "Codex" },
+    { id: "kimi-cli", name: "Kimi" },
+  ] });
+  const status = (tool: string, state: string, updated: number, ctx_pct = -1, cost_usd = -1) => ({
+    id: `${tool}-${updated}`,
+    status: { tool, model: "", session: tool, state, ctx_pct, cost_usd, last: "", updated },
+  });
+  const usage = collectUsage(config, [
+    status("claude-code", "running", 20, 42, 1.234),
+    status("claude-code", "idle", 10, -1, 0.5),
+    status("codex", "idle", 20, -1, -1),
+    status("kimi-cli", "idle", 20, 0, -1),
+  ]);
+  assert.deepEqual(usage.list.map((entry) => entry.tool), ["claude-code", "kimi-cli"]);
+  assert.deepEqual(usage.list[0], { tool: "claude-code", name: "Claude Code", sessions: 2, active: 1, ctx_pct: 42, cost_usd: 1.73, updated: 20 });
+  assert.equal(usage.list[1]?.ctx_pct, 0);
+  assert.equal(usage.interval_s, 30);
+});
+
+test("usage aggregation accepts local quota and token snapshots", () => {
+  const config = normalizeConfig({ tools: [{ id: "codex", name: "Codex" }] });
+  const usage = collectUsage(config, [{
+    id: "codex-1",
+    status: { tool: "codex", model: "", session: "Work", state: "running", ctx_pct: -1, cost_usd: -1, quota_pct: 12, tokens: 120000, last: "", updated: 20 },
+  }]);
+  assert.deepEqual(usage.list[0], { tool: "codex", name: "Codex", sessions: 1, active: 1, quota_pct: 12, tokens: 120000, updated: 20 });
+});
+
 test("session store selects the next discovered session after a successful session.new request", () => {
   const store = new HostSessionStore(normalizeConfig({ tools: [{ id: "codex", name: "Codex" }] }));
   const status = (id: string, updated: number) => ({ id, status: { tool: "codex", model: "", session: id, state: "idle", ctx_pct: -1, cost_usd: -1, last: "", updated } });
@@ -180,6 +226,9 @@ test("dashboard contract returns snapshots and routes commands through one core"
   assert.deepEqual(core.snapshot().foreground_target, { app: "Notepad" });
   core.command({ cmd: "device.info", model: "M5StickS3", firmware: "0.2.1" });
   assert.deepEqual(core.snapshot().device, { model: "M5StickS3", firmware: "0.2.1" });
+  core.command({ cmd: "device.ui", screen: "sessions", selected: 2, recording: false, battery: 73, rotation: 1 });
+  const mirrored = core.snapshot().device_ui;
+  assert.deepEqual({ screen: mirrored.screen, selected: mirrored.selected, recording: mirrored.recording, battery: mirrored.battery, rotation: mirrored.rotation }, { screen: "sessions", selected: 2, recording: false, battery: 73, rotation: 1 });
   core.recordDelivery("yolo");
   assert.equal(core.snapshot().transfers[0]?.kind, "delivery");
   assert.equal(dashboardRequest(core, "POST", "/api/command", { cmd: "tool.select", id: "nope" }).status, 400);
@@ -522,11 +571,12 @@ test("BLE bridge subscribes, syncs and keeps Vibe Mic audio separate from ASR", 
   const bridge = new VibeBridge(transport, core, { onAudio: (destination) => { audio.push(destination); } });
   await bridge.connect();
   assert.deepEqual(transport.subscriptions, ["INPUT", "COMMAND", "AUDIO", "HID_INPUT"]);
-  assert.deepEqual(transport.writes.map((item) => item.characteristic), ["STATUS", "SESSIONS", "TOOLS", "DEVICE_CONFIG"]);
-  assert.deepEqual(JSON.parse(new TextDecoder().decode(transport.writes[3]?.data)), { hid: { button_a: "F14", button_b: "F15" } });
+  assert.deepEqual(transport.writes.map((item) => item.characteristic), ["STATUS", "SESSIONS", "TOOLS", "USAGE", "DEVICE_CONFIG"]);
+  assert.deepEqual(JSON.parse(new TextDecoder().decode(transport.writes[4]?.data)), { hid: { button_a: "F14", button_b: "F15" } });
   // Firmware 0.2.1 announces its model after COMMAND is subscribed. The
   // bridge must retain it so the desktop chooses the matching product art.
   transport.notify("COMMAND", new TextEncoder().encode('{"cmd":"device.info","model":"M5StickS3","firmware":"0.2.1"}'));
+  transport.notify("COMMAND", new TextEncoder().encode('{"cmd":"device.ui","screen":"home","selected":1,"recording":false,"battery":73,"rotation":0}'));
   transport.notify("COMMAND", new TextEncoder().encode('{"cmd":"voice.start","mode":"mic"}'));
   transport.notify("AUDIO", new Uint8Array([128, 129]));
   transport.notify("COMMAND", new TextEncoder().encode('{"cmd":"voice.start"}'));
@@ -534,6 +584,7 @@ test("BLE bridge subscribes, syncs and keeps Vibe Mic audio separate from ASR", 
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(audio, ["mic", "asr"]);
   assert.deepEqual(core.snapshot().device, { model: "M5StickS3", firmware: "0.2.1" });
+  assert.deepEqual({ ...core.snapshot().device_ui, updated: 0 }, { screen: "home", selected: 1, recording: false, battery: 73, rotation: 0, updated: 0 });
 });
 
 test("BLE voice stop publishes transcribing immediately but waits for preceding PCM before ASR stop", async () => {

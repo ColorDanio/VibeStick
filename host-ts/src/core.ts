@@ -2,6 +2,7 @@ import type { Config } from "./config.js";
 import { SendQueue, type PendingMessage } from "./queue.js";
 import { transition, type AudioRoute, type RoutingAction } from "./routing.js";
 import { HostSessionStore, type SessionRecord } from "./store.js";
+import type { UsagePayload } from "./usage.js";
 
 type VoiceState = "idle" | "recording" | "transcribing" | "ready" | "error";
 type VoicePreview = { state: VoiceState; mode: "agent" | "mic" | "yolo"; recorded_ms: number; level: number; text: string };
@@ -22,6 +23,8 @@ export interface CoreSnapshot {
   audio_route: AudioRoute;
   device_mode: "home" | "agent" | "mic" | "yolo";
   device: { name?: string; model: string; firmware: string };
+  /** Device-emitted UI state. Older firmware leaves this at its boot default. */
+  device_ui: { screen: "waiting" | "home" | "sessions" | "convo" | "mic" | "yolo" | "usage"; selected: number; recording: boolean; battery: number; rotation: number; updated: number };
   foreground_target?: { app: string };
   voice: VoicePreview;
   transcriptions: TranscriptionRecord[];
@@ -30,6 +33,7 @@ export interface CoreSnapshot {
   status: ReturnType<HostSessionStore["statusPayload"]>;
   sessions: ReturnType<HostSessionStore["sessionsPayload"]>;
   tools: ReturnType<HostSessionStore["toolsPayload"]>;
+  usage: UsagePayload;
 }
 
 /**
@@ -46,7 +50,9 @@ export class HostCore {
   private transcriptions: TranscriptionRecord[] = [];
   private foregroundTarget: { app: string } | undefined;
   private device = { name: "", model: "", firmware: "" };
+  private deviceUi: CoreSnapshot["device_ui"] = { screen: "waiting", selected: -1, recording: false, battery: -1, rotation: 0, updated: 0 };
   private onTranscription: ((record: TranscriptionRecord) => void) | undefined;
+  private usage: UsagePayload = { updated: 0, interval_s: 30, list: [] };
 
   constructor(public config: Config) { this.store = new HostSessionStore(config); }
   /** Runtime-only settings that the BLE bridge must use before a restart. */
@@ -54,14 +60,26 @@ export class HostCore {
   /** Forget transient device identity before activating a different Stick. */
   clearDevice(): void { this.device = { name: "", model: "", firmware: "" }; }
   replaceSessions(records: SessionRecord[]): void { this.store.replace(records); }
+  /** Refresh the cached usage view on the deliberately slow collection cadence. */
+  refreshUsage(): UsagePayload { this.usage = this.store.usagePayload(); return this.usage; }
 
-  command(input: { cmd: string; id?: string; mode?: unknown; name?: unknown; model?: unknown; firmware?: unknown }): { changed: boolean; actions: RoutingAction[] } {
+  command(input: { cmd: string; id?: string; mode?: unknown; name?: unknown; model?: unknown; firmware?: unknown; screen?: unknown; selected?: unknown; recording?: unknown; battery?: unknown; rotation?: unknown }): { changed: boolean; actions: RoutingAction[] } {
     if (input.cmd === "device.info") {
       const name = typeof input.name === "string" ? input.name : "";
       const model = typeof input.model === "string" ? input.model : "";
       const firmware = typeof input.firmware === "string" ? input.firmware : "";
       const changed = name !== this.device.name || model !== this.device.model || firmware !== this.device.firmware;
       this.device = { name: name || this.device.name, model: model || this.device.model, firmware: firmware || this.device.firmware };
+      return { changed, actions: [] };
+    }
+    if (input.cmd === "device.ui" && typeof input.screen === "string" && ["waiting", "home", "sessions", "convo", "mic", "yolo", "usage"].includes(input.screen)) {
+      const selected = typeof input.selected === "number" && Number.isFinite(input.selected) ? Math.trunc(input.selected) : -1;
+      const recording = input.recording === true;
+      const battery = typeof input.battery === "number" && Number.isFinite(input.battery) ? Math.max(-1, Math.min(100, Math.trunc(input.battery))) : -1;
+      const rotation = typeof input.rotation === "number" && Number.isFinite(input.rotation) ? ((Math.trunc(input.rotation) % 4) + 4) % 4 : 0;
+      const next = { screen: input.screen as CoreSnapshot["device_ui"]["screen"], selected, recording, battery, rotation, updated: Date.now() };
+      const changed = next.screen !== this.deviceUi.screen || next.selected !== this.deviceUi.selected || next.recording !== this.deviceUi.recording || next.battery !== this.deviceUi.battery || next.rotation !== this.deviceUi.rotation;
+      this.deviceUi = next;
       return { changed, actions: [] };
     }
     if (input.cmd === "mode.select" && typeof input.mode === "string" && ["home", "agent", "mic", "yolo"].includes(input.mode)) {
@@ -128,6 +146,7 @@ export class HostCore {
       audio_route: this.route,
       device_mode: this.deviceMode,
       device: { ...(this.device.name ? { name: this.device.name } : {}), model: this.device.model, firmware: this.device.firmware },
+      device_ui: { ...this.deviceUi },
       ...(this.foregroundTarget ? { foreground_target: { ...this.foregroundTarget } } : {}),
       voice: { ...this.voice },
       transcriptions: this.transcriptions.map((item) => ({ ...item })),
@@ -136,6 +155,7 @@ export class HostCore {
       status: this.store.statusPayload(),
       sessions: this.store.sessionsPayload(),
       tools: this.store.toolsPayload(),
+      usage: { updated: this.usage.updated, interval_s: this.usage.interval_s, list: this.usage.list.map((entry) => ({ ...entry })) },
     };
   }
 

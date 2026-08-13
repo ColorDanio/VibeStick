@@ -57,6 +57,26 @@ struct ToolsInfo {
   bool valid;
 };
 
+// Optional host-sampled local CLI metrics. A missing/empty list is a valid
+// snapshot and means the device should not show a usage entry.
+#define USAGE_MAX 6
+struct UsageEntry {
+  char id[20];
+  char name[24];
+  int sessions;
+  int active;
+  int ctxPct;     // -1 = adapter did not report context
+  float costUsd;  // < 0 = adapter did not report cost
+  int quotaPct;   // -1 = provider quota was not available
+  int tokens;     // -1 = local token snapshot was not available
+};
+
+struct UsageInfo {
+  UsageEntry list[USAGE_MAX];
+  int count;
+  bool valid;
+};
+
 struct VoiceInfo {
   char state[16];  // idle | recording | transcribing | ready | error
   char text[200];
@@ -66,14 +86,19 @@ struct VoiceInfo {
 extern StatusInfo gStatus;
 extern SessionsInfo gSessions;
 extern ToolsInfo gTools;
+extern UsageInfo gUsage;
 extern VoiceInfo gVoice;
 
 // Set by BLE callbacks (NimBLE task), cleared by the app in loop().
 extern volatile bool gStatusDirty;
 extern volatile bool gSessionsDirty;
 extern volatile bool gToolsDirty;
+extern volatile bool gUsageDirty;
 extern volatile bool gVoiceDirty;
 extern volatile bool gConnDirty;  // connection state changed
+// Set once COMMAND notifications are enabled so main.cpp can publish its
+// authoritative screen state after the central is actually subscribed.
+extern volatile bool gDeviceUiSyncDirty;
 // Set together with gStatusDirty when ONLY the tail lines changed (meta
 // fields identical, tail present before and after): the app can redraw
 // just the conversation content area instead of the whole screen.
@@ -94,6 +119,11 @@ void bleNotifyMessage(const char* text);
 // e.g. key="id" for tool.select/session.select, key="fn" for fn.activate.
 void bleNotifyCommand(const char* cmd, const char* key = nullptr,
                       const char* val = nullptr);
+
+// COMMAND characteristic: an authoritative compact description of the
+// currently visible device screen for the desktop's read-only mirror.
+void bleNotifyDeviceUi(const char* screen, int selected, bool recording,
+                       int batteryPct, int rotation);
 
 // AUDIO characteristic: binary PCM chunk (8 kHz, 8-bit unsigned, mono).
 void bleNotifyAudio(const uint8_t* data, size_t len);

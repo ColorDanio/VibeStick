@@ -19,6 +19,7 @@ TOOLS_UUID = "4b1e0006-5a3f-4c8d-9b6e-7f2a1c0d3e5f"
 VOICE_UUID = "4b1e0007-5a3f-4c8d-9b6e-7f2a1c0d3e5f"
 AUDIO_UUID = "4b1e0008-5a3f-4c8d-9b6e-7f2a1c0d3e5f"
 DEVICE_CONFIG_UUID = "4b1e0009-5a3f-4c8d-9b6e-7f2a1c0d3e5f"
+USAGE_UUID = "4b1e000a-5a3f-4c8d-9b6e-7f2a1c0d3e5f"
 # The standard HID-over-GATT input-report characteristic.  BlueZ 5.85 on
 # this host subscribes to it but fails to forward reports through UHID, so the
 # daemon also subscribes and supplies an application-visible keyboard fallback.
@@ -85,6 +86,8 @@ class SessionStatus:
     state: str = "idle"
     ctx_pct: int = -1  # 0-100, -1 unknown
     cost_usd: float = -1.0  # -1 unknown
+    quota_pct: float = -1.0  # provider quota percentage, -1 unknown
+    tokens: int = -1  # cumulative local token snapshot, -1 unknown
     last: str = ""  # last assistant action, ~80 chars max
     updated: int = 0  # unix epoch seconds
     tail: list[str] = field(default_factory=list)  # v2.2: recent conversation lines
@@ -101,6 +104,10 @@ class SessionStatus:
             "last": self.last,
             "updated": self.updated,
         }
+        if self.quota_pct >= 0:
+            d["quota_pct"] = self.quota_pct
+        if self.tokens >= 0:
+            d["tokens"] = self.tokens
         if self.tail:
             d["tail"] = list(self.tail)
         if self.queued:
@@ -116,6 +123,8 @@ class SessionStatus:
             state=str(data.get("state", "idle")),
             ctx_pct=int(data.get("ctx_pct", -1)),
             cost_usd=float(data.get("cost_usd", -1)),
+            quota_pct=float(data.get("quota_pct", -1)),
+            tokens=int(data.get("tokens", -1)),
             last=str(data.get("last", "")),
             updated=int(data.get("updated", 0)),
             tail=[str(t) for t in data.get("tail", [])],
@@ -153,6 +162,8 @@ class SessionStatus:
                 return out
         d["ctx_pct"] = -1
         d["cost_usd"] = -1
+        d.pop("quota_pct", None)
+        d.pop("tokens", None)
         return _dumps(d)
 
 

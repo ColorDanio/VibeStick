@@ -27,7 +27,7 @@ export type NobleLoader = () => Promise<NobleAdapter>;
 
 const DEVICE_NAME = "VibeStick";
 const notificationUuids: Record<Characteristic, string> = { INPUT: BLE.input, COMMAND: BLE.command, AUDIO: BLE.audio, HID_INPUT: BLE.hidInput };
-const writableUuids = { STATUS: BLE.status, SESSIONS: BLE.sessions, TOOLS: BLE.tools, VOICE: BLE.voice, DEVICE_CONFIG: BLE.deviceConfig } as const;
+const writableUuids = { STATUS: BLE.status, SESSIONS: BLE.sessions, TOOLS: BLE.tools, VOICE: BLE.voice, DEVICE_CONFIG: BLE.deviceConfig, USAGE: BLE.usage } as const;
 
 /**
  * Cross-platform Node BLE central backed by Noble. It intentionally exposes

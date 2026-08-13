@@ -1,6 +1,7 @@
 import type { Config, ToolConfig } from "./config.js";
 import type { SessionInfo, SessionStatus, SessionsPayload } from "./protocol.js";
 import { SessionSelection } from "./session.js";
+import { collectUsage, type UsagePayload } from "./usage.js";
 
 export interface SessionRecord { id: string; status: SessionStatus; fg?: boolean; raw?: Record<string, unknown>; }
 export interface ToolInfo { id: string; name: string; state: string; fns: string[]; }
@@ -69,6 +70,8 @@ export class HostSessionStore {
     const list = visible.map((tool) => this.toolInfo(tool));
     return { active: Math.max(0, visible.findIndex((tool) => tool.id === this.selectedTool)), list };
   }
+
+  usagePayload(): UsagePayload { return collectUsage(this.config, this.records); }
 
   private toolInfo(tool: ToolConfig): ToolInfo {
     const sessions = this.records.filter((record) => record.status.tool === tool.id);

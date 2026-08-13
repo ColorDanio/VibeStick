@@ -48,7 +48,9 @@ def make_codex(root: Path):
         "{broken",
         json.dumps({"type": "response_item", "payload": {"type": "message",
             "role": "assistant", "content": [{"type": "output_text", "text": "Refactored the db layer."}]}}),
-        json.dumps({"type": "event_msg", "payload": {"type": "token_count"}}),
+        json.dumps({"type": "event_msg", "payload": {"type": "token_count",
+            "info": {"total_token_usage": {"total_tokens": 120000}},
+            "rate_limits": {"primary": {"used_percent": 12.0}}}}),
     ]) + "\n")
     os.utime(f, (NOW - 30, NOW - 30))
     return f
@@ -115,6 +117,8 @@ def test_scan_codex(tmp_path):
     assert s.id == "019f08d3-1e78-79d2-932a-3d95c817bc4a"
     assert s.name == "eastcorp"
     assert s.last == "Refactored the db layer."
+    assert s.tokens == 120000
+    assert s.quota_pct == 12.0
 
 
 def test_scan_kimi(tmp_path):

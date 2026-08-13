@@ -119,6 +119,8 @@ class DiscoveredSession:
     last: str = ""  # last assistant message snippet, "" when unknown
     updated: int = 0  # epoch seconds
     cost_usd: float = -1.0
+    quota_pct: float = -1.0
+    tokens: int = -1
     tail: list[str] = field(default_factory=list)  # recent conversation lines
     directory: str = ""  # absolute working directory when the CLI stores it
 
@@ -129,6 +131,7 @@ class SessionDiscovery:
     def __init__(self, roots: dict[str, Path] | None = None) -> None:
         self.roots = roots or default_roots()
         self._cache: dict[str, tuple[float, str, str, float]] = {}  # path -> (mtime, name, last, cost)
+        self._usage_cache: dict[str, tuple[float, float, int]] = {}  # path -> (mtime, quota_pct, tokens)
 
     def scan(self, tool_ids: list[str]) -> dict[str, list[DiscoveredSession]]:
         """Return {tool_id: [DiscoveredSession, ...]} (newest first, capped)."""
@@ -299,6 +302,45 @@ def _parse_codex(path: Path) -> tuple[str, str, float, list]:
     return name, last, -1.0, tail
 
 
+def _codex_usage(disc: SessionDiscovery, path: Path) -> tuple[float, int]:
+    """Read the newest local Codex token/quota snapshot without network access."""
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        return -1.0, -1
+    cached = disc._usage_cache.get(str(path))
+    if cached and cached[0] == mtime:
+        return cached[1], cached[2]
+    quota_pct = -1.0
+    tokens = -1
+    try:
+        for line in reversed(_read_tail(path)):
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if entry.get("type") != "event_msg":
+                continue
+            payload = entry.get("payload") or {}
+            if payload.get("type") != "token_count":
+                continue
+            info = payload.get("info") or {}
+            total = (info.get("total_token_usage") or {}).get("total_tokens")
+            if tokens < 0 and isinstance(total, (int, float)) and total >= 0:
+                tokens = int(total)
+            limits = payload.get("rate_limits") or {}
+            primary = limits.get("primary") or {}
+            used = primary.get("used_percent")
+            if quota_pct < 0 and isinstance(used, (int, float)) and used >= 0:
+                quota_pct = float(used)
+            if tokens >= 0 and quota_pct >= 0:
+                break
+    except OSError:
+        pass
+    disc._usage_cache[str(path)] = (mtime, quota_pct, tokens)
+    return quota_pct, tokens
+
+
 def _scan_codex(disc: SessionDiscovery, root: Path) -> list[DiscoveredSession]:
     out = []
     for path in disc._recent_files(root, "**/rollout-*.jsonl"):
@@ -307,6 +349,7 @@ def _scan_codex(disc: SessionDiscovery, root: Path) -> list[DiscoveredSession]:
         except OSError:
             continue
         name, last, _, tail = disc._meta(path, _parse_codex)
+        quota_pct, tokens = _codex_usage(disc, path)
         # rollout-<ts>-<uuid>.jsonl -> uuid as the stable id
         parts = path.stem.split("-")
         session_id = "-".join(parts[-5:]) if len(parts) >= 5 else path.stem
@@ -314,6 +357,7 @@ def _scan_codex(disc: SessionDiscovery, root: Path) -> list[DiscoveredSession]:
             DiscoveredSession(
                 id=session_id, tool="codex",
                 name=name or session_id[:8], last=last, updated=int(mtime), tail=tail,
+                quota_pct=quota_pct, tokens=tokens,
             )
         )
     return out

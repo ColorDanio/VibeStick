@@ -50,7 +50,7 @@ export class HelperGattTransport implements GattTransport {
   async unpair(address: string): Promise<void> { if (!this.child) this.start(); await this.request({ cmd: "unpair", address }); }
   setTargetAddress(address: string): void { this.targetAddress = address; }
   async subscribe(_characteristic: Characteristic): Promise<void> { /* helper subscribes atomically on connect */ }
-  async write(characteristic: "STATUS" | "SESSIONS" | "TOOLS" | "VOICE" | "DEVICE_CONFIG", data: Uint8Array): Promise<void> {
+  async write(characteristic: "STATUS" | "SESSIONS" | "TOOLS" | "VOICE" | "DEVICE_CONFIG" | "USAGE", data: Uint8Array): Promise<void> {
     await this.request({ cmd: "write", characteristic, data: Buffer.from(data).toString("base64") });
   }
   async invoke(command: string, values: Record<string, unknown> = {}): Promise<HelperReply> {

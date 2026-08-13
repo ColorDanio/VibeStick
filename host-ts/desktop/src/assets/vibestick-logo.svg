@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+  <title>Vibe Stick sound capsule</title>
+  <rect width="256" height="256" rx="58" fill="#081522"/>
+  <rect x="16" y="16" width="224" height="224" rx="48" stroke="#20DCE8" stroke-opacity=".2" stroke-width="3"/>
+
+  <!-- A lighter outline keeps the microphone legible without a heavy filled silhouette. -->
+  <rect x="87" y="40" width="82" height="125" rx="41" stroke="#20DCE8" stroke-width="15"/>
+
+  <!-- The pulse is the distinctive Vibe Stick detail. -->
+  <path d="M99 113h16l10-21 13 34 10-20h16" stroke="#B6F7EE" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <path d="M55 126v8c0 40 33 72 73 72s73-32 73-72v-8" stroke="#20DCE8" stroke-width="15" stroke-linecap="round"/>
+  <path d="M128 206v17M93 229h70" stroke="#20DCE8" stroke-width="15" stroke-linecap="round"/>
+</svg>

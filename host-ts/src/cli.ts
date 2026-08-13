@@ -62,6 +62,7 @@ async function main(): Promise<void> {
     core.replaceSessions(mergeSessions(files, live));
   };
   await loadSessions();
+  core.refreshUsage();
   let runtime: HostRuntime | undefined;
   let bridge: VibeBridge | undefined;
   let scanSticks: (() => Promise<{ name: string; address: string; rssi?: number | null; paired?: boolean; connected?: boolean }[]>) | undefined;
@@ -480,8 +481,16 @@ async function main(): Promise<void> {
     }
   };
   const refreshTimer = setInterval(() => { void refresh().catch((error) => console.error(`session refresh failed: ${String(error)}`)); }, 1000);
+  // Session/status discovery stays responsive, while usage metrics are
+  // intentionally sampled only every 30 seconds and then pushed to clients.
+  const usageTimer = setInterval(() => {
+    void (async () => {
+      core.refreshUsage();
+      if (runtime?.isBleOwner()) await bridge?.syncUsage();
+    })().catch((error) => console.error(`usage refresh failed: ${String(error)}`));
+  }, 30_000);
   const ownerTimer = setInterval(() => { void probeTraditionalOwner().then((next) => { traditionalOwner = next; }); }, 5000);
-  const stop = async (): Promise<void> => { clearInterval(refreshTimer); clearInterval(ownerTimer); await runtime?.stop(); await dashboard.close(); };
+  const stop = async (): Promise<void> => { clearInterval(refreshTimer); clearInterval(usageTimer); clearInterval(ownerTimer); await runtime?.stop(); await dashboard.close(); };
   process.once("SIGINT", () => { void stop().finally(() => process.exit(0)); });
   process.once("SIGTERM", () => { void stop().finally(() => process.exit(0)); });
 }

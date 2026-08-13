@@ -16,17 +16,21 @@ static const char* TOOLS_UUID    = "4b1e0006-5a3f-4c8d-9b6e-7f2a1c0d3e5f";
 static const char* VOICE_UUID    = "4b1e0007-5a3f-4c8d-9b6e-7f2a1c0d3e5f";
 static const char* AUDIO_UUID    = "4b1e0008-5a3f-4c8d-9b6e-7f2a1c0d3e5f";
 static const char* DEVICE_CONFIG_UUID = "4b1e0009-5a3f-4c8d-9b6e-7f2a1c0d3e5f";
+static const char* USAGE_UUID = "4b1e000a-5a3f-4c8d-9b6e-7f2a1c0d3e5f";
 
 StatusInfo gStatus = {};
 SessionsInfo gSessions = {};
 ToolsInfo gTools = {};
+UsageInfo gUsage = {};
 VoiceInfo gVoice = {};
 
 volatile bool gStatusDirty = false;
 volatile bool gSessionsDirty = false;
 volatile bool gToolsDirty = false;
+volatile bool gUsageDirty = false;
 volatile bool gVoiceDirty = false;
 volatile bool gConnDirty = false;
+volatile bool gDeviceUiSyncDirty = false;
 volatile bool gStatusTailOnly = false;
 volatile bool gTailChanged = false;
 
@@ -73,6 +77,16 @@ void bleNotifyCommand(const char* cmd, const char* key, const char* val) {
   } else {
     snprintf(buf, sizeof(buf), "{\"cmd\":\"%s\"}", cmd);
   }
+  notifyJson(pCommandChar, buf);
+}
+
+void bleNotifyDeviceUi(const char* screen, int selected, bool recording,
+                       int batteryPct, int rotation) {
+  char buf[128];
+  snprintf(buf, sizeof(buf),
+           "{\"cmd\":\"device.ui\",\"screen\":\"%s\",\"selected\":%d,\"recording\":%s,\"battery\":%d,\"rotation\":%d}",
+           screen ? screen : "waiting", selected, recording ? "true" : "false",
+           batteryPct, rotation);
   notifyJson(pCommandChar, buf);
 }
 
@@ -152,7 +166,12 @@ class ServerCB : public NimBLEServerCallbacks {
 class CommandCB : public NimBLECharacteristicCallbacks {
   void onSubscribe(NimBLECharacteristic* /*characteristic*/,
                    ble_gap_conn_desc* /*desc*/, uint16_t value) override {
-    if (value) bleNotifyDeviceInfo();
+    if (value) {
+      bleNotifyDeviceInfo();
+      // main.cpp owns navigation state. Publish a snapshot after the central
+      // has actually subscribed, rather than leaking a stale boot screen.
+      gDeviceUiSyncDirty = true;
+    }
   }
 };
 
@@ -300,6 +319,28 @@ class ToolsCB : public NimBLECharacteristicCallbacks {
   }
 };
 
+class UsageCB : public NimBLECharacteristicCallbacks {
+  void onWrite(NimBLECharacteristic* pChar) override {
+    JsonDocument doc;
+    if (deserializeJson(doc, pChar->getValue().c_str())) return;
+    gUsage.count = 0;
+    for (JsonObject item : doc["list"].as<JsonArray>()) {
+      if (gUsage.count >= USAGE_MAX) break;
+      UsageEntry& entry = gUsage.list[gUsage.count++];
+      strlcpy(entry.id, item["tool"] | "", sizeof(entry.id));
+      strlcpy(entry.name, item["name"] | "", sizeof(entry.name));
+      entry.sessions = item["sessions"] | 0;
+      entry.active = item["active"] | 0;
+      entry.ctxPct = item["ctx_pct"] | -1;
+      entry.costUsd = item["cost_usd"] | -1.0f;
+      entry.quotaPct = item["quota_pct"] | -1;
+      entry.tokens = item["tokens"] | -1;
+    }
+    gUsage.valid = true;
+    gUsageDirty = true;
+  }
+};
+
 class VoiceCB : public NimBLECharacteristicCallbacks {
   void onWrite(NimBLECharacteristic* pChar) override {
     JsonDocument doc;
@@ -395,6 +436,10 @@ void bleInit() {
   NimBLECharacteristic* pDeviceConfig = pService->createCharacteristic(
       DEVICE_CONFIG_UUID, NIMBLE_PROPERTY::WRITE);
   pDeviceConfig->setCallbacks(new DeviceConfigCB());
+
+  NimBLECharacteristic* pUsage =
+      pService->createCharacteristic(USAGE_UUID, NIMBLE_PROPERTY::WRITE);
+  pUsage->setCallbacks(new UsageCB());
 
   pInputChar = pService->createCharacteristic(INPUT_UUID, NIMBLE_PROPERTY::NOTIFY);
   pCommandChar = pService->createCharacteristic(COMMAND_UUID, NIMBLE_PROPERTY::NOTIFY);

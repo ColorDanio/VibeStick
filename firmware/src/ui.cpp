@@ -585,22 +585,27 @@ void uiTickWaiting(int animPhase) {
 }
 
 // ---- Home: tool picker carousel ----
-// Entries = host tools + device-local "Vibe Mic" and "YOLO" entries.
-// at the end (index == gTools.count); it exists even with no host tools.
+// Entries = host tools + device-local Vibe Mic/YOLO and an optional Usage
+// entry. Usage is only added after the host provides at least one metric.
 
 static int homeEntryCount() {
-  return (gTools.valid ? gTools.count : 0) + 2;
+  return (gTools.valid ? gTools.count : 0) + 2 + (gUsage.valid && gUsage.count > 0 ? 1 : 0);
 }
 
 static bool isMicEntry(int idx) {
-  return !gTools.valid || idx >= gTools.count;
+  return idx == (gTools.valid ? gTools.count : 0);
 }
 
 static bool isYoloEntry(int idx) {
-  return idx >= (gTools.valid ? gTools.count : 0) + 1;
+  return idx == (gTools.valid ? gTools.count : 0) + 1;
+}
+
+static bool isUsageEntry(int idx) {
+  return gUsage.valid && gUsage.count > 0 && idx == (gTools.valid ? gTools.count : 0) + 2;
 }
 
 static const uint16_t* entryLogo(int idx) {
+  if (isUsageEntry(idx)) return icon_tool;
   if (isYoloEntry(idx)) return icon_yolo24;
   if (isMicEntry(idx)) return icon_vibe_mic24;
   return toolLogo(gTools.list[idx].id);
@@ -629,7 +634,12 @@ static void drawLocalHomeBadge(int cx, int cy, bool yolo) {
 }
 
 static void drawHomeNeighbor(int cx, int cy, int idx) {
-  if (isMicEntry(idx)) drawLocalHomeBadge(cx, cy, isYoloEntry(idx));
+  if (isUsageEntry(idx)) {
+    M5Lcd.drawFastHLine(cx - 9, cy + 7, 18, COL_ACCENT);
+    M5Lcd.drawFastVLine(cx - 7, cy - 5, 12, COL_ACCENT);
+    M5Lcd.drawFastVLine(cx, cy - 10, 17, COL_ACCENT);
+    M5Lcd.drawFastVLine(cx + 7, cy - 1, 8, COL_ACCENT);
+  } else if (isMicEntry(idx)) drawLocalHomeBadge(cx, cy, isYoloEntry(idx));
   else drawIcon(cx - 12, cy - 12, 24, 24, entryLogo(idx));
 }
 
@@ -679,6 +689,20 @@ static void drawLocalHomeCard(int x, int y, bool yolo) {
   }
 }
 
+static void drawUsageHomeCard(int x, int y) {
+  const int cx = x + 28, cy = y + 28;
+  M5Lcd.fillRoundRect(x, y, 56, 56, 6, TFT_BLACK);
+  M5Lcd.drawRoundRect(x, y, 56, 56, 6, COL_DIM);
+  homeCardCorner(x + 6, y + 6, 1, 1, COL_ACCENT);
+  homeCardCorner(x + 49, y + 6, -1, 1, COL_ACCENT);
+  homeCardCorner(x + 6, y + 49, 1, -1, COL_ACCENT);
+  homeCardCorner(x + 49, y + 49, -1, -1, COL_ACCENT);
+  M5Lcd.drawFastHLine(cx - 17, cy + 15, 34, COL_FAINT);
+  M5Lcd.fillRect(cx - 13, cy - 1, 6, 16, COL_ACCENT);
+  M5Lcd.fillRect(cx - 3, cy - 10, 6, 25, COL_ACCENT);
+  M5Lcd.fillRect(cx + 7, cy + 5, 6, 10, COL_ACCENT);
+}
+
 void uiShowHome(int selTool) {
   M5Lcd.fillScreen(TFT_BLACK);
   drawStatusBar(nullptr);
@@ -689,7 +713,10 @@ void uiShowHome(int selTool) {
 
   const char* name;
   const char* state;
-  if (isMicEntry(selTool)) {
+  if (isUsageEntry(selTool)) {
+    name = "Usage";
+    state = "local metrics";
+  } else if (isMicEntry(selTool)) {
     name = isYoloEntry(selTool) ? "YOLO" : "Vibe Mic";
     state = isYoloEntry(selTool) ? "whisper asr" : "sound only";
   } else {
@@ -714,7 +741,9 @@ void uiShowHome(int selTool) {
       M5Lcd.drawCircle(cx + 74, cy, 20, COL_FAINT);
       drawHomeNeighbor(cx + 74, cy, next);
     }
-    if (isMicEntry(selTool)) {
+    if (isUsageEntry(selTool)) {
+      drawUsageHomeCard(cx - 28, cy - 26);
+    } else if (isMicEntry(selTool)) {
       drawLocalHomeCard(cx - 28, cy - 26, isYoloEntry(selTool));
     } else {
       M5Lcd.fillRoundRect(cx - 28, cy - 26, 56, 56, 8, COL_HL);
@@ -736,7 +765,9 @@ void uiShowHome(int selTool) {
       M5Lcd.drawCircle(cx, 180, 18, COL_FAINT);
       drawHomeNeighbor(cx, 180, next);
     }
-    if (isMicEntry(selTool)) {
+    if (isUsageEntry(selTool)) {
+      drawUsageHomeCard(cx - 28, 68);
+    } else if (isMicEntry(selTool)) {
       drawLocalHomeCard(cx - 28, 68, isYoloEntry(selTool));
     } else {
       M5Lcd.fillRoundRect(cx - 28, 68, 56, 56, 8, COL_HL);
@@ -761,7 +792,7 @@ void uiShowHome(int selTool) {
   }
 
   // State dot + state text.
-  uint16_t stCol = isMicEntry(selTool) ? COL_DIM : stateColor(state);
+  uint16_t stCol = (isMicEntry(selTool) || isYoloEntry(selTool) || isUsageEntry(selTool)) ? COL_DIM : stateColor(state);
   int tw = strlen(state) * 6;
   int sx = (sW - tw) / 2;
   M5Lcd.fillCircle(sx - 10, stateY + 4, 4, stCol);
@@ -1402,4 +1433,60 @@ void uiShowMic(const char* errorText, bool yolo) {
                 charsFit(sW - 24, 1), 1, TFT_RED, TFT_BLACK);
   }
   sCkDots = -1;
+}
+
+// ---- Local CLI usage ----
+// Read-only compact view. The host deliberately omits tools without usable
+// local metrics, so an empty snapshot is represented by no home entry.
+void uiShowUsage() {
+  M5Lcd.fillScreen(TFT_BLACK);
+  drawStatusBar("usage");
+  centerText("CLI usage", 20, 1, TFT_WHITE);
+  M5Lcd.drawFastHLine(0, 32, sW, COL_FAINT);
+
+  const int rowH = landscape() ? 25 : 28;
+  const int firstY = landscape() ? 38 : 40;
+  int visible = (footDivY() - firstY - 3) / rowH;
+  if (visible < 1) visible = 1;
+  if (visible > gUsage.count) visible = gUsage.count;
+  for (int i = 0; i < visible; ++i) {
+    const UsageEntry& entry = gUsage.list[i];
+    int y = firstY + i * rowH;
+    M5Lcd.fillCircle(7, y + 7, 3, COL_ACCENT);
+    int nameWidth = landscape() ? 105 : sW - 18;
+    drawText16N(16, y, entry.name, strlen(entry.name), TFT_WHITE, TFT_BLACK, nameWidth);
+    char metrics[48];
+    metrics[0] = '\0';
+    if (entry.ctxPct >= 0) {
+      snprintf(metrics + strlen(metrics), sizeof(metrics) - strlen(metrics), "%d%% ctx", entry.ctxPct);
+    }
+    if (entry.costUsd >= 0) {
+      if (metrics[0]) strlcat(metrics, "  ", sizeof(metrics));
+      char cost[20];
+      snprintf(cost, sizeof(cost), "$%.2f", entry.costUsd);
+      strlcat(metrics, cost, sizeof(metrics));
+    }
+    if (entry.quotaPct >= 0) {
+      if (metrics[0]) strlcat(metrics, "  ", sizeof(metrics));
+      char quota[20];
+      snprintf(quota, sizeof(quota), "%d%% q", entry.quotaPct);
+      strlcat(metrics, quota, sizeof(metrics));
+    }
+    if (entry.tokens >= 0) {
+      if (metrics[0]) strlcat(metrics, "  ", sizeof(metrics));
+      char tokens[24];
+      if (entry.tokens >= 1000000) snprintf(tokens, sizeof(tokens), "%d.%dM tok", entry.tokens / 1000000, (entry.tokens / 100000) % 10);
+      else if (entry.tokens >= 1000) snprintf(tokens, sizeof(tokens), "%d.%dk tok", entry.tokens / 1000, (entry.tokens / 100) % 10);
+      else snprintf(tokens, sizeof(tokens), "%d tok", entry.tokens);
+      strlcat(metrics, tokens, sizeof(metrics));
+    }
+    if (landscape()) {
+      drawText16N(126, y + 1, metrics, strlen(metrics), COL_GREEN, TFT_BLACK, sW - 130);
+    } else {
+      drawText16N(16, y + 15, metrics, strlen(metrics), COL_GREEN, TFT_BLACK, sW - 18);
+    }
+    if (i + 1 < visible) M5Lcd.drawFastHLine(16, y + rowH - 2, sW - 20, COL_FAINT);
+  }
+  M5Lcd.drawFastHLine(0, footDivY(), sW, COL_FAINT);
+  centerText("power/B: back", footL1Y(), 1, COL_FAINT);
 }

@@ -36,6 +36,7 @@ WRITE = {
     "TOOLS": protocol.TOOLS_UUID,
     "VOICE": protocol.VOICE_UUID,
     "DEVICE_CONFIG": protocol.DEVICE_CONFIG_UUID,
+    "USAGE": protocol.USAGE_UUID,
 }
 
 
@@ -220,7 +221,14 @@ class Helper:
         except (OSError, asyncio.SubprocessError) as exc:
             raise RuntimeError(f"Could not start Bluetooth pairing agent: {exc}") from exc
 
-        default_agent = asyncio.Event()
+        # `bluetoothctl --agent` registers the agent as part of startup on
+        # current BlueZ releases. Some versions print
+        # ``Default agent request successful`` after the explicit command,
+        # while others only print ``Agent registered`` (and leave the
+        # default-agent command silent). Waiting for just the former caused
+        # us to tear down a valid agent after five seconds, so BlueZ later
+        # reported ``No agent available`` and Bleak surfaced Page Timeout.
+        agent_ready = asyncio.Event()
         messages: list[str] = []
 
         async def consume() -> None:
@@ -230,8 +238,12 @@ class Helper:
                 text = line.decode(errors="replace").strip()
                 if text:
                     messages.append(text)
-                if "Default agent request successful" in text:
-                    default_agent.set()
+                if (
+                    "Agent registered" in text
+                    or "Agent is already registered" in text
+                    or "Default agent request successful" in text
+                ):
+                    agent_ready.set()
 
         reader = asyncio.create_task(consume())
         try:
@@ -239,7 +251,7 @@ class Helper:
                 raise RuntimeError("Bluetooth pairing agent has no command pipe")
             process.stdin.write(b"default-agent\n")
             await process.stdin.drain()
-            await asyncio.wait_for(default_agent.wait(), timeout=5.0)
+            await asyncio.wait_for(agent_ready.wait(), timeout=5.0)
         except Exception as exc:
             await self._stop_pairing_agent((process, reader))
             detail = messages[-1] if messages else str(exc)

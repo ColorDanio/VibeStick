@@ -53,6 +53,10 @@ function statusFromFile(raw: Record<string, unknown>, mtime: number): SessionSta
     tool: string(raw.tool), model: string(raw.model), session: string(raw.session), state: string(raw.state, "idle"),
     ctx_pct: number(raw.ctx_pct, -1), cost_usd: number(raw.cost_usd, -1), last: string(raw.last), updated: number(raw.updated, 0) || mtime,
   };
+  const quota = number(raw.quota_pct, -1);
+  const tokens = number(raw.tokens, -1);
+  if (quota >= 0) status.quota_pct = quota;
+  if (tokens >= 0) status.tokens = tokens;
   if (tail?.length) status.tail = tail;
   if (queued) status.queued = queued;
   return status;

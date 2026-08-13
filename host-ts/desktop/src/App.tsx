@@ -11,6 +11,10 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import stickCPlusImage from "./assets/m5stickc-plus-product-v2.png";
 import stickS3Image from "./assets/m5sticks3-product-transparent.png";
+import vibeStickLogo from "./assets/vibestick-logo.svg";
+import appPackage from "../package.json";
+
+const APP_VERSION = appPackage.version;
 
 type Page = "overview" | "sessions" | "voice" | "settings";
 type ThemePreference = "system" | "light" | "dark";
@@ -35,12 +39,14 @@ type Session = {
   tool: string;
 };
 type Agent = { id: string; name: string; state: string };
+type UsageEntry = { tool: string; name: string; sessions: number; active: number; ctx_pct?: number; cost_usd?: number; quota_pct?: number; tokens?: number; updated: number };
 type Snapshot = {
   selected_tool: string | null;
   active_session: string | null;
   audio_route: "asr" | "mic";
   device_mode: "home" | "agent" | "mic" | "yolo";
   device: { name?: string; model: string; firmware: string };
+  device_ui?: { screen: "waiting" | "home" | "sessions" | "convo" | "mic" | "yolo" | "usage"; selected: number; recording: boolean; battery: number; rotation: number; updated: number };
   foreground_target?: { app: string };
   voice: { state: "idle" | "recording" | "transcribing" | "ready" | "error"; mode: "agent" | "mic" | "yolo"; recorded_ms: number; level: number; text: string };
   transcriptions: { at: number; source: "agent" | "yolo"; text: string }[];
@@ -49,6 +55,7 @@ type Snapshot = {
   status: { state: string; session: string; tool: string; model: string };
   sessions: { list: Session[] };
   tools: { list: Agent[] };
+  usage?: { updated: number; interval_s: number; list: UsageEntry[] };
   environment: {
     owner: "active" | "inactive";
     runtime: string;
@@ -86,6 +93,7 @@ const demo: Snapshot = {
   audio_route: "asr",
   device_mode: "home",
   device: { name: "", model: "", firmware: "" },
+  device_ui: { screen: "home", selected: 0, recording: false, battery: -1, rotation: 0, updated: 0 },
   voice: { state: "idle", mode: "agent", recorded_ms: 0, level: 0, text: "" },
   transcriptions: [],
   transfers: [],
@@ -122,6 +130,7 @@ const demo: Snapshot = {
       { id: "codex", name: "Codex", state: "running" },
     ],
   },
+  usage: { updated: 0, interval_s: 30, list: [] },
   environment: {
     owner: "inactive",
     runtime: "stopped",
@@ -185,6 +194,7 @@ export function App(): ReactElement {
   const [cwd, setCwd] = useState("");
   const [loginEnabled, setLoginEnabled] = useState<boolean>();
   const [busy, setBusy] = useState<string>();
+  const [stickSimulator, setStickSimulator] = useState(false);
   const [testing, setTesting] = useState<"asr" | "yolo">();
   const initialized = useRef(false);
   const previousDeviceMode = useRef<Snapshot["device_mode"]>(demo.device_mode);
@@ -515,11 +525,6 @@ export function App(): ReactElement {
       {isTauri() && <WindowChrome locale={locale} connected={connected} />}
       <main className="vibe-app">
       <aside className="rail">
-        <button className="wordmark" onClick={() => setPage("overview")}>
-          <span>V</span>
-          <b>Vibe Stick</b>
-          <small>0.2</small>
-        </button>
         <nav aria-label={t("Primary navigation", "主导航")}>
           <Nav
             page={page}
@@ -551,7 +556,7 @@ export function App(): ReactElement {
           />
         </nav>
         <div className="rail-status">
-          {connected ? t("Vibe Stick desktop", "Vibe Stick 桌面端") : t("Connecting to host…", "正在连接主机…")}
+          {connected ? t("Host ready", "主机就绪") : t("Connecting to host…", "正在连接主机…")}
         </div>
       </aside>
       <section className="canvas">
@@ -588,6 +593,7 @@ export function App(): ReactElement {
             busy={busy}
             onRelease={() => void release()}
             onReconnect={() => void restart()}
+            onOpenSimulator={() => setStickSimulator(true)}
           />
         )}
         {page === "sessions" && (
@@ -657,6 +663,7 @@ export function App(): ReactElement {
         )}
       </section>
       </main>
+      {stickSimulator && <StickSimulator data={data} selected={selected} onClose={() => setStickSimulator(false)} />}
     </div>
     </LocaleContext.Provider>
   );
@@ -715,10 +722,11 @@ function WindowChrome({
       }}
     >
       <div className="window-title" data-tauri-drag-region>
-        <span className="window-mark" aria-hidden="true">V</span>
+        <img className="window-mark" src={vibeStickLogo} alt="" aria-hidden="true" />
         <span className="window-title-copy">
           <b>Vibe Stick</b>
           <small>{t("Desktop companion", "桌面伴侣")}</small>
+          <small className="window-version">v{APP_VERSION}</small>
         </span>
         <i className={connected ? "window-status online" : "window-status warn"} />
       </div>
@@ -761,6 +769,7 @@ function Overview({
   busy,
   onRelease,
   onReconnect,
+  onOpenSimulator,
 }: {
   data: Snapshot;
   selected?: Session;
@@ -768,6 +777,7 @@ function Overview({
   busy?: string;
   onRelease(): void;
   onReconnect(): void;
+  onOpenSimulator(): void;
 }): ReactElement {
   const t = useT();
   const caps = data.environment.capabilities;
@@ -776,7 +786,10 @@ function Overview({
   return (
     <div className="overview-dashboard">
       {hasActiveStick ? <section className="device-card dashboard-hero">
-        <DeviceImage model={data.device.model} />
+        <button className="stick-simulator-launch" type="button" onClick={onOpenSimulator} aria-label={t("Open live Stick view", "打开实时 Stick 视图")} title={t("Open live Stick view", "打开实时 Stick 视图")}>
+          <DeviceImage model={data.device.model} />
+          <span>{t("Live view", "实时视图")}</span>
+        </button>
         <div className="device-copy">
           <span className="section-label">{t("STICK STATUS", "设备状态")}</span>
           <h2>{data.device.name || deviceName(data.device.model)}</h2>
@@ -822,8 +835,95 @@ function Overview({
         <LiveActivity data={data} selected={selected} />
         <CurrentTarget data={data} selected={selected} agents={agents} />
       </section>
+      <UsageSummary data={data} />
     </div>
   );
+}
+
+function StickSimulator({ data, selected, onClose }: { data: Snapshot; selected?: Session; onClose(): void }): ReactElement {
+  const t = useT();
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent): void => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+  const emitted = data.device_ui;
+  const screen = emitted?.screen ?? (data.device_mode === "agent" ? "convo" : data.device_mode);
+  const selection = emitted?.selected ?? 0;
+  const recording = emitted?.recording || data.voice.state === "recording";
+  const landscape = (emitted?.rotation ?? 0) % 2 === 1;
+  const model = stickKind(data.device.model) ?? "unknown";
+  return <div className="stick-simulator-backdrop" role="presentation">
+    <section className="stick-simulator" role="dialog" aria-modal="true" aria-labelledby="stick-live-title">
+      <header className="stick-simulator-head">
+        <div><span className="section-label">{t("LIVE DEVICE", "实时设备")}</span><h2 id="stick-live-title">{t("Stick live view", "Stick 实时视图")}</h2></div>
+        <div className="simulator-head-actions"><span className={emitted?.updated ? "simulator-live" : "simulator-estimate"}>{emitted?.updated ? t("Live · device state", "实时 · 设备状态") : t("Host state estimate", "主机状态估算")}</span><button type="button" className="simulator-close" onClick={onClose} aria-label={t("Close live Stick view", "关闭实时 Stick 视图")}>×</button></div>
+      </header>
+      <div className="stick-simulator-body">
+        <div className={`simulator-device ${model} ${landscape ? "landscape" : "portrait"}`}>
+          <div className="simulator-bezel"><StickScreen data={data} selected={selected} screen={screen} selection={selection} recording={recording} /></div>
+          <i className="simulator-hardware-button" aria-hidden="true" />
+        </div>
+        <div className="simulator-copy">
+          <h3>{data.device.name || deviceName(data.device.model)}</h3>
+          <p>{emitted?.updated ? t("This view follows the active screen, selection, capture state, orientation, and battery reported by your Stick.", "此视图跟随 Stick 上报的当前页面、选择项、录音状态、方向和电量。") : t("This device uses earlier firmware, so the view is reconstructed from the current Host mode. Update firmware for the exact active screen and selection.", "此设备使用较早固件，因此当前视图按 Host 模式推定。更新固件后可同步准确页面和选择项。")}</p>
+          <dl className="simulator-facts"><div><dt>{t("Screen", "页面")}</dt><dd>{simulatorScreenName(screen, t)}</dd></div><div><dt>{t("Orientation", "方向")}</dt><dd>{landscape ? t("Landscape", "横屏") : t("Portrait", "竖屏")}</dd></div><div><dt>{t("Battery", "电量")}</dt><dd>{typeof emitted?.battery === "number" && emitted.battery >= 0 ? `${emitted.battery}%` : "—"}</dd></div></dl>
+          <p className="simulator-note">{t("Read-only mirror — use the physical Stick to navigate.", "只读镜像 — 请使用实体 Stick 操作。")}</p>
+        </div>
+      </div>
+    </section>
+  </div>;
+}
+
+function StickScreen({ data, selected, screen, selection, recording }: { data: Snapshot; selected?: Session; screen: NonNullable<Snapshot["device_ui"]>["screen"]; selection: number; recording: boolean }): ReactElement {
+  const t = useT();
+  const battery = data.device_ui?.battery;
+  const top = <div className="sim-screen-status"><span>{data.environment.owner === "active" ? "⌁" : "×"}</span><b>{screen === "convo" ? (selected?.tool ?? data.status.tool) : "Vibe Stick"}</b><span>{typeof battery === "number" && battery >= 0 ? `${battery}%` : "▱"}</span></div>;
+  if (recording) return <div className="sim-screen recording-screen">{top}<div className="sim-rec-dot" /><b>REC</b><strong>{Math.max(0, Math.floor(data.voice.recorded_ms / 1000)).toString().padStart(2, "0")}:{Math.max(0, Math.floor(data.voice.recorded_ms / 10) % 100).toString().padStart(2, "0")}</strong><div className="sim-level">{Array.from({ length: 18 }, (_, index) => <i key={index} style={{ height: `${18 + ((index * 37 + data.voice.level * 2) % 70)}%` }} />)}</div><small>{data.voice.mode === "yolo" ? "YOLO" : data.voice.mode === "mic" ? "VIBE MIC" : "VOICE INPUT"}</small></div>;
+  if (screen === "waiting") return <div className="sim-screen waiting-screen">{top}<div className="sim-v-mark">⌁</div><b>VIBE STICK</b><small>{t("Waiting for host", "等待主机连接")}</small></div>;
+  if (screen === "home") {
+    const entries = [...data.tools.list, { id: "mic", name: "Vibe Mic", state: "ready" }, { id: "yolo", name: "YOLO", state: "ready" }, ...(data.usage?.list.length ? [{ id: "usage", name: "Usage", state: "ready" }] : [])];
+    const current = entries[Math.max(0, Math.min(selection, Math.max(entries.length - 1, 0)))] ?? { id: "none", name: t("No tools", "没有工具"), state: "idle" };
+    return <div className="sim-screen home-screen">{top}<span className="sim-kicker">{t("SELECT A MODE", "选择模式")}</span><div className={`sim-home-icon ${current.id}`}>{current.id === "mic" ? "◉" : current.id === "yolo" ? "✦" : current.id === "usage" ? "▥" : agentSymbols[current.id] ?? "›_"}</div><strong>{current.name}</strong><small>{current.id === "mic" ? t("Raw microphone", "原始麦克风") : current.id === "yolo" ? t("Voice control", "语音控制") : current.id === "usage" ? t("Local CLI usage", "本地 CLI 用量") : current.state}</small><div className="sim-dots">{entries.map((entry, index) => <i className={index === Math.max(0, Math.min(selection, entries.length - 1)) ? "active" : ""} key={entry.id} />)}</div></div>;
+  }
+  if (screen === "sessions") {
+    const rows: Array<{ id: string; name?: string; session?: string; state: string }> = [{ id: "new", name: `+ ${t("New session", "新建会话")}`, state: "" }, ...data.sessions.list.filter((item) => item.tool === data.selected_tool || !data.selected_tool)];
+    return <div className="sim-screen sessions-screen">{top}<span className="sim-kicker">{t("SESSIONS", "会话")}</span><strong>{agentName(data.tools.list, data.selected_tool)}</strong><div className="sim-session-list">{rows.slice(0, 5).map((row, index) => <div className={index === selection ? "selected" : ""} key={row.id}><i className={row.state === "running" ? "running" : ""} /><span>{row.name || row.session || row.id}</span></div>)}</div></div>;
+  }
+  if (screen === "usage") return <div className="sim-screen usage-screen">{top}<span className="sim-kicker">{t("LOCAL USAGE", "本地用量")}</span><strong>{t("CLI usage", "CLI 用量")}</strong><div className="sim-usage-list">{(data.usage?.list ?? []).slice(0, 3).map((entry) => <div key={entry.tool}><span>{entry.name}</span><b>{typeof entry.ctx_pct === "number" ? `${entry.ctx_pct}%` : typeof entry.quota_pct === "number" ? `${entry.quota_pct}%` : typeof entry.tokens === "number" ? formatCompactNumber(entry.tokens) : entry.cost_usd !== undefined ? `$${entry.cost_usd.toFixed(2)}` : ""}</b></div>)}</div></div>;
+  const voice = screen === "mic" || screen === "yolo";
+  if (voice) return <div className={`sim-screen mic-screen ${screen}`}>{top}<div className="sim-mic-ring">{screen === "yolo" ? "✦" : "◉"}</div><strong>{screen === "yolo" ? "YOLO" : "Vibe Mic"}</strong><small>{data.voice.state === "transcribing" ? t("Transcribing…", "正在转写…") : data.foreground_target?.app ?? t("Ready", "就绪")}</small><div className="sim-screen-footer">A · {screen === "yolo" ? t("Enter", "确认") : "PTT"}<span>B · {screen === "yolo" ? t("Escape", "返回") : "F15"}</span></div></div>;
+  return <div className="sim-screen convo-screen">{top}<span className="sim-kicker">{t("AGENT CLI", "智能体 CLI")}</span><strong>{selected?.session || data.status.session || t("No session", "没有会话")}</strong><div className={`sim-convo-state ${data.status.state}`}>{data.status.state || t("idle", "空闲")}</div><p>{selected?.last || t("Ready for your next prompt", "可以开始下一次输入")}</p><div className="sim-screen-footer">A · {t("Hold to talk", "按住说话")}<span>B · {t("Back", "返回")}</span></div></div>;
+}
+
+function simulatorScreenName(screen: NonNullable<Snapshot["device_ui"]>["screen"], t: Translate): string {
+  const names: Record<NonNullable<Snapshot["device_ui"]>["screen"], string> = { waiting: t("Waiting", "等待"), home: t("Home", "主菜单"), sessions: t("Sessions", "会话"), convo: t("Conversation", "对话"), mic: "Vibe Mic", yolo: "YOLO", usage: t("Usage", "用量") };
+  return names[screen];
+}
+
+function UsageSummary({ data }: { data: Snapshot }): ReactElement | null {
+  const t = useT();
+  const entries = data.usage?.list ?? [];
+  if (!entries.length) return null;
+  const updated = data.usage?.updated ?? 0;
+  return <section className="panel usage-panel">
+    <div className="panel-head usage-head">
+      <div><span className="section-label">{t("LOCAL USAGE", "本地用量")}</span><h2>{t("CLI usage", "CLI 用量")}</h2></div>
+      <span className="usage-refresh">{updated ? `${t("Observed", "采集于")} ${formatTime(updated * 1000)}` : t("Waiting for metrics", "等待指标")}</span>
+    </div>
+    <p className="usage-intro">{t("Only tools with usable local context, quota, token, or cost metrics are shown.", "仅显示本机适配器提供了有效上下文、额度、Token 或成本指标的工具。")}</p>
+    <div className="usage-list">
+      {entries.map((entry) => <article className="usage-row" key={entry.tool}>
+        <div className="usage-tool"><span className={`usage-glyph ${entry.tool}`}>{agentSymbols[entry.tool] ?? "›_"}</span><div><b>{entry.name}</b><small>{entry.sessions} {t(entry.sessions === 1 ? "session" : "sessions", "个会话")} · {entry.active} {t("active", "活动")}</small></div></div>
+        <div className="usage-metrics">
+          {typeof entry.ctx_pct === "number" && <span className="usage-context"><small>{t("Context", "上下文")}</small><b>{entry.ctx_pct}%</b><i><em style={{ width: `${Math.min(100, Math.max(0, entry.ctx_pct))}%` }} /></i></span>}
+          {typeof entry.quota_pct === "number" && <span className="usage-context"><small>{t("Quota", "额度")}</small><b>{entry.quota_pct}%</b><i><em style={{ width: `${Math.min(100, Math.max(0, entry.quota_pct))}%` }} /></i></span>}
+          {typeof entry.tokens === "number" && <span className="usage-cost"><small>{t("Tokens", "Token")}</small><b>{formatCompactNumber(entry.tokens)}</b></span>}
+          {typeof entry.cost_usd === "number" && <span className="usage-cost"><small>{t("Observed cost", "已观测成本")}</small><b>${entry.cost_usd.toFixed(2)}</b></span>}
+        </div>
+      </article>)}
+    </div>
+  </section>;
 }
 function StatusFact({ label, value }: { label: string; value: string }): ReactElement {
   return <span className="status-fact"><small>{label}</small><b>{value}</b></span>;
@@ -1378,6 +1478,11 @@ function Status({ state }: { state: string }): ReactElement {
 }
 function formatTime(value: number): string {
   return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+function formatCompactNumber(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
+  return String(Math.round(value));
 }
 function Empty({ text }: { text: string }): ReactElement {
   return <div className="empty">{text}</div>;

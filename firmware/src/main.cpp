@@ -40,9 +40,9 @@
 #define AUDIO_CHUNK 180
 #define AUDIO_CHUNKS_PER_LOOP 3
 
-static const char* SCREEN_NAMES[] = {"waiting", "home", "sessions", "convo", "mic", "yolo"};
+static const char* SCREEN_NAMES[] = {"waiting", "home", "sessions", "convo", "mic", "yolo", "usage"};
 
-enum Screen { SCR_WAITING, SCR_HOME, SCR_SESSIONS, SCR_CONVO, SCR_MIC, SCR_YOLO };
+enum Screen { SCR_WAITING, SCR_HOME, SCR_SESSIONS, SCR_CONVO, SCR_MIC, SCR_YOLO, SCR_USAGE };
 
 enum Event { EV_NONE, EV_A_SHORT, EV_A_LONG, EV_A_DBL, EV_B_SHORT, EV_B_LONG };
 
@@ -107,6 +107,19 @@ static bool popEvent(Event* e) {
 
 // ---- helpers ----
 
+static int uiRotation();
+
+static int uiSelection() {
+  if (sScreen == SCR_HOME) return sSelTool;
+  if (sScreen == SCR_SESSIONS) return sSelEntry;
+  return -1;
+}
+
+static void syncDeviceUi() {
+  bleNotifyDeviceUi(SCREEN_NAMES[sScreen], uiSelection(), sRecording,
+                    sBatteryPct, uiRotation());
+}
+
 static void setScreen(Screen s) {
   if (sScreen == s) return;
   Serial.printf("[UI] screen: %s -> %s\n", SCREEN_NAMES[sScreen],
@@ -117,6 +130,7 @@ static void setScreen(Screen s) {
   const char* mode = s == SCR_MIC ? "mic" : s == SCR_YOLO ? "yolo" :
                      s == SCR_CONVO ? "agent" : "home";
   bleNotifyCommand("mode.select", "mode", mode);
+  syncDeviceUi();
   sNeedRedraw = true;
   uiMarqueeResetAll();  // no stale band may paint over the new screen
   uiConvoPageReset();
@@ -148,6 +162,7 @@ static void startRecording(bool micMode, bool yoloMode = false) {
   sRecording = true;
   sRecStart = millis();
   sNeedRedraw = true;
+  syncDeviceUi();
 }
 
 static void stopRecording() {
@@ -155,6 +170,7 @@ static void stopRecording() {
   micStop();
   bleNotifyCommand("voice.stop");
   sNeedRedraw = true;
+  syncDeviceUi();
   Serial.println("[VOICE] recording stopped");
 }
 
@@ -194,6 +210,9 @@ static void redraw() {
       if (sRecording) uiShowRecording(micLevel(), millis() - sRecStart);
       else uiShowMic(visibleError(), true);
       break;
+    case SCR_USAGE:
+      uiShowUsage();
+      break;
   }
 }
 
@@ -216,6 +235,9 @@ static void back() {  // one level up
       if (sRecording) stopRecording();
       setScreen(SCR_HOME);
       break;
+    case SCR_USAGE:
+      setScreen(SCR_HOME);
+      break;
     default:
       break;  // home / waiting: no-op
   }
@@ -235,7 +257,7 @@ static void handleEvent(Event e) {
 
     case SCR_HOME: {
       int toolCount = gTools.valid ? gTools.count : 0;
-      int entries = toolCount + 2;  // + Vibe Mic + YOLO device-local entries
+      int entries = toolCount + 2 + (gUsage.valid && gUsage.count > 0 ? 1 : 0);
       if (e == EV_B_SHORT) {
         int from = sSelTool;
         sSelTool = (sSelTool + 1) % entries;  // optimistic: move instantly
@@ -244,12 +266,14 @@ static void handleEvent(Event e) {
         // entry is device-local and has no host counterpart.
         if (sSelTool < toolCount) bleNotifyCommand("tool.next");
         Serial.printf("[UI] home select -> %d/%d\n", sSelTool, entries - 1);
+        syncDeviceUi();
         uiHomeAnimate(from, sSelTool);
       } else if (e == EV_A_SHORT) {
         if (sSelTool == toolCount) {
           setScreen(SCR_MIC);  // device-local voice-input microphone
         } else if (sSelTool > toolCount) {
-          setScreen(SCR_YOLO);
+          if (sSelTool == toolCount + 1) setScreen(SCR_YOLO);
+          else setScreen(SCR_USAGE);
         } else {
           bleNotifyCommand("tool.select", "id", gTools.list[sSelTool].id);
           sSelEntry = gSessions.valid ? gSessions.active + 1 : 0;
@@ -259,11 +283,17 @@ static void handleEvent(Event e) {
       break;
     }
 
+    case SCR_USAGE:
+      // Usage is read-only; A/B are intentionally inert and power/long-B
+      // provide the conventional way back to the tool picker.
+      break;
+
     case SCR_SESSIONS: {
       int entries = 1 + (gSessions.valid ? gSessions.count : 0);
       if (e == EV_B_SHORT) {
         sSelEntry = (sSelEntry + 1) % entries;
         sNeedRedraw = true;
+        syncDeviceUi();
       } else if (e == EV_A_SHORT) {
         if (sSelEntry == 0) {
           bleNotifyCommand("session.new");
@@ -450,6 +480,8 @@ static uint8_t sCandOrientation = 1;
 static uint32_t sCandSince = 0;
 #define ORIENT_STABLE_MS 500
 
+static int uiRotation() { return sOrientation; }
+
 // +Y points toward the device top and +X toward the right side. Pick the
 // closest of the 4 rotations after M5Unified has normalized the board IMU.
 static uint8_t orientationFromAccel(float ax, float ay) {
@@ -510,6 +542,7 @@ static void pollImu() {
       sOrientation = cand;
       uiSetOrientation(cand);
       sNeedRedraw = true;
+      syncDeviceUi();
       Serial.printf("[UI] orientation change -> rotation %d (%dx%d)\n",
                     sOrientation, (cand % 2 == 0) ? 135 : 240,
                     (cand % 2 == 0) ? 240 : 135);
@@ -529,6 +562,7 @@ static void pollBattery(bool force) {
     sBatteryPct = pct;
     uiSetBatteryPct(pct);
     sNeedRedraw = true;
+    syncDeviceUi();
   }
 }
 
@@ -541,6 +575,10 @@ static void pollBattery(bool force) {
 static uint32_t sDisconnectPendingAt = 0;
 
 static void applyBleDirty() {
+  if (gDeviceUiSyncDirty) {
+    gDeviceUiSyncDirty = false;
+    syncDeviceUi();
+  }
   if (gConnDirty) {
     gConnDirty = false;
     if (!bleConnected()) {
@@ -555,6 +593,7 @@ static void applyBleDirty() {
       sDisconnectPendingAt = 0;
     }
     sNeedRedraw = true;
+    if (bleConnected()) syncDeviceUi();
   }
   if (sDisconnectPendingAt != 0 && !bleConnected() &&
       millis() - sDisconnectPendingAt >= BLE_DISCONNECT_GRACE_MS) {
@@ -574,11 +613,22 @@ static void applyBleDirty() {
         sSelTool = gTools.active;
         if (sSelTool < 0 || sSelTool > gTools.count) sSelTool = 0;
       }
+      if (sScreen == SCR_HOME && !userNav) syncDeviceUi();
       if (sScreen == SCR_WAITING) setScreen(SCR_HOME);
       else if (sScreen == SCR_HOME && !userNav) sNeedRedraw = true;
     } else if (sScreen == SCR_HOME) {
       sNeedRedraw = true;
     }
+  }
+  if (gUsageDirty) {
+    gUsageDirty = false;
+    const int usageIndex = (gTools.valid ? gTools.count : 0) + 2;
+    if (sScreen == SCR_USAGE && (!gUsage.valid || gUsage.count == 0)) {
+      setScreen(SCR_HOME);
+    } else if (sScreen == SCR_HOME && sSelTool >= usageIndex && (!gUsage.valid || gUsage.count == 0)) {
+      sSelTool = 0;
+    }
+    if (sScreen == SCR_HOME || sScreen == SCR_USAGE) sNeedRedraw = true;
   }
   if (gStatusDirty) {
     gStatusDirty = false;

@@ -29,6 +29,7 @@ void uiMarqueeResetAll();
 void uiShowWaiting(int animPhase);     // branded boot/waiting, static draw
 void uiTickWaiting(int animPhase);     // rings + message line only
 void uiShowHome(int selTool);          // tool picker carousel
+void uiShowUsage();                    // locally observed CLI usage
 // Start a ~150 ms slide animation of the center icon (from -> to).
 void uiHomeAnimate(int fromIdx, int toIdx);
 // Draw the next animation frame; returns true once on completion (caller

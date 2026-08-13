@@ -53,6 +53,13 @@ degraded and does not claim to own the Stick.
 The desktop shell remains in preview until Host 2.0 owns the BLE link; it
 never presents unavailable BLE, HID, or Vibe Mic capabilities as usable.
 
+HostCore keeps local CLI usage separate from the one-second session refresh:
+every 30 seconds it aggregates only non-negative context, quota, token, or cost
+metrics already provided by a configured adapter or local session reader. Tools
+that expose process state but no usage data are omitted from the desktop
+Overview, tray summary and optional `USAGE` BLE characteristic. No provider
+credentials or private cloud endpoints are scraped by this feature.
+
 The cross-platform login lifecycle model also carries the executable's
 arguments and non-secret runtime environment. This is needed when the Tauri
 package launches the bundled HostCore through its versioned Node sidecar
